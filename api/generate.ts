@@ -14,12 +14,14 @@ export default async function handler(req: any, res: any) {
   }
 
   const passphrase = process.env.APP_PASSPHRASE;
-  if (passphrase) {
-    const provided = req.headers["x-app-key"];
-    if (!provided || provided !== passphrase) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
+  if (!passphrase) {
+    res.status(500).json({ error: "Server misconfigured: APP_PASSPHRASE not set" });
+    return;
+  }
+  const provided = req.headers["x-app-key"];
+  if (!provided || provided !== passphrase) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
   }
 
   try {
