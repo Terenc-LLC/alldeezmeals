@@ -81,6 +81,10 @@ function fmtPurchaseQty(qty: number, unit: string, isPurchaseStyle: boolean): st
   return unit ? `${q} ${unit}` : String(q);
 }
 
+function normalizeIngName(name: string): string {
+  return name.toLowerCase().trim().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /* ====================================================================== */
 export default function App() {
   /* ---- passphrase gate ---- */
@@ -245,7 +249,7 @@ export default function App() {
       let purchaseQty: number;
       if (i.purchaseSize && i.purchaseQty != null) {
         purchaseSize = String(i.purchaseSize).trim();
-        purchaseQty = Math.max(0, Math.ceil(Number(i.purchaseQty) || 0));
+        purchaseQty = Math.max(1, Math.ceil(Number(i.purchaseQty) || 0));
       } else {
         purchaseSize = recipeAmount.unit
           ? `${recipeAmount.qty} ${recipeAmount.unit}`.trim()
@@ -287,12 +291,13 @@ export default function App() {
 
     const eff = efficiency
       ? `Efficiency rules:
-- Mainstream, affordable ALDI ingredients.
+- Mainstream, affordable ALDI ingredients. Bias strongly to ALDI-stocked everyday items; avoid exotic spices, specialty oils, or artisan/niche products unless they are the central defining ingredient of the dish — substitute a common ALDI item when possible.
+- Common seasonings and basic oils are assumed to be in the pantry already. Do NOT add these to the ingredients list: salt, black pepper, common dried or ground spices (garlic powder, onion powder, paprika, cumin, chili powder, cayenne, oregano, basil, thyme, cinnamon, etc.), and basic cooking oils (vegetable oil, olive oil, canola oil). Mention them freely in cooking steps only. Exception: if one of these IS the defining/star flavor of the dish and would realistically need to be purchased, include it.
 - Share ingredients across the week; minimize waste.
 - The family likes bulk chicken breasts poached with onion+garlic then shredded for multiple dinners. Favor this kind of batch prep.
 - If a whole chicken is used, use its parts across more than one dinner.
 - AVOID DOUBLE BUYING (purchase basis): if a package already bought for an earlier dinner this week covers what you need here (e.g. one 2 lb bag of rice already purchased), do NOT include that ingredient in "ingredients" — note the reuse in "reuseNote" instead.`
-      : `Use mainstream, affordable ALDI ingredients.`;
+      : `Use mainstream, affordable ALDI ingredients. Bias to ALDI-stocked everyday items; avoid exotic or specialty items unless they are central to the dish. Common seasonings and basic oils (salt, pepper, dried spices, vegetable/olive oil) are assumed on hand — do not include them in the ingredients list.`;
 
     const loves = Array.from(new Set([...liked, ...rotation.map((r) => r.name)]));
     const prefLines: string[] = [];
@@ -367,6 +372,12 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     }
   };
 
+  const handleStartOver = () => {
+    if (!window.confirm("Clear the current meal plan and grocery list?\n\nYour setup (days, people, cuisine pins), staples, and preferences (liked/avoid/rotation) will be kept.")) return;
+    setMeals({});
+    setCheckedItems({});
+  };
+
   const thumbUp = (name: string) => { if (name) setLiked((p) => (p.includes(name) ? p : [...p, name])); };
   const thumbDown = async (day: any, idx: number) => {
     const name = meals[day.id]?.data?.name;
@@ -394,19 +405,19 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         qty = Number(i.qty) || 0;
         isPurchaseStyle = false;
       }
-      const key = `${name.toLowerCase()}|${unit.toLowerCase()}`;
+      const key = `${normalizeIngName(name)}|${unit.toLowerCase()}`;
       if (!agg[key]) agg[key] = { name, qty: 0, unit, category, staple: false, isPurchaseStyle };
       agg[key].qty += qty;
     };
     days.forEach((d) => { const m = meals[d.id]; if (m?.status === "accepted") m.data.ingredients.forEach(pushIngredient); });
     staples.filter((st) => st.enabled).forEach((st) => {
-      const k = `${st.name.toLowerCase()}|${st.unit.toLowerCase()}`;
+      const k = `${normalizeIngName(st.name)}|${st.unit.toLowerCase()}`;
       if (!agg[k]) agg[k] = { name: st.name, qty: 0, unit: st.unit, category: CATEGORIES.includes(st.category) ? st.category : "Other", staple: false, isPurchaseStyle: false };
       agg[k].qty += Number(st.qty) || 0;
       agg[k].staple = true;
     });
     const byCat: Record<string, any[]> = {}; CATEGORIES.forEach((c) => (byCat[c] = []));
-    Object.values(agg).forEach((it: any) => { if (pantry.includes(it.name.toLowerCase())) return; (byCat[it.category] || byCat.Other).push(it); });
+    Object.values(agg).forEach((it: any) => { if (it.qty === 0) return; if (pantry.includes(it.name.toLowerCase())) return; (byCat[it.category] || byCat.Other).push(it); });
     CATEGORIES.forEach((c) => byCat[c].sort((a, b) => a.name.localeCompare(b.name)));
     return byCat;
   }, [days, meals, staples, pantry]);
@@ -489,7 +500,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             efficiency={efficiency} setEfficiency={setEfficiency}
             mixCuisines={mixCuisines} setMixCuisines={setMixCuisines}
             staples={staples} setStaples={setStaples}
-            onGenerate={generateAll} busy={busy}
+            onGenerate={generateAll} busy={busy} onStartOver={handleStartOver}
           />
         )}
         {tab === "plan" && (
@@ -585,7 +596,7 @@ function GateView({ onEnter, error }: { onEnter: (pp: string) => void; error: bo
 /* ============================ Setup ============================ */
 function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
-    defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples, onGenerate, busy } = p;
+    defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples, onGenerate, busy, onStartOver } = p;
   const [showStaples, setShowStaples] = useState(false);
   const [locInput, setLocInput] = useState("");
 
@@ -676,6 +687,9 @@ function SetupView(p: any) {
 
       <button onClick={onGenerate} disabled={busy} style={{ ...s.primaryBtn, justifyContent: "center", padding: 14, fontSize: 15, opacity: busy ? 0.6 : 1 }}>
         {busy ? <><RefreshCw size={17} className="spin" /> Generating...</> : <><Sparkles size={17} /> Generate meal plan</>}
+      </button>
+      <button onClick={onStartOver} disabled={busy} style={{ ...s.ghostBtn, justifyContent: "center", fontSize: 13, opacity: busy ? 0.5 : 1 }}>
+        Start over
       </button>
     </div>
   );

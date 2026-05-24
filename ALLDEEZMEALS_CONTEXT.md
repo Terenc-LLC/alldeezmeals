@@ -31,6 +31,21 @@ session (status, decisions, next steps).
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
 
+## Status (TER-184/185/181-partial — May 2026)
+- List hygiene (TER-184): `purchaseQty` floored at 1 (no zero-qty lines). Ingredient names
+  normalized (lowercase, strip trailing parentheticals) before aggregation so near-dupes like
+  "sour cream" + "sour cream (full fat)" merge into one line. Zero-qty items filtered from
+  the rendered list and copy/Instacart text. Normalization is conservative — distinct items
+  (salted vs unsalted butter, corn vs flour tortillas) are not merged.
+- Generation tuning (TER-185): `buildPrompt` now explicitly biases toward ALDI-stocked
+  mainstream items and instructs the model to omit common pantry seasonings (salt, pepper,
+  dried spices) and basic cooking oils from the purchase list by default (they still appear
+  in cooking steps; a defining/central spice may still be purchased at model's judgment).
+- "Start over" (TER-181, localStorage half): a "Start over" button in Setup tab (below
+  "Generate meal plan") clears `meals` and `checkedItems` after a confirm dialog. Keeps
+  all day configuration, staples, pantry/have-it list, and preferences (liked/avoid/rotation).
+  (The "Mark as ordered" archive half of TER-181 is deferred pending Supabase.)
+
 ## Status (TER-183 — May 2026)
 - Scaffold builds clean (`tsc --noEmit && vite build` OK).
 - Frontend ported from the Claude artifact prototype.
