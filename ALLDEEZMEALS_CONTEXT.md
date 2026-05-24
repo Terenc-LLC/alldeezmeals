@@ -31,14 +31,16 @@ session (status, decisions, next steps).
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
 
-## Status (initial scaffold)
+## Status (TER-177/178/180 — May 2026)
 - Scaffold builds clean (`vite build` OK).
-- Frontend ported from the Claude artifact prototype with three swaps:
-  localStorage, `/api/generate`, direct Open-Meteo.
-- Proxy function written; needs the env var set in Vercel to function.
+- Frontend ported from the Claude artifact prototype.
+- Passphrase gate (TER-177): `/api/generate` requires `x-app-key` header matching `APP_PASSPHRASE` env var. Returns 401 otherwise. `VITE_APP_PASSPHRASE` sent from client on every call.
+- Full recipes (TER-178): generation now returns `prepMinutes`, `cookMinutes`, `steps[]`. max_tokens bumped to 2000. Displayed on meal cards. "Print recipes" prints all accepted meals as a clean recipe sheet.
+- Instacart copy (TER-180): "Copy for Instacart" on List tab copies a ChatGPT-ready prompt for ALDI ordering.
+- Three env vars required: `ANTHROPIC_API_KEY` (server), `APP_PASSPHRASE` (server), `VITE_APP_PASSPHRASE` (client, must equal APP_PASSPHRASE).
 
 ## Backlog / next
-- Verify end-to-end generation on a Vercel preview deploy (key set).
+- Verify end-to-end generation on a Vercel preview deploy (all three env vars set).
 - Optional: Supabase persistence so Jen can use it on her own device.
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.
 - Optional: PWA / installable on phone.

@@ -13,6 +13,15 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  const passphrase = process.env.APP_PASSPHRASE;
+  if (passphrase) {
+    const provided = req.headers["x-app-key"];
+    if (!provided || provided !== passphrase) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+  }
+
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
     const {

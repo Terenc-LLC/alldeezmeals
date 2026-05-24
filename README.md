@@ -32,12 +32,24 @@ Note: `/api/generate` runs as a Vercel function. For full local testing of gener
 use `vercel dev` (Vercel CLI) so the function and env var load; `npm run dev` alone serves
 only the frontend.
 
+## Environment variables
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Server (Vercel) | Anthropic API key — never sent to browser |
+| `APP_PASSPHRASE` | Server (Vercel) | Shared secret; `/api/generate` returns 401 without it |
+| `VITE_APP_PASSPHRASE` | Client (Vercel + `.env`) | Must equal `APP_PASSPHRASE`; sent in every request header |
+
+**Security note:** `VITE_*` variables are compiled into the browser bundle, so `VITE_APP_PASSPHRASE`
+is visible to anyone who reads the JS. This is an intentional abuse speed-bump — it stops casual
+scraping without requiring real auth. The hard backstop is a low monthly spend cap on the API key.
+
 ## Deploy to Vercel
 
 1. Push this repo to GitHub (done).
 2. In Vercel: **New Project -> Import** `Terenc-LLC/alldeezmeals`.
 3. Framework preset auto-detects **Vite**. No build changes needed.
-4. **Settings -> Environment Variables:** add `ANTHROPIC_API_KEY` (Production + Preview).
+4. **Settings -> Environment Variables:** add `ANTHROPIC_API_KEY`, `APP_PASSPHRASE`, and `VITE_APP_PASSPHRASE` (Production + Preview). `VITE_APP_PASSPHRASE` must equal `APP_PASSPHRASE`.
 5. Deploy.
 
 ## Cost
