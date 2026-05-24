@@ -13,16 +13,8 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const passphrase = process.env.APP_PASSPHRASE;
-  if (!passphrase) {
-    res.status(500).json({ error: "Server misconfigured: APP_PASSPHRASE not set" });
-    return;
-  }
-  const provided = req.headers["x-app-key"];
-  if (!provided || provided !== passphrase) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  // TER-188 will add Supabase JWT validation here.
+  // Access is currently gated by the Supabase invite-only sign-in wall on the client.
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
