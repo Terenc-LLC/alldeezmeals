@@ -176,7 +176,11 @@ export default function App() {
       body: JSON.stringify({ prompt }),
     });
     const data = await r.json();
-    if (data.error) throw new Error(data.error);
+    if (!r.ok) {
+      // Anthropic errors arrive as { type, error: { type, message } }
+      const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
+      throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    }
     const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
     const obj = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim());
     if (!obj.name || !Array.isArray(obj.ingredients)) throw new Error("bad shape");
@@ -258,8 +262,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary -- ex
       const data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
       setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null } }));
       return data;
-    } catch {
-      setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: "Couldn't generate -- retry." } }));
+    } catch (e: any) {
+      setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: e?.message || "Couldn't generate -- retry." } }));
       return null;
     }
   };

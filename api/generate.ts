@@ -41,7 +41,12 @@ export default async function handler(req: any, res: any) {
     });
 
     const data = await r.json();
-    res.status(r.status).json(data);
+    // Pass Anthropic's status + body through unchanged so the frontend gets the real error.
+    if (!r.ok) {
+      res.status(r.status).json(data);
+      return;
+    }
+    res.status(200).json(data);
   } catch (e: any) {
     res.status(500).json({ error: String(e?.message || e) });
   }
