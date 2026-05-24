@@ -31,16 +31,22 @@ session (status, decisions, next steps).
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
 
-## Status (TER-177/178/180 — May 2026)
-- Scaffold builds clean (`vite build` OK).
+## Status (TER-177 revised — May 2026)
+- Scaffold builds clean (`tsc --noEmit && vite build` OK).
 - Frontend ported from the Claude artifact prototype.
-- Passphrase gate (TER-177): `/api/generate` requires `x-app-key` header matching `APP_PASSPHRASE` env var. Returns 401 otherwise. `VITE_APP_PASSPHRASE` sent from client on every call.
-- Full recipes (TER-178): generation now returns `prepMinutes`, `cookMinutes`, `steps[]`. max_tokens bumped to 2000. Displayed on meal cards. "Print recipes" prints all accepted meals as a clean recipe sheet.
-- Instacart copy (TER-180): "Copy for Instacart" on List tab copies a ChatGPT-ready prompt for ALDI ordering.
-- Three env vars required: `ANTHROPIC_API_KEY` (server), `APP_PASSPHRASE` (server), `VITE_APP_PASSPHRASE` (client, must equal APP_PASSPHRASE).
+- Passphrase gate (TER-177 revised): user-entered passphrase stored in `localStorage` key
+  `alldeez-passphrase`. Gate screen shown on first visit or after sign-out/wrong key. Sent
+  as `x-app-key` header on every `/api/generate` call. 401 → clears stored value, re-shows
+  gate with error message. No secret in the JS bundle; `VITE_APP_PASSPHRASE` removed.
+  Server now fail-closes: returns 500 if `APP_PASSPHRASE` is not set.
+- Full recipes (TER-178): generation returns `prepMinutes`, `cookMinutes`, `steps[]`.
+  max_tokens = 2000. Displayed on meal cards. "Print recipes" prints all accepted meals.
+- Instacart copy (TER-180): "Copy for Instacart" on List tab copies a ChatGPT-ready prompt.
+- Two env vars required: `ANTHROPIC_API_KEY` (server), `APP_PASSPHRASE` (server).
+  `VITE_APP_PASSPHRASE` must be DELETED from Vercel if previously set.
 
 ## Backlog / next
-- Verify end-to-end generation on a Vercel preview deploy (all three env vars set).
+- Verify end-to-end generation on a Vercel preview deploy (both server env vars set).
 - Optional: Supabase persistence so Jen can use it on her own device.
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.
 - Optional: PWA / installable on phone.
@@ -49,3 +55,5 @@ session (status, decisions, next steps).
 - Open-Meteo forecasts ~16 days out; beyond that, days fall back to neutral weather.
 - AI ingredient quantities are estimates suitable for a shopping list, not exact recipes.
 - localStorage is per-device until/unless Supabase is added.
+- Single shared household passphrase (not per-user accounts); persists in the browser after
+  entry. Spend cap remains the hard backstop against abuse.

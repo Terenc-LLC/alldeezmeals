@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
-  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays,
+  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -13,7 +13,10 @@ import {
 /* ------------------------------------------------------------------ */
 
 const STORAGE_KEY = "alldeezmeals-v1";
+const PASSPHRASE_KEY = "alldeez-passphrase";
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+class UnauthorizedError extends Error {}
 
 const CATEGORIES = ["Produce", "Meat & Seafood", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other"];
 const CUISINES = ["Any", "American", "Comfort food", "Italian", "Mexican", "Tex-Mex", "Asian", "Chinese", "Thai", "Indian", "Mediterranean", "Greek", "BBQ", "Soup / Stew", "Salad-forward"];
@@ -45,15 +48,15 @@ function weekdayLabel(iso: string) { return parseISO(iso).toLocaleDateString(und
 
 /* ---- WMO weather code -> label/emoji ---- */
 function wx(code: number) {
-  if (code === 0) return { e: "\u2600\uFE0F", l: "Clear" };
-  if (code <= 3) return { e: "\u26C5", l: "Partly cloudy" };
-  if (code <= 48) return { e: "\uD83C\uDF2B\uFE0F", l: "Fog" };
-  if (code <= 57) return { e: "\uD83C\uDF26\uFE0F", l: "Drizzle" };
-  if (code <= 67) return { e: "\uD83C\uDF27\uFE0F", l: "Rain" };
-  if (code <= 77) return { e: "\u2744\uFE0F", l: "Snow" };
-  if (code <= 82) return { e: "\uD83C\uDF26\uFE0F", l: "Showers" };
-  if (code <= 86) return { e: "\uD83C\uDF28\uFE0F", l: "Snow showers" };
-  return { e: "\u26C8\uFE0F", l: "Thunderstorm" };
+  if (code === 0) return { e: "☀️", l: "Clear" };
+  if (code <= 3) return { e: "⛅", l: "Partly cloudy" };
+  if (code <= 48) return { e: "🌫️", l: "Fog" };
+  if (code <= 57) return { e: "🌦️", l: "Drizzle" };
+  if (code <= 67) return { e: "🌧️", l: "Rain" };
+  if (code <= 77) return { e: "❄️", l: "Snow" };
+  if (code <= 82) return { e: "🌦️", l: "Showers" };
+  if (code <= 86) return { e: "🌨️", l: "Snow showers" };
+  return { e: "⛈️", l: "Thunderstorm" };
 }
 const tempBand = (hi: number | null | undefined) => (hi == null ? "mild" : hi >= 82 ? "hot" : hi <= 45 ? "cold" : "mild");
 
@@ -61,6 +64,31 @@ const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Aut
 
 /* ====================================================================== */
 export default function App() {
+  /* ---- passphrase gate ---- */
+  const [passphrase, setPassphrase] = useState<string | null>(
+    () => localStorage.getItem(PASSPHRASE_KEY) || null
+  );
+  const [passphraseError, setPassphraseError] = useState(false);
+
+  const handlePassphraseEnter = (pp: string) => {
+    localStorage.setItem(PASSPHRASE_KEY, pp);
+    setPassphrase(pp);
+    setPassphraseError(false);
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem(PASSPHRASE_KEY);
+    setPassphrase(null);
+    setPassphraseError(false);
+  };
+
+  const handleAuthError = useCallback(() => {
+    localStorage.removeItem(PASSPHRASE_KEY);
+    setPassphrase(null);
+    setPassphraseError(true);
+    setBusy(false);
+  }, []); // eslint-disable-line
+
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("setup");
 
@@ -172,10 +200,11 @@ export default function App() {
   const callClaude = async (prompt: string) => {
     const r = await fetch("/api/generate", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-app-key": import.meta.env.VITE_APP_PASSPHRASE ?? "" },
+      headers: { "content-type": "application/json", "x-app-key": passphrase ?? "" },
       body: JSON.stringify({ prompt, max_tokens: 2000 }),
     });
     const data = await r.json();
+    if (r.status === 401) throw new UnauthorizedError();
     if (!r.ok) {
       // Anthropic errors arrive as { type, error: { type, message } }
       const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
@@ -266,6 +295,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null } }));
       return data;
     } catch (e: any) {
+      if (e instanceof UnauthorizedError) throw e;
       setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: e?.message || "Couldn't generate -- retry." } }));
       return null;
     }
@@ -274,17 +304,27 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   const generateAll = async () => {
     setBusy(true); setTab("plan");
     const committed = days.map((d) => meals[d.id]).filter((m) => m && m.status === "accepted").map((m) => m.data);
-    for (let i = 0; i < days.length; i++) {
-      const day = days[i];
-      if (meals[day.id]?.status === "accepted") continue;
-      const data = await generateOne(day, i, [...committed]);
-      if (data) committed.push(data);
+    try {
+      for (let i = 0; i < days.length; i++) {
+        const day = days[i];
+        if (meals[day.id]?.status === "accepted") continue;
+        const data = await generateOne(day, i, [...committed]);
+        if (data) committed.push(data);
+      }
+    } catch (e: any) {
+      if (e instanceof UnauthorizedError) { handleAuthError(); return; }
     }
     setBusy(false);
   };
 
   const acceptMeal = (id: string) => setMeals((m) => ({ ...m, [id]: { ...m[id], status: "accepted" } }));
-  const rejectMeal = async (day: any, idx: number) => { await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name); };
+  const rejectMeal = async (day: any, idx: number) => {
+    try {
+      await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name);
+    } catch (e: any) {
+      if (e instanceof UnauthorizedError) handleAuthError();
+    }
+  };
 
   const thumbUp = (name: string) => { if (name) setLiked((p) => (p.includes(name) ? p : [...p, name])); };
   const thumbDown = async (day: any, idx: number) => {
@@ -332,6 +372,25 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     return lines.join("\n").trim();
   }, [groceryList]);
 
+  /* ---- passphrase gate ---- */
+  if (!passphrase) {
+    return (
+      <div style={s.shell}>
+        <style>{fontImport}</style>
+        <header style={s.header}>
+          <div style={s.logoRow}>
+            <div style={s.logoMark}><Utensils size={20} color="#fff" /></div>
+            <div>
+              <h1 style={s.h1}>ALLDEEZMeals</h1>
+              <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
+            </div>
+          </div>
+        </header>
+        <GateView onEnter={handlePassphraseEnter} error={passphraseError} />
+      </div>
+    );
+  }
+
   if (!loaded) return <div style={s.shell}><p style={{ fontFamily: serif, color: "#5b6b5e" }}>Loading your kitchen...</p></div>;
 
   return (
@@ -339,12 +398,17 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     <div className="no-print" style={s.shell}>
       <style>{fontImport}</style>
       <header style={s.header}>
-        <div style={s.logoRow}>
-          <div style={s.logoMark}><Utensils size={20} color="#fff" /></div>
-          <div>
-            <h1 style={s.h1}>ALLDEEZMeals</h1>
-            <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
+        <div style={{ ...s.logoRow, justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={s.logoMark}><Utensils size={20} color="#fff" /></div>
+            <div>
+              <h1 style={s.h1}>ALLDEEZMeals</h1>
+              <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
+            </div>
           </div>
+          <button onClick={handleSignOut} style={s.signOutBtn} title="Change passphrase">
+            <LogOut size={15} />
+          </button>
         </div>
       </header>
 
@@ -423,6 +487,39 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       ))}
     </div>
     </>
+  );
+}
+
+/* ============================ Gate ============================ */
+function GateView({ onEnter, error }: { onEnter: (pp: string) => void; error: boolean }) {
+  const [value, setValue] = useState("");
+  const submit = () => { if (value.trim()) onEnter(value.trim()); };
+  return (
+    <div style={{ ...s.card, maxWidth: 340, margin: "48px auto" }}>
+      <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 4px", color: "#2c3a2e" }}>Enter passphrase</h2>
+      <p style={s.cardSub}>Shared household access</p>
+      {error && (
+        <p style={{ color: "#a23b3b", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
+          <AlertCircle size={14} /> Incorrect passphrase — try again.
+        </p>
+      )}
+      <input
+        type="password"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        style={{ ...s.input, width: "100%", marginTop: 14, boxSizing: "border-box" } as any}
+        placeholder="passphrase"
+        autoFocus
+      />
+      <button
+        onClick={submit}
+        disabled={!value.trim()}
+        style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 10, opacity: value.trim() ? 1 : 0.5 }}
+      >
+        Enter
+      </button>
+    </div>
   );
 }
 
@@ -731,6 +828,7 @@ const s: Record<string, any> = {
   primaryBtn: { display: "inline-flex", alignItems: "center", gap: 7, background: "#3d5141", color: "#fff", border: "none", borderRadius: 9, padding: "10px 16px", fontFamily: sans, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 2px 5px rgba(61,81,65,.25)" },
   ghostBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "transparent", color: "#6b7a6d", border: "1px solid #d8ddd4", borderRadius: 9, padding: "8px 13px", fontFamily: sans, fontWeight: 600, fontSize: 13, cursor: "pointer" },
   iconBtn: { background: "transparent", border: "none", cursor: "pointer", padding: 5, borderRadius: 6, display: "grid", placeItems: "center" },
+  signOutBtn: { background: "transparent", border: "1px solid #d8ddd4", borderRadius: 8, padding: 7, cursor: "pointer", color: "#9aa89c", display: "grid", placeItems: "center", flexShrink: 0 },
   mealCard: { background: "#fff", borderRadius: 13, padding: 16, border: "1px solid #e6e2d6" },
   mealTop: { marginBottom: 8 },
   slotTag: { fontSize: 11.5, fontWeight: 700, color: "#7a8a7c", textTransform: "uppercase", letterSpacing: ".04em" },

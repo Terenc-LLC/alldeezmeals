@@ -24,7 +24,7 @@ forwards the request to Anthropic. Weather needs no key, so it is called directl
 
 ```bash
 npm install
-cp .env.example .env        # add your ANTHROPIC_API_KEY
+cp .env.example .env        # add your ANTHROPIC_API_KEY and APP_PASSPHRASE
 npm run dev
 ```
 
@@ -37,20 +37,27 @@ only the frontend.
 | Variable | Where | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Server (Vercel) | Anthropic API key — never sent to browser |
-| `APP_PASSPHRASE` | Server (Vercel) | Shared secret; `/api/generate` returns 401 without it |
-| `VITE_APP_PASSPHRASE` | Client (Vercel + `.env`) | Must equal `APP_PASSPHRASE`; sent in every request header |
+| `APP_PASSPHRASE` | Server (Vercel) | Shared secret; `/api/generate` returns 401 without it. Server returns 500 if not set. |
 
-**Security note:** `VITE_*` variables are compiled into the browser bundle, so `VITE_APP_PASSPHRASE`
-is visible to anyone who reads the JS. This is an intentional abuse speed-bump — it stops casual
-scraping without requiring real auth. The hard backstop is a low monthly spend cap on the API key.
+**How passphrase auth works:** On first visit, users are shown a simple gate screen and
+prompted to enter the household passphrase. It is saved to `localStorage` and sent as the
+`x-app-key` header on every generation request. A wrong passphrase gets a 401 and
+re-prompts. The passphrase persists in the browser between visits; the logout button clears
+it. There is no `VITE_APP_PASSPHRASE` — no secret lives in the JS bundle.
+
+**Security note:** This is a single shared household secret, not per-user accounts. The
+hard backstop remains a low monthly spend cap on the API key.
 
 ## Deploy to Vercel
 
 1. Push this repo to GitHub (done).
-2. In Vercel: **New Project -> Import** `Terenc-LLC/alldeezmeals`.
+2. In Vercel: **New Project → Import** `Terenc-LLC/alldeezmeals`.
 3. Framework preset auto-detects **Vite**. No build changes needed.
-4. **Settings -> Environment Variables:** add `ANTHROPIC_API_KEY`, `APP_PASSPHRASE`, and `VITE_APP_PASSPHRASE` (Production + Preview). `VITE_APP_PASSPHRASE` must equal `APP_PASSPHRASE`.
-5. Deploy.
+4. **Settings → Environment Variables:** add `ANTHROPIC_API_KEY` and `APP_PASSPHRASE`
+   (Production + Preview). No client-side env vars needed.
+5. **Important:** if you previously set `VITE_APP_PASSPHRASE` in Vercel, delete it — it is
+   no longer used and would expose the secret in the bundle.
+6. Deploy.
 
 ## Cost
 
