@@ -62,6 +62,25 @@ const tempBand = (hi: number | null | undefined) => (hi == null ? "mild" : hi >=
 
 const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Auto", note: "" });
 
+/* ---- display helpers ---- */
+function fmtRecipeQty(ing: any): string {
+  if (ing.recipeAmount) {
+    const { qty, unit } = ing.recipeAmount;
+    if (!qty) return "";
+    const q = Number.isInteger(qty) ? qty : Math.round(qty * 100) / 100;
+    return `${q}${unit ? " " + unit : ""}`;
+  }
+  if (!ing.qty) return "";
+  const q = Number.isInteger(ing.qty) ? ing.qty : Math.round(ing.qty * 100) / 100;
+  return `${q}${ing.unit ? " " + ing.unit : ""}`;
+}
+
+function fmtPurchaseQty(qty: number, unit: string, isPurchaseStyle: boolean): string {
+  if (isPurchaseStyle) return qty <= 1 ? unit : `${qty} × ${unit}`;
+  const q = Number.isInteger(qty) ? qty : Math.round(qty * 100) / 100;
+  return unit ? `${q} ${unit}` : String(q);
+}
+
 /* ====================================================================== */
 export default function App() {
   /* ---- passphrase gate ---- */
@@ -216,10 +235,25 @@ export default function App() {
     obj.prepMinutes = typeof obj.prepMinutes === "number" ? Math.round(obj.prepMinutes) : null;
     obj.cookMinutes = typeof obj.cookMinutes === "number" ? Math.round(obj.cookMinutes) : null;
     obj.steps = Array.isArray(obj.steps) ? obj.steps.map(String).filter(Boolean) : [];
-    obj.ingredients = obj.ingredients.map((i: any) => ({
-      name: String(i.name || "").trim(), qty: Number(i.qty) || 0, unit: String(i.unit || "").trim(),
-      category: CATEGORIES.includes(i.category) ? i.category : "Other",
-    })).filter((i: any) => i.name);
+    obj.ingredients = obj.ingredients.map((i: any) => {
+      const name = String(i.name || "").trim();
+      const category = CATEGORIES.includes(i.category) ? i.category : "Other";
+      const recipeAmount = (i.recipeAmount && typeof i.recipeAmount === "object")
+        ? { qty: Number(i.recipeAmount.qty) || 0, unit: String(i.recipeAmount.unit || "").trim() }
+        : { qty: Number(i.qty) || 0, unit: String(i.unit || "").trim() };
+      let purchaseSize: string;
+      let purchaseQty: number;
+      if (i.purchaseSize && i.purchaseQty != null) {
+        purchaseSize = String(i.purchaseSize).trim();
+        purchaseQty = Math.max(0, Math.ceil(Number(i.purchaseQty) || 0));
+      } else {
+        purchaseSize = recipeAmount.unit
+          ? `${recipeAmount.qty} ${recipeAmount.unit}`.trim()
+          : String(recipeAmount.qty);
+        purchaseQty = 1;
+      }
+      return { name, recipeAmount, purchaseSize, purchaseQty, category };
+    }).filter((i: any) => i.name);
     return obj;
   };
 
@@ -243,7 +277,12 @@ export default function App() {
         : `Any cuisine is fine.`;
 
     const prior = committed.length
-      ? committed.map((m) => `- ${m.name}: ${m.ingredients.map((i: any) => `${i.name} (${i.qty}${i.unit ? " " + i.unit : ""})`).join(", ")}`).join("\n")
+      ? committed.map((m) => `- ${m.name}: ${m.ingredients.map((i: any) => {
+          const buy = i.purchaseSize
+            ? `${i.purchaseQty ?? 1}×${i.purchaseSize}`
+            : `${i.qty ?? 0}${i.unit ? " " + i.unit : ""}`;
+          return `${i.name} [buy: ${buy}]`;
+        }).join(", ")}`).join("\n")
       : "none yet";
 
     const eff = efficiency
@@ -252,7 +291,7 @@ export default function App() {
 - Share ingredients across the week; minimize waste.
 - The family likes bulk chicken breasts poached with onion+garlic then shredded for multiple dinners. Favor this kind of batch prep.
 - If a whole chicken is used, use its parts across more than one dinner.
-- AVOID DOUBLE BUYING: if this dinner reuses an ingredient already bought below, do NOT list it again in "ingredients"; note it in "reuseNote".`
+- AVOID DOUBLE BUYING (purchase basis): if a package already bought for an earlier dinner this week covers what you need here (e.g. one 2 lb bag of rice already purchased), do NOT include that ingredient in "ingredients" — note the reuse in "reuseNote" instead.`
       : `Use mainstream, affordable ALDI ingredients.`;
 
     const loves = Array.from(new Set([...liked, ...rotation.map((r) => r.name)]));
@@ -276,8 +315,10 @@ ${reject ? `\nThe user REJECTED "${reject}". Propose a clearly DIFFERENT dinner 
 Dinners already planned this week (with purchased ingredients):
 ${prior}
 
+Each ingredient requires: recipeAmount {qty, unit} (the cooking amount used in the recipe), purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen"), purchaseQty (integer ≥ 1, whole packages rounded UP to cover recipeAmount — usually 1).
+
 Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers -- exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","qty":0,"unit":"","category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -339,13 +380,31 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
 
   const groceryList = useMemo(() => {
     const agg: Record<string, any> = {};
-    const push = (name: string, qty: number, unit: string, category: string) => {
+    const pushIngredient = (i: any) => {
+      const name = String(i.name || "").trim();
+      if (!name) return;
+      const category = CATEGORIES.includes(i.category) ? i.category : "Other";
+      let unit: string, qty: number, isPurchaseStyle: boolean;
+      if (i.purchaseSize != null && i.purchaseQty != null) {
+        unit = i.purchaseSize;
+        qty = Number(i.purchaseQty) || 0;
+        isPurchaseStyle = true;
+      } else {
+        unit = String(i.unit || "").trim();
+        qty = Number(i.qty) || 0;
+        isPurchaseStyle = false;
+      }
       const key = `${name.toLowerCase()}|${unit.toLowerCase()}`;
-      if (!agg[key]) agg[key] = { name, qty: 0, unit, category: CATEGORIES.includes(category) ? category : "Other", staple: false };
-      agg[key].qty += Number(qty) || 0;
+      if (!agg[key]) agg[key] = { name, qty: 0, unit, category, staple: false, isPurchaseStyle };
+      agg[key].qty += qty;
     };
-    days.forEach((d) => { const m = meals[d.id]; if (m?.status === "accepted") m.data.ingredients.forEach((i: any) => push(i.name, i.qty, i.unit, i.category)); });
-    staples.filter((st) => st.enabled).forEach((st) => { const k = `${st.name.toLowerCase()}|${st.unit.toLowerCase()}`; push(st.name, st.qty, st.unit, st.category); if (agg[k]) agg[k].staple = true; });
+    days.forEach((d) => { const m = meals[d.id]; if (m?.status === "accepted") m.data.ingredients.forEach(pushIngredient); });
+    staples.filter((st) => st.enabled).forEach((st) => {
+      const k = `${st.name.toLowerCase()}|${st.unit.toLowerCase()}`;
+      if (!agg[k]) agg[k] = { name: st.name, qty: 0, unit: st.unit, category: CATEGORIES.includes(st.category) ? st.category : "Other", staple: false, isPurchaseStyle: false };
+      agg[k].qty += Number(st.qty) || 0;
+      agg[k].staple = true;
+    });
     const byCat: Record<string, any[]> = {}; CATEGORIES.forEach((c) => (byCat[c] = []));
     Object.values(agg).forEach((it: any) => { if (pantry.includes(it.name.toLowerCase())) return; (byCat[it.category] || byCat.Other).push(it); });
     CATEGORIES.forEach((c) => byCat[c].sort((a, b) => a.name.localeCompare(b.name)));
@@ -366,7 +425,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     CATEGORIES.forEach((cat) => {
       const items = groceryList[cat]; if (!items?.length) return;
       lines.push(`${cat}:`);
-      items.forEach((it: any) => { const q = Number.isInteger(it.qty) ? it.qty : Math.round(it.qty * 100) / 100; lines.push(`  - ${it.name} (${it.unit ? `${q} ${it.unit}` : q})`); });
+      items.forEach((it: any) => { lines.push(`  - ${it.name} (${fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)})`); });
       lines.push("");
     });
     return lines.join("\n").trim();
@@ -471,8 +530,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           <h3 style={{ fontSize: 13, margin: "0 0 4px" }}>Ingredients</h3>
           <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13 }}>
             {meal.data.ingredients.map((ing: any, ii: number) => {
-              const q = Number.isInteger(ing.qty) ? ing.qty : Math.round(ing.qty * 100) / 100;
-              return <li key={ii}>{ing.name}{ing.qty ? ` — ${q}${ing.unit ? " " + ing.unit : ""}` : ""}</li>;
+              const rStr = fmtRecipeQty(ing);
+              return <li key={ii}>{ing.name}{rStr ? ` — ${rStr}` : ""}</li>;
             })}
           </ul>
           {meal.data.steps?.length > 0 && (
@@ -669,9 +728,17 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                   </div>
                 )}
                 <div style={s.tagWrap}>
-                  {m.data.ingredients.map((ing: any, idx: number) => (
-                    <span key={idx} style={s.tag}>{ing.name}{ing.qty ? ` - ${Number.isInteger(ing.qty) ? ing.qty : Math.round(ing.qty * 100) / 100}${ing.unit ? " " + ing.unit : ""}` : ""}</span>
-                  ))}
+                  {m.data.ingredients.map((ing: any, idx: number) => {
+                    const rStr = fmtRecipeQty(ing);
+                    const pStr = ing.purchaseSize || "";
+                    const showBuyNote = pStr && pStr !== rStr;
+                    return (
+                      <span key={idx} style={s.tag}>
+                        {ing.name}{rStr ? ` — ${rStr}` : ""}
+                        {showBuyNote && <span style={{ fontSize: 10, color: "#9aa89c", marginLeft: 3 }}>· buy: {pStr}</span>}
+                      </span>
+                    );
+                  })}
                 </div>
                 {m.data.steps?.length > 0 && (
                   <ol style={s.stepsList}>
@@ -728,12 +795,11 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
                 <div style={{ display: "grid", gap: 4 }}>
                   {items.map((it: any) => {
                     const key = `${it.name}|${it.unit}`; const checked = !!checkedItems[key]; const isP = pantry.includes(it.name.toLowerCase());
-                    const q = Number.isInteger(it.qty) ? it.qty : Math.round(it.qty * 100) / 100;
                     return (
                       <div key={key} style={s.listItem}>
                         <button onClick={() => toggleCheck(key)} style={{ ...s.check, background: checked ? "#3d5141" : "transparent" }}>{checked && <Check size={13} color="#fff" />}</button>
                         <span style={{ flex: 1, textDecoration: checked ? "line-through" : "none", color: checked ? "#9aa89c" : "#2c3a2e" }}>
-                          {it.name} <span style={s.qtyText}>- {it.unit ? `${q} ${it.unit}` : q}</span>{it.staple && <span style={s.stapleDot}>staple</span>}
+                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{it.staple && <span style={s.stapleDot}>staple</span>}
                         </span>
                         <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP ? "#3d5141" : "#b6c0b7", borderColor: isP ? "#3d5141" : "#d8ddd4" }}>have it</button>
                       </div>
