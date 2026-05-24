@@ -172,8 +172,8 @@ export default function App() {
   const callClaude = async (prompt: string) => {
     const r = await fetch("/api/generate", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      headers: { "content-type": "application/json", "x-app-key": import.meta.env.VITE_APP_PASSPHRASE ?? "" },
+      body: JSON.stringify({ prompt, max_tokens: 2000 }),
     });
     const data = await r.json();
     if (!r.ok) {
@@ -184,6 +184,9 @@ export default function App() {
     const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
     const obj = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim());
     if (!obj.name || !Array.isArray(obj.ingredients)) throw new Error("bad shape");
+    obj.prepMinutes = typeof obj.prepMinutes === "number" ? Math.round(obj.prepMinutes) : null;
+    obj.cookMinutes = typeof obj.cookMinutes === "number" ? Math.round(obj.cookMinutes) : null;
+    obj.steps = Array.isArray(obj.steps) ? obj.steps.map(String).filter(Boolean) : [];
     obj.ingredients = obj.ingredients.map((i: any) => ({
       name: String(i.name || "").trim(), qty: Number(i.qty) || 0, unit: String(i.unit || "").trim(),
       category: CATEGORIES.includes(i.category) ? i.category : "Other",
@@ -244,8 +247,8 @@ ${reject ? `\nThe user REJECTED "${reject}". Propose a clearly DIFFERENT dinner 
 Dinners already planned this week (with purchased ingredients):
 ${prior}
 
-Respond with ONLY one JSON object -- no markdown, no fences, no commentary -- exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"reuseNote":"","ingredients":[{"name":"","qty":0,"unit":"","category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
+Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers -- exactly:
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","qty":0,"unit":"","category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -310,6 +313,14 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary -- ex
   }, [days, meals, staples, pantry]);
 
   const totalItems = useMemo(() => Object.values(groceryList).reduce((n, a) => n + a.length, 0), [groceryList]);
+
+  const acceptedMealsForPrint = useMemo(
+    () => days
+      .map((d, i) => ({ day: d, date: addDays(startDate, i), meal: meals[d.id] }))
+      .filter(({ meal }) => meal?.status === "accepted"),
+    [days, meals, startDate]
+  );
+
   const listText = useMemo(() => {
     const lines: string[] = [];
     CATEGORIES.forEach((cat) => {
@@ -324,7 +335,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary -- ex
   if (!loaded) return <div style={s.shell}><p style={{ fontFamily: serif, color: "#5b6b5e" }}>Loading your kitchen...</p></div>;
 
   return (
-    <div style={s.shell}>
+    <>
+    <div className="no-print" style={s.shell}>
       <style>{fontImport}</style>
       <header style={s.header}>
         <div style={s.logoRow}>
@@ -369,13 +381,48 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary -- ex
         {tab === "list" && (
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
             pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
-            acceptedCount={acceptedCount} slotCount={days.length} />
+            acceptedCount={acceptedCount} slotCount={days.length} location={location} />
         )}
         {tab === "rotation" && (
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
         )}
       </main>
     </div>
+    <div className="print-only">
+      <h1 style={{ fontFamily: serif, fontSize: 22, marginBottom: 4 }}>ALLDEEZMeals — Weekly Recipes</h1>
+      <p style={{ fontSize: 12, color: "#666", marginBottom: 24 }}>Printed {new Date().toLocaleDateString()}</p>
+      {acceptedMealsForPrint.map(({ day, date, meal }, pi) => (
+        <div key={pi} style={{ pageBreakAfter: pi < acceptedMealsForPrint.length - 1 ? "always" : "auto", marginBottom: 32 }}>
+          <h2 style={{ fontFamily: serif, fontSize: 18, margin: "0 0 4px" }}>{meal.data.name}</h2>
+          <p style={{ fontSize: 12, color: "#555", margin: "0 0 6px" }}>{weekdayLabel(date)} &mdash; {meal.data.cuisine}</p>
+          {(meal.data.prepMinutes != null || meal.data.cookMinutes != null) && (
+            <p style={{ fontSize: 12, margin: "0 0 8px" }}>
+              {meal.data.prepMinutes != null ? `Prep: ${meal.data.prepMinutes} min` : ""}
+              {meal.data.prepMinutes != null && meal.data.cookMinutes != null ? " | " : ""}
+              {meal.data.cookMinutes != null ? `Cook: ${meal.data.cookMinutes} min` : ""}
+              {" | "}Serves: {meal.data.servings}
+            </p>
+          )}
+          {meal.data.reuseNote && <p style={{ fontSize: 12, fontStyle: "italic", color: "#7a6030", margin: "0 0 8px" }}>Note: {meal.data.reuseNote}</p>}
+          <h3 style={{ fontSize: 13, margin: "0 0 4px" }}>Ingredients</h3>
+          <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13 }}>
+            {meal.data.ingredients.map((ing: any, ii: number) => {
+              const q = Number.isInteger(ing.qty) ? ing.qty : Math.round(ing.qty * 100) / 100;
+              return <li key={ii}>{ing.name}{ing.qty ? ` — ${q}${ing.unit ? " " + ing.unit : ""}` : ""}</li>;
+            })}
+          </ul>
+          {meal.data.steps?.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 13, margin: "0 0 4px" }}>Instructions</h3>
+              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+                {meal.data.steps.map((step: string, si: number) => <li key={si} style={{ marginBottom: 4 }}>{step}</li>)}
+              </ol>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+    </>
   );
 }
 
@@ -485,6 +532,11 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
   }
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      {days.some((d: any) => meals[d.id]?.status === "accepted") && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={() => window.print()} style={s.printBtn}>Print recipes</button>
+        </div>
+      )}
       {days.map((day: any, i: number) => {
         const m = meals[day.id]; const date = dateFor(i); const fx = forecast[date]; const w = fx ? wx(fx.code) : null;
         const isLiked = m?.data && liked.includes(m.data.name);
@@ -511,11 +563,26 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                   {m.status === "accepted" && <span style={s.acceptedPill}><Check size={13} /> Accepted</span>}
                 </div>
                 {m.data.reuseNote && <div style={s.reuseNote}><Repeat size={13} /> {m.data.reuseNote}</div>}
+                {(m.data.prepMinutes != null || m.data.cookMinutes != null) && (
+                  <div style={s.timeLine}>
+                    {m.data.prepMinutes != null && `Prep: ${m.data.prepMinutes} min`}
+                    {m.data.prepMinutes != null && m.data.cookMinutes != null && " · "}
+                    {m.data.cookMinutes != null && `Cook: ${m.data.cookMinutes} min`}
+                    {" · "}Serves: {m.data.servings}
+                  </div>
+                )}
                 <div style={s.tagWrap}>
                   {m.data.ingredients.map((ing: any, idx: number) => (
                     <span key={idx} style={s.tag}>{ing.name}{ing.qty ? ` - ${Number.isInteger(ing.qty) ? ing.qty : Math.round(ing.qty * 100) / 100}${ing.unit ? " " + ing.unit : ""}` : ""}</span>
                   ))}
                 </div>
+                {m.data.steps?.length > 0 && (
+                  <ol style={s.stepsList}>
+                    {m.data.steps.map((step: string, si: number) => (
+                      <li key={si} style={s.stepItem}>{step}</li>
+                    ))}
+                  </ol>
+                )}
                 <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
                   {m.status !== "accepted" && <button onClick={() => onAccept(day.id)} style={s.acceptBtn}><Check size={15} /> Accept</button>}
                   <button onClick={() => onReject(day, i)} style={s.rejectBtn}><RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}</button>
@@ -534,16 +601,25 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount }: any) {
+function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location }: any) {
   const [copied, setCopied] = useState(false);
+  const [copiedCart, setCopiedCart] = useState(false);
   const copy = async () => { try { await navigator.clipboard.writeText(listText); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
+  const copyForInstacart = async () => {
+    const locName = location?.name ?? "ALDI";
+    const prompt = `Add these groceries to an Instacart order from ALDI in ${locName}:\n\n${listText}`;
+    try { await navigator.clipboard.writeText(prompt); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
+  };
   const togglePantry = (n: string) => { const k = n.toLowerCase(); setPantry((p: string[]) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]); };
   const toggleCheck = (k: string) => setCheckedItems((p: any) => ({ ...p, [k]: !p[k] }));
   return (
     <div>
       <div style={s.listToolbar}>
         <p style={s.cardSub}>{totalItems} items - {acceptedCount}/{slotCount} dinners + staples</p>
-        <button onClick={copy} style={s.primaryBtn}>{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copied!" : "Copy list"}</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={copy} style={s.primaryBtn}>{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copied!" : "Copy list"}</button>
+          <button onClick={copyForInstacart} style={s.ghostBtn}>{copiedCart ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copiedCart ? "Copied!" : "Copy for Instacart"}</button>
+        </div>
       </div>
       {totalItems === 0 ? <div style={s.card}><p style={s.empty}>Accept dinners to build the list (staples always included).</p></div> : (
         <div style={{ display: "grid", gap: 14 }}>
@@ -621,7 +697,9 @@ function TabBtn({ active, onClick, icon, label }: any) {
 }
 
 const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
-.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}`;
+.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+.print-only{display:none}
+@media print{.no-print{display:none!important}.print-only{display:block!important}}`;
 const serif = "'Fraunces', Georgia, serif";
 const sans = "'Nunito Sans', -apple-system, sans-serif";
 
@@ -679,4 +757,8 @@ const s: Record<string, any> = {
   howto: { marginTop: 22, background: "#eef2e9", borderRadius: 13, padding: "14px 18px", border: "1px solid #d3ddc9" },
   howtoTitle: { fontFamily: serif, fontSize: 15, fontWeight: 600, margin: "0 0 6px", color: "#3d5141" },
   howtoList: { margin: 0, paddingLeft: 18, fontSize: 13, color: "#52614f", lineHeight: 1.7 },
+  timeLine: { fontSize: 12, color: "#7a8a7c", margin: "8px 0 0" },
+  stepsList: { margin: "10px 0 0", paddingLeft: 20, display: "grid", gap: 4 },
+  stepItem: { fontSize: 13, color: "#3a4a3c", lineHeight: 1.5 },
+  printBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "#fff", color: "#3d5141", border: "1px solid #b8ccba", borderRadius: 8, padding: "8px 14px", fontFamily: "'Nunito Sans', -apple-system, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer" },
 };
