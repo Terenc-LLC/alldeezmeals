@@ -31,7 +31,7 @@ session (status, decisions, next steps).
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
 
-## Status (TER-177 revised — May 2026)
+## Status (TER-183 — May 2026)
 - Scaffold builds clean (`tsc --noEmit && vite build` OK).
 - Frontend ported from the Claude artifact prototype.
 - Passphrase gate (TER-177 revised): user-entered passphrase stored in `localStorage` key
@@ -42,6 +42,14 @@ session (status, decisions, next steps).
 - Full recipes (TER-178): generation returns `prepMinutes`, `cookMinutes`, `steps[]`.
   max_tokens = 2000. Displayed on meal cards. "Print recipes" prints all accepted meals.
 - Instacart copy (TER-180): "Copy for Instacart" on List tab copies a ChatGPT-ready prompt.
+- Purchase-quantity grocery list (TER-183): ingredient JSON shape changed — each ingredient
+  now carries `recipeAmount {qty, unit}` (cooking amount) and `purchaseSize` / `purchaseQty`
+  (whole ALDI package). Grocery list aggregates on purchaseSize, summing purchaseQty (whole
+  packages), so the list reads "garlic — 1 head" not "garlic — 2 cloves". Meal cards and
+  print view still show recipeAmount (cooking amounts). Chips show a subtle "buy: 1 head"
+  note where purchaseSize differs from recipeAmount. AVOID-DOUBLE-BUYING rule updated to
+  operate on purchases, not recipe quantities. Old saved meals (pre-TER-183 shape) fall back
+  to old qty/unit behavior — no crash on load.
 - Two env vars required: `ANTHROPIC_API_KEY` (server), `APP_PASSPHRASE` (server).
   `VITE_APP_PASSPHRASE` must be DELETED from Vercel if previously set.
 
