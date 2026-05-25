@@ -511,22 +511,27 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       numDays,
       location,
       meals: acceptedMealsForPrint.map(({ day, date, meal }: any) => ({
-        day: day.label,
+        day: weekdayLabel(date),
         date,
         mealData: meal.data,
       })),
       groceryList,
       listText,
     };
-    const { error } = await supabase
-      .from("orders")
-      .insert({ user_id: session.user.id, plan: snapshot });
-    if (error) {
-      console.warn("Failed to archive order:", error);
-      return { error: error.message };
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .insert({ user_id: session.user.id, plan: snapshot });
+      if (error) {
+        console.warn("Failed to archive order:", error);
+        return { error: error.message };
+      }
+      resetPlan();
+      return { error: null };
+    } catch (e: any) {
+      console.warn("Failed to archive order:", e);
+      return { error: e?.message || "Network error — plan not archived." };
     }
-    resetPlan();
-    return { error: null };
   };
 
   /* ---- auth gate ---- */
