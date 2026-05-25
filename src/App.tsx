@@ -171,7 +171,7 @@ export default function App() {
       .eq("user_id", userId)
       .maybeSingle()
       .then(({ data, error }) => {
-        if (error) console.warn("user_state fetch failed:", error.message);
+        if (error) { console.warn("user_state fetch failed:", error.message); hydrated.current = true; return; }
         if (data?.state) {
           const d = data.state;
           if (d.location !== undefined) setLocation(d.location);
@@ -189,6 +189,27 @@ export default function App() {
           if (d.rotation !== undefined) setRotation(d.rotation);
           if (d.liked !== undefined) setLiked(d.liked);
           if (d.avoid !== undefined) setAvoid(d.avoid);
+        } else if (data === null) {
+          // No row — one-time migration: push existing localStorage up to Supabase.
+          // Only fires when maybeSingle returns null (no row ever written for this user).
+          // If any row exists (even empty, e.g. after Start-over), we skip — cloud wins.
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            const local = raw ? JSON.parse(raw) : null;
+            if (local && typeof local === "object") {
+              supabase
+                .from("user_state")
+                .upsert(
+                  { user_id: userId, state: local, updated_at: new Date().toISOString() },
+                  { onConflict: "user_id" },
+                )
+                .then(({ error: migrateErr }) => {
+                  if (migrateErr) console.warn("user_state migrate failed:", migrateErr.message);
+                  hydrated.current = true;
+                });
+              return; // hydrated.current set inside the nested callback above
+            }
+          } catch {}
         }
         hydrated.current = true;
       });

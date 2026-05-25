@@ -115,14 +115,25 @@ session (status, decisions, next steps).
 - Two env vars required: `ANTHROPIC_API_KEY` (server), `APP_PASSPHRASE` (server).
   `VITE_APP_PASSPHRASE` must be DELETED from Vercel if previously set.
 
+## Status (TER-189 — May 2026)
+- localStorage→Supabase one-time migration (TER-189): effect 2 (sign-in fetch) now migrates
+  pre-existing localStorage data to the signed-in user's `user_state` row the first time they
+  sign in, without requiring an edit. Trigger: `maybeSingle()` returns `null` (no row exists)
+  AND localStorage parses to a non-null object. If any row exists (even empty, e.g. after a
+  Start-over), migration is skipped — cloud is authoritative. Idempotent: after migration a row
+  exists, so re-sign-ins/reloads are no-ops. `hydrated.current` is set inside the nested upsert
+  callback, preserving the TER-173 gate (effect 3 can't write until the migration completes).
+  `catalog` is NOT migrated (server-write-only, no client localStorage). Cross-device: first
+  device to sign in migrates its local data; subsequent devices load the cloud row.
+  `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
-- TER-189: localStorage→Supabase data migration (post TER-173).
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.
 - Optional: PWA / installable on phone.
 
 ## Known caveats
 - Open-Meteo forecasts ~16 days out; beyond that, days fall back to neutral weather.
 - AI ingredient quantities are estimates suitable for a shopping list, not exact recipes.
-- Existing localStorage data (pre-TER-173) is NOT auto-migrated to Supabase — that's TER-189.
-  New users start with a blank Supabase row; returning users will see their localStorage data
-  until TER-189 runs the one-time migration.
+- Pre-TER-173 localStorage data is migrated to Supabase on first sign-in (TER-189). Each
+  device's local data migrates under the first account to sign in there — if a device was
+  shared pre-accounts, its local data imports under that first account only.
