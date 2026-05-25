@@ -585,6 +585,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Saved (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
+        <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Archive size={15} />} label="Catalog" />
       </nav>
 
       <main style={s.main}>
@@ -620,6 +621,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
         )}
         {tab === "receipt" && <IngestView session={session} />}
+        {tab === "catalog" && <CatalogView session={session} />}
       </main>
     </div>
     <div className="print-only">
@@ -1307,6 +1309,247 @@ function IngestView({ session }: { session: any }) {
       <div style={{ background: "#eef2e9", border: "1px solid #d3ddc9", borderRadius: 12, padding: "12px 16px", fontSize: 12.5, color: "#52614f", lineHeight: 1.6 }}>
         <strong>What gets logged:</strong> delivered items upsert the shared ALDI catalog (product name, size, price) and log to your purchase history. Re-submitting the same receipt will re-increment counts.
       </div>
+    </div>
+  );
+}
+
+/* ============================ Catalog ============================ */
+type CatalogItem = {
+  id: string;
+  product_name: string | null;
+  normalized_product: string;
+  package_size: string | null;
+  category: string | null;
+  upc: string | null;
+  kcal_per_100g: number | null;
+  serving_g: number | null;
+  macros: { protein_g: number; fat_g: number; carbs_g: number } | null;
+  fdc_id: string | null;
+  nutrition_source: string | null;
+  nutrition_retrieved_at: string | null;
+  nutrition_stale: boolean | null;
+};
+
+function CatalogView({ session }: { session: any }) {
+  const [items, setItems] = useState<CatalogItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [fetchingId, setFetchingId] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [manualVals, setManualVals] = useState({ kcal: "", serving_g: "", protein: "", fat: "", carbs: "" });
+  const [savingManual, setSavingManual] = useState(false);
+
+  useEffect(() => { loadItems(); }, []);
+
+  const loadItems = async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("catalog")
+      .select("id, product_name, normalized_product, package_size, category, upc, kcal_per_100g, serving_g, macros, fdc_id, nutrition_source, nutrition_retrieved_at, nutrition_stale")
+      .order("updated_at", { ascending: false })
+      .limit(200);
+    setLoading(false);
+    if (data) setItems(data as CatalogItem[]);
+  };
+
+  const handleExpand = (id: string, item: CatalogItem) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    setManualVals({
+      kcal: item.kcal_per_100g != null ? String(item.kcal_per_100g) : "",
+      serving_g: item.serving_g != null ? String(item.serving_g) : "",
+      protein: item.macros?.protein_g != null ? String(item.macros.protein_g) : "",
+      fat: item.macros?.fat_g != null ? String(item.macros.fat_g) : "",
+      carbs: item.macros?.carbs_g != null ? String(item.macros.carbs_g) : "",
+    });
+  };
+
+  const fetchByUpc = async (item: CatalogItem) => {
+    if (!item.upc) return;
+    setFetchingId(item.id);
+    const token = session?.access_token ?? "";
+    try {
+      const nutRes = await fetch("/api/nutrition", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mode: "gtin", gtin: item.upc }),
+      });
+      const nutData = await nutRes.json();
+      if (!nutRes.ok || !nutData.hit) {
+        setStatusMsg(p => ({ ...p, [item.id]: { ok: false, msg: nutData.miss_reason ?? "Not found in FDC or Open Food Facts" } }));
+        return;
+      }
+      const saveRes = await fetch("/api/catalog-nutrition", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mode: "auto", catalogId: item.id, result: nutData }),
+      });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saveData.error || `Error ${saveRes.status}`);
+      const srcLabel = nutData.source === "usda" ? "USDA FDC" : "Open Food Facts";
+      setStatusMsg(p => ({ ...p, [item.id]: { ok: true, msg: `Saved from ${srcLabel} — ${Math.round(nutData.kcal_per_100g)} kcal/100g` } }));
+      await loadItems();
+    } catch (e: any) {
+      setStatusMsg(p => ({ ...p, [item.id]: { ok: false, msg: e?.message || "Failed" } }));
+    } finally {
+      setFetchingId(null);
+    }
+  };
+
+  const saveManual = async (item: CatalogItem) => {
+    setSavingManual(true);
+    const token = session?.access_token ?? "";
+    const kcal = manualVals.kcal ? Number(manualVals.kcal) : null;
+    const servG = manualVals.serving_g ? Number(manualVals.serving_g) : null;
+    const protein = manualVals.protein ? Number(manualVals.protein) : null;
+    const fat = manualVals.fat ? Number(manualVals.fat) : null;
+    const carbs = manualVals.carbs ? Number(manualVals.carbs) : null;
+    const macros = protein != null && fat != null && carbs != null
+      ? { protein_g: protein, fat_g: fat, carbs_g: carbs }
+      : null;
+    try {
+      const res = await fetch("/api/catalog-nutrition", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mode: "manual", catalogId: item.id, kcal_per_100g: kcal, serving_g: servG, macros }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      setStatusMsg(p => ({ ...p, [item.id]: { ok: true, msg: "Saved manually" } }));
+      await loadItems();
+    } catch (e: any) {
+      setStatusMsg(p => ({ ...p, [item.id]: { ok: false, msg: e?.message || "Failed" } }));
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
+  const filtered = search.trim()
+    ? items.filter(it => (it.product_name ?? it.normalized_product).toLowerCase().includes(search.toLowerCase()))
+    : items;
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ ...s.cardTitle, margin: 0 }}>Catalog ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""})</h3>
+        <button onClick={loadItems} style={s.ghostBtn}><RefreshCw size={13} /> Refresh</button>
+      </div>
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search products…"
+        style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
+      />
+      {loading && <p style={s.empty}>Loading…</p>}
+      {!loading && filtered.length === 0 && (
+        <p style={s.empty}>No catalog items yet — log a receipt to populate.</p>
+      )}
+      {filtered.map(item => {
+        const expanded = expandedId === item.id;
+        const hasNutrition = item.kcal_per_100g != null;
+        const displayName = item.product_name ?? item.normalized_product;
+        const srcLabel = item.nutrition_source === "usda" ? "USDA" : item.nutrition_source === "off" ? "OFF" : item.nutrition_source === "manual" ? "Manual" : null;
+        const msg = statusMsg[item.id];
+
+        return (
+          <div key={item.id} style={s.dayBlock}>
+            <button onClick={() => handleExpand(item.id, item)} style={{ ...s.collapseBtn, padding: 0 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13.5, color: "#2c3a2e" }}>{displayName}</span>
+                  {item.package_size && <span style={{ fontSize: 12, color: "#9aa89c", marginLeft: 6 }}>{item.package_size}</span>}
+                </div>
+                <div style={{ display: "flex", gap: 5, alignItems: "center", flexShrink: 0 }}>
+                  {item.upc && <span style={{ fontSize: 10, color: "#b6c0b7" }}>UPC</span>}
+                  {hasNutrition && srcLabel && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#3d5141", background: "#eef2e9", padding: "1px 6px", borderRadius: 10 }}>{srcLabel}</span>
+                  )}
+                  {hasNutrition && (
+                    <span style={{ fontSize: 11.5, color: "#52614f", fontWeight: 600 }}>{Math.round(item.kcal_per_100g!)} kcal</span>
+                  )}
+                </div>
+              </div>
+              <span style={{ marginLeft: 10, color: "#9aa89c", fontSize: 11 }}>{expanded ? "▲" : "▼"}</span>
+            </button>
+
+            {expanded && (
+              <div style={{ marginTop: 12, borderTop: "1px solid #ece7d9", paddingTop: 12, display: "grid", gap: 12 }}>
+                {hasNutrition && (
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" as const, fontSize: 12.5, color: "#52614f", alignItems: "center" }}>
+                    <span><strong>{Math.round(item.kcal_per_100g!)} kcal</strong>/100g</span>
+                    {item.serving_g != null && <span>Serving: {item.serving_g}g</span>}
+                    {item.macros && (
+                      <>
+                        <span>P: {item.macros.protein_g}g</span>
+                        <span>F: {item.macros.fat_g}g</span>
+                        <span>C: {item.macros.carbs_g}g</span>
+                      </>
+                    )}
+                    {item.nutrition_retrieved_at && (
+                      <span style={{ color: "#9aa89c" }}>{new Date(item.nutrition_retrieved_at).toLocaleDateString()}</span>
+                    )}
+                  </div>
+                )}
+
+                {item.upc && (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button
+                      onClick={() => fetchByUpc(item)}
+                      disabled={fetchingId === item.id}
+                      style={{ ...s.ghostBtn, opacity: fetchingId === item.id ? 0.5 : 1, fontSize: 12.5, padding: "6px 11px" }}
+                    >
+                      {fetchingId === item.id
+                        ? <><RefreshCw size={13} className="spin" /> Fetching…</>
+                        : <><Sparkles size={13} /> Fetch nutrition by UPC</>}
+                    </button>
+                    <span style={{ fontSize: 11, color: "#9aa89c", fontFamily: "monospace" }}>{item.upc}</span>
+                  </div>
+                )}
+
+                {msg && (
+                  <p style={{ fontSize: 12.5, color: msg.ok ? "#3d5141" : "#a23b3b", margin: 0, display: "flex", gap: 5, alignItems: "center" }}>
+                    {msg.ok ? <Check size={13} /> : <AlertCircle size={13} />} {msg.msg}
+                  </p>
+                )}
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <span style={s.fieldLabel}>Manual nutrition</span>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+                    {[
+                      { label: "kcal/100g", key: "kcal" as const, w: 80 },
+                      { label: "serving g", key: "serving_g" as const, w: 72 },
+                      { label: "protein g", key: "protein" as const, w: 72 },
+                      { label: "fat g", key: "fat" as const, w: 64 },
+                      { label: "carbs g", key: "carbs" as const, w: 68 },
+                    ].map(({ label, key, w }) => (
+                      <div key={key}>
+                        <label style={{ fontSize: 11, color: "#7a8a7c", display: "block", marginBottom: 2 }}>{label}</label>
+                        <input
+                          type="number"
+                          value={manualVals[key]}
+                          onChange={e => setManualVals(p => ({ ...p, [key]: e.target.value }))}
+                          style={{ ...s.input, width: w, fontSize: 12 }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => saveManual(item)}
+                    disabled={savingManual || !manualVals.kcal}
+                    style={{ ...s.ghostBtn, opacity: savingManual || !manualVals.kcal ? 0.5 : 1, fontSize: 12.5, width: "fit-content" }}
+                  >
+                    {savingManual ? <><RefreshCw size={13} className="spin" /> Saving…</> : <><Check size={13} /> Save manual</>}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

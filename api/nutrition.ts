@@ -4,7 +4,7 @@
 // no service-role key needed here (unlike /api/ingest-order).
 
 import { createClient } from "@supabase/supabase-js";
-import { normalizeIngName } from "../src/lib/normalize";
+import { normalizeIngName, normalizeGtin } from "../src/lib/normalize";
 
 const FDC_BASE = "https://api.nal.usda.gov/fdc/v1";
 const OFF_BASE = "https://world.openfoodfacts.org/api/v0";
@@ -170,7 +170,8 @@ async function lookupByGtin(gtin: string, apiKey: string): Promise<LookupOutcome
     if (fdcR.ok) {
       const fdcData = await fdcR.json();
       const foods: any[] = fdcData.foods ?? [];
-      const match = foods.find((f: any) => f.gtinUpc === gtin);
+      const normGtin = normalizeGtin(gtin);
+      const match = foods.find((f: any) => f.gtinUpc && normalizeGtin(f.gtinUpc) === normGtin);
       if (!match) {
         // FDC searched successfully and confirmed this GTIN is absent — definitive miss from FDC.
         fdcDefinitive = true;
@@ -325,11 +326,12 @@ export default async function handler(req: any, res: any) {
     }
     cacheKey = normalizeIngName(ingredient);
   } else {
-    gtin = typeof body.gtin === "string" ? body.gtin.trim() : "";
-    if (!gtin) {
+    const rawGtin = typeof body.gtin === "string" ? body.gtin.trim() : "";
+    if (!rawGtin) {
       res.status(400).json({ error: "gtin required for gtin mode" });
       return;
     }
+    gtin = normalizeGtin(rawGtin);
     cacheKey = `upc:${gtin}`;
   }
 
