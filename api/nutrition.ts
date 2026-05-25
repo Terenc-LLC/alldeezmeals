@@ -4,6 +4,7 @@
 // no service-role key needed here (unlike /api/ingest-order).
 
 import { createClient } from "@supabase/supabase-js";
+import { normalizeIngName } from "../src/lib/normalize";
 
 const FDC_BASE = "https://api.nal.usda.gov/fdc/v1";
 const OFF_BASE = "https://world.openfoodfacts.org/api/v0";
@@ -11,16 +12,6 @@ const CACHE_TTL_DAYS = 30;
 
 export const USDA_ATTRIBUTION = "Nutrition data: USDA FoodData Central";
 const OFF_ATTRIBUTION = "Nutrition data: Open Food Facts (ODbL)";
-
-// Same logic as App.tsx:normalizeIngName — keep in sync (flagged in TER-202/195).
-function normalizeName(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/\s*\([^)]*\)\s*/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 // Ingredients that yield no useful nutrition and should be skipped by callers.
 const SKIP_TERMS = ["to taste", "as needed", "for garnish", "optional"];
@@ -332,7 +323,7 @@ export default async function handler(req: any, res: any) {
     if (SKIP_TERMS.some((t) => ingredient.toLowerCase().includes(t))) {
       return res.status(200).json({ hit: false, miss_reason: "skip" } as MissResponse);
     }
-    cacheKey = normalizeName(ingredient);
+    cacheKey = normalizeIngName(ingredient);
   } else {
     gtin = typeof body.gtin === "string" ? body.gtin.trim() : "";
     if (!gtin) {
