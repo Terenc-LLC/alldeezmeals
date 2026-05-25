@@ -1,6 +1,8 @@
 // Vercel serverless function. Runs on the server, never shipped to the browser.
 // Keeps ANTHROPIC_API_KEY secret. Frontend calls POST /api/generate with { prompt }.
 
+import { createClient } from "@supabase/supabase-js";
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -13,8 +15,27 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  // TER-188 will add Supabase JWT validation here.
-  // Access is currently gated by the Supabase invite-only sign-in wall on the client.
+  // Validate Supabase session — closes the open-proxy gap left by TER-187 (TER-188).
+  const authHeader = (req.headers["authorization"] as string) ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    res.status(500).json({ error: "Server missing Supabase configuration" });
+    return;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};

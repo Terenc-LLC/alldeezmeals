@@ -32,6 +32,15 @@ session (status, decisions, next steps).
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
 
+## Status (TER-188 — May 2026)
+- `/api/generate` server-side auth (TER-188): Supabase JWT validation added, closing the
+  open-proxy gap from TER-187. After the method and API-key guards, the handler reads the
+  `Authorization: Bearer <token>` header, rejects missing/malformed tokens with 401, then
+  calls `supabase.auth.getUser(token)` using the anon key (`VITE_SUPABASE_URL` /
+  `VITE_SUPABASE_ANON_KEY` — no new env vars needed). Invalid/expired tokens → 401; valid
+  session → proceeds to the Anthropic call. No service-role key used or introduced.
+  TER-187 stub comment replaced. `tsc --noEmit && vite build` pass.
+
 ## Status (TER-187 — May 2026)
 - Supabase auth (TER-187): passphrase gate replaced by Supabase magic-link / email OTP.
   `@supabase/supabase-js` added; client initialised from `VITE_SUPABASE_URL` +
@@ -86,8 +95,7 @@ session (status, decisions, next steps).
   `VITE_APP_PASSPHRASE` must be DELETED from Vercel if previously set.
 
 ## Backlog / next
-- TER-188: Add Supabase JWT validation to `/api/generate` (replace the stub comment).
-- TER-173: Per-user schema + RLS (references `auth.uid()` — needs TER-187 first).
+- TER-173: Per-user schema + RLS (references `auth.uid()` — needs TER-187/188 first).
 - TER-189: Data migration (post TER-173).
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.
 - Optional: PWA / installable on phone.
@@ -96,5 +104,3 @@ session (status, decisions, next steps).
 - Open-Meteo forecasts ~16 days out; beyond that, days fall back to neutral weather.
 - AI ingredient quantities are estimates suitable for a shopping list, not exact recipes.
 - localStorage is per-device until TER-173 (Supabase schema) lands.
-- `/api/generate` has no server-side auth check between TER-187 and TER-188; access is
-  gated by the Supabase sign-in wall on the client (invite-only). TER-188 closes this gap.
