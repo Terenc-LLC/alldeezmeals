@@ -1,5 +1,5 @@
 // TER-186: Server-side order/receipt ingestion.
-// Upserts shared catalog + per-user item_usage via the service role.
+// TER-202: Dedup key changed to normalized_product; added orderDate for purchase timestamps.
 // user_id is derived from the validated JWT — never from client-supplied input.
 
 import { createClient } from "@supabase/supabase-js";
@@ -20,6 +20,13 @@ type IngestRow = {
   isRefund?: boolean;
   include?: boolean;
 };
+
+function toNormalizedProduct(productName: string | null | undefined, fallback: string): string {
+  return ((productName?.trim() || fallback.trim()) || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -53,7 +60,7 @@ export default async function handler(req: any, res: any) {
   }
   const userId = userData.user.id;
 
-  let body: { rows?: IngestRow[] };
+  let body: { rows?: IngestRow[]; orderDate?: string };
   try {
     body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   } catch {
@@ -77,28 +84,50 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  // Resolve purchase date from the receipt's orderDate; fall back to now().
+  // Noon UTC avoids date-shifting when displayed in non-UTC timezones.
+  const now = new Date().toISOString();
+  const rawOrderDate = typeof body.orderDate === "string" ? body.orderDate.trim() : "";
+  let purchaseDate = now;
+  if (rawOrderDate) {
+    const d = new Date(rawOrderDate);
+    if (!isNaN(d.getTime())) {
+      purchaseDate = rawOrderDate.slice(0, 10) + "T12:00:00.000Z";
+    }
+  }
+
+  // Dedupe within the submitted batch by normalized_product (last-wins on size/price).
+  // This collapses same-product rows that got different generic names from the LLM
+  // (e.g. "lunch mate hard salami" and "hard salami" → one row for Lunch Mate Hard Salami).
+  const seenProducts = new Map<string, IngestRow>();
+  for (const row of deliveredRows) {
+    const key = toNormalizedProduct(row.productName, row.normalizedName);
+    seenProducts.set(key, row);
+  }
+
   // Service role client: bypasses RLS so we can write to the shared catalog.
   const svc = createClient(supabaseUrl, serviceRoleKey);
 
   const ok: string[] = [];
   const failed: string[] = [];
-  const now = new Date().toISOString();
 
-  for (const row of deliveredRows) {
-    const normalized = row.normalizedName.trim().toLowerCase();
+  for (const [normalizedProduct, row] of seenProducts.entries()) {
+    const normalizedName = row.normalizedName.trim().toLowerCase();
     const category = VALID_CATEGORIES.includes(row.category ?? "")
       ? (row.category as string)
       : null;
     const purchaseQty = Math.max(1, Math.round(Number(row.qty) || 1));
 
     try {
-      // Upsert catalog keyed on normalized_name.
-      // Only non-nutrition columns are specified here — nutrition columns stay untouched on conflict.
+      // Upsert catalog keyed on normalized_product.
+      // normalized_name stores the latest generic name seen for this product (lossy, v1).
+      // Nutrition columns are omitted here so they survive re-ingests untouched.
       const { data: catalogRow, error: catalogErr } = await svc
         .from("catalog")
         .upsert(
           {
-            normalized_name: normalized,
+            normalized_product: normalizedProduct,
+            normalized_name: normalizedName,
             product_name: row.productName?.trim() || null,
             brand: row.brand?.trim() || null,
             category,
@@ -108,29 +137,30 @@ export default async function handler(req: any, res: any) {
               typeof row.unitPriceCents === "number"
                 ? Math.round(row.unitPriceCents)
                 : null,
-            last_seen_at: now,
+            last_seen_at: purchaseDate,
             source: "receipt",
             updated_at: now,
           },
-          { onConflict: "normalized_name" },
+          { onConflict: "normalized_product" },
         )
         .select("id")
         .single();
 
       if (catalogErr) {
-        console.error("catalog upsert failed:", normalized, catalogErr.message);
-        failed.push(normalized);
+        console.error("catalog upsert failed:", normalizedProduct, catalogErr.message);
+        failed.push(normalizedProduct);
         continue;
       }
 
       const catalogId: string | null = catalogRow?.id ?? null;
 
-      // Upsert item_usage: increment purchase_count on conflict rather than overwriting.
+      // Upsert item_usage keyed on (user_id, item_name=normalizedProduct):
+      // increment purchase_count on conflict rather than overwriting.
       const { data: existing } = await svc
         .from("item_usage")
         .select("id, purchase_count")
         .eq("user_id", userId)
-        .eq("item_name", normalized)
+        .eq("item_name", normalizedProduct)
         .maybeSingle();
 
       if (existing) {
@@ -138,36 +168,36 @@ export default async function handler(req: any, res: any) {
           .from("item_usage")
           .update({
             purchase_count: existing.purchase_count + purchaseQty,
-            last_purchased_at: now,
+            last_purchased_at: purchaseDate,
             ...(catalogId ? { catalog_id: catalogId } : {}),
           })
           .eq("id", existing.id);
 
         if (updateErr) {
-          console.error("item_usage update failed:", normalized, updateErr.message);
-          failed.push(normalized);
+          console.error("item_usage update failed:", normalizedProduct, updateErr.message);
+          failed.push(normalizedProduct);
           continue;
         }
       } else {
         const { error: insertErr } = await svc.from("item_usage").insert({
           user_id: userId,
           catalog_id: catalogId,
-          item_name: normalized,
+          item_name: normalizedProduct,
           purchase_count: purchaseQty,
-          last_purchased_at: now,
+          last_purchased_at: purchaseDate,
         });
 
         if (insertErr) {
-          console.error("item_usage insert failed:", normalized, insertErr.message);
-          failed.push(normalized);
+          console.error("item_usage insert failed:", normalizedProduct, insertErr.message);
+          failed.push(normalizedProduct);
           continue;
         }
       }
 
-      ok.push(normalized);
+      ok.push(normalizedProduct);
     } catch (e: any) {
-      console.error("ingest row error:", normalized, e?.message);
-      failed.push(normalized);
+      console.error("ingest row error:", normalizedProduct, e?.message);
+      failed.push(normalizedProduct);
     }
   }
 

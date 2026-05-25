@@ -1022,7 +1022,7 @@ function ChipManager({ items, onRemove, empty, tone }: any) {
 function buildReceiptParsePrompt(receiptText: string): string {
   return `You are parsing an ALDI grocery order confirmation or receipt.
 
-Extract every line item as a JSON array. Rules:
+Extract every line item and the order/receipt date. Rules:
 - For substitutions: record what was ACTUALLY DELIVERED (the substitute), not the original request.
 - Refunded, unavailable, or not-charged items: include them with "isRefund": true.
 - Skip line items for fees, taxes, tips, delivery charges, and order totals.
@@ -1030,7 +1030,7 @@ Extract every line item as a JSON array. Rules:
 - Sizes in parentheses: "Baker's Corner Brown Sugar (32 oz)" → packageSize="32 oz".
 - Category headers (PRODUCE, DAIRY, etc.) label sections but are not items.
 
-For each line item output exactly:
+For each line item:
 {
   "normalizedName": "lowercase generic name, e.g. \\"brown sugar\\", \\"boneless chicken breast\\"",
   "productName": "full product name as printed",
@@ -1048,7 +1048,12 @@ Receipt text:
 ${receiptText.trim()}
 ---
 
-Respond with ONLY a JSON array. No markdown, no fences, no commentary.`;
+Respond with ONLY a JSON object (no markdown, no fences, no commentary) in this exact shape:
+{
+  "orderDate": "YYYY-MM-DD",
+  "items": [ ...array of line items as above... ]
+}
+Use null for orderDate if the receipt does not contain a date.`;
 }
 
 type ParsedRow = {
@@ -1068,6 +1073,7 @@ function IngestView({ session }: { session: any }) {
   const [step, setStep] = useState<"paste" | "parsing" | "review" | "submitting" | "done">("paste");
   const [receiptText, setReceiptText] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [orderDate, setOrderDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [result, setResult] = useState<{ ingested: number; failed: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1097,9 +1103,16 @@ function IngestView({ session }: { session: any }) {
         .join("")
         .trim();
       const parsed = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim());
-      if (!Array.isArray(parsed)) throw new Error("Parser returned unexpected shape");
+      // Support both the new { orderDate, items } shape and a bare array (fallback).
+      const itemsArr: any[] = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.items)
+          ? parsed.items
+          : (() => { throw new Error("Parser returned unexpected shape"); })();
+      const parsedOrderDate = typeof parsed?.orderDate === "string" ? parsed.orderDate.trim() : "";
+      setOrderDate(parsedOrderDate || new Date().toISOString().slice(0, 10));
       setRows(
-        parsed.map((row: any) => ({
+        itemsArr.map((row: any) => ({
           normalizedName: String(row.normalizedName ?? "").trim(),
           productName: String(row.productName ?? "").trim(),
           brand: row.brand ?? null,
@@ -1130,7 +1143,7 @@ function IngestView({ session }: { session: any }) {
           "content-type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify({ rows, orderDate: orderDate || null }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error ?? `API error ${r.status}`);
@@ -1157,7 +1170,7 @@ function IngestView({ session }: { session: any }) {
           {result.failed > 0 && ` (${result.failed} failed — check console for details.)`}
         </p>
         <button
-          onClick={() => { setStep("paste"); setReceiptText(""); setRows([]); setResult(null); }}
+          onClick={() => { setStep("paste"); setReceiptText(""); setRows([]); setResult(null); setOrderDate(new Date().toISOString().slice(0, 10)); }}
           style={{ ...s.ghostBtn, marginTop: 14 }}
         >
           Log another receipt
@@ -1175,6 +1188,15 @@ function IngestView({ session }: { session: any }) {
             <span style={s.miniLabel}>{deliveredCount} of {rows.length} included</span>
           </div>
           <p style={s.cardSub}>Uncheck refunds or mis-parses. Edit names if needed.</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <label style={{ fontSize: 13, color: "#52614f", fontWeight: 600, whiteSpace: "nowrap" as const }}>Order date:</label>
+            <input
+              type="date"
+              value={orderDate}
+              onChange={(e) => setOrderDate(e.target.value)}
+              style={{ ...s.input, width: 150, fontSize: 13 }}
+            />
+          </div>
           <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
             {rows.map((row, i) => (
               <div key={i} style={{ ...s.dayBlock, opacity: !row.include ? 0.55 : 1 }}>
