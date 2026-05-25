@@ -166,6 +166,10 @@ session (status, decisions, next steps).
 - **`/api/ingest-order.ts`**: validates Bearer JWT; derives `user_id`; uses `SUPABASE_SERVICE_ROLE_KEY`
   to upsert shared `catalog`; upserts per-user `item_usage` with select+increment. Skips refunds and
   unchecked rows.
+- **`SUPABASE_SERVICE_ROLE_KEY`** must be the **LEGACY service_role JWT** (starts with `eyJ…`), found
+  under Supabase → API Keys → "Legacy anon, service_role API keys" tab. The new `sb_secret_…` key
+  does NOT bypass RLS via supabase-js in this project — service-role writes (catalog ingestion, future
+  seed endpoints) are rejected with it. Applies to every service-role endpoint.
 - **Receipt tab**: paste → parse (Haiku) → review → `/api/ingest-order`.
 - Known v1 limitation: re-submitting the same receipt re-increments `item_usage.purchase_count`.
 - `tsc --noEmit && vite build` pass.
