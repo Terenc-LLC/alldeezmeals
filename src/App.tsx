@@ -3,6 +3,7 @@ import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
+  ReceiptText,
 } from "lucide-react";
 import { supabase } from "./supabase";
 
@@ -586,6 +587,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <TabBtn active={tab === "plan"} onClick={() => setTab("plan")} icon={<Sparkles size={15} />} label={`Meals (${acceptedCount}/${days.length})`} />
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Saved (${rotation.length})`} />
+        <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
       </nav>
 
       <main style={s.main}>
@@ -620,6 +622,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         {tab === "rotation" && (
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
         )}
+        {tab === "receipt" && <IngestView session={session} />}
       </main>
     </div>
     <div className="print-only">
@@ -1010,6 +1013,281 @@ function ChipManager({ items, onRemove, empty, tone }: any) {
           {x}<button onClick={() => onRemove(x)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid" }}><X size={12} /></button>
         </span>
       ))}
+    </div>
+  );
+}
+
+/* ============================ Receipt ingestion (TER-186) ============================ */
+
+function buildReceiptParsePrompt(receiptText: string): string {
+  return `You are parsing an ALDI grocery order confirmation or receipt.
+
+Extract every line item as a JSON array. Rules:
+- For substitutions: record what was ACTUALLY DELIVERED (the substitute), not the original request.
+- Refunded, unavailable, or not-charged items: include them with "isRefund": true.
+- Skip line items for fees, taxes, tips, delivery charges, and order totals.
+- "2 x $1.99" means qty=2 and unitPriceCents=199.
+- Sizes in parentheses: "Baker's Corner Brown Sugar (32 oz)" → packageSize="32 oz".
+- Category headers (PRODUCE, DAIRY, etc.) label sections but are not items.
+
+For each line item output exactly:
+{
+  "normalizedName": "lowercase generic name, e.g. \\"brown sugar\\", \\"boneless chicken breast\\"",
+  "productName": "full product name as printed",
+  "brand": "brand if identifiable, else null",
+  "category": "one of: Produce, Meat & Seafood, Dairy & Eggs, Pantry, Frozen, Bakery, Other",
+  "packageSize": "e.g. \\"32 oz\\", \\"1 lb\\", \\"12 ct\\", or null",
+  "qty": 1,
+  "unitPriceCents": price per single unit in cents as integer,
+  "upc": null,
+  "isRefund": false
+}
+
+Receipt text:
+---
+${receiptText.trim()}
+---
+
+Respond with ONLY a JSON array. No markdown, no fences, no commentary.`;
+}
+
+type ParsedRow = {
+  normalizedName: string;
+  productName: string;
+  brand: string | null;
+  category: string | null;
+  packageSize: string | null;
+  qty: number;
+  unitPriceCents: number | null;
+  upc: string | null;
+  isRefund: boolean;
+  include: boolean;
+};
+
+function IngestView({ session }: { session: any }) {
+  const [step, setStep] = useState<"paste" | "parsing" | "review" | "submitting" | "done">("paste");
+  const [receiptText, setReceiptText] = useState("");
+  const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [result, setResult] = useState<{ ingested: number; failed: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const parseReceipt = async () => {
+    if (!receiptText.trim()) return;
+    setStep("parsing");
+    setErr(null);
+    const token = session?.access_token ?? "";
+    try {
+      const r = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          prompt: buildReceiptParsePrompt(receiptText),
+          max_tokens: 4000,
+          model: "claude-haiku-4-5-20251001",
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error?.message ?? `API error ${r.status}`);
+      const text = (data.content || [])
+        .filter((b: any) => b.type === "text")
+        .map((b: any) => b.text)
+        .join("")
+        .trim();
+      const parsed = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim());
+      if (!Array.isArray(parsed)) throw new Error("Parser returned unexpected shape");
+      setRows(
+        parsed.map((row: any) => ({
+          normalizedName: String(row.normalizedName ?? "").trim(),
+          productName: String(row.productName ?? "").trim(),
+          brand: row.brand ?? null,
+          category: CATEGORIES.includes(row.category) ? row.category : "Other",
+          packageSize: row.packageSize ?? null,
+          qty: Math.max(1, Math.round(Number(row.qty) || 1)),
+          unitPriceCents: typeof row.unitPriceCents === "number" ? Math.round(row.unitPriceCents) : null,
+          upc: row.upc ?? null,
+          isRefund: !!row.isRefund,
+          include: !row.isRefund,
+        })),
+      );
+      setStep("review");
+    } catch (e: any) {
+      setErr(e?.message ?? "Parse failed — check the receipt text and try again.");
+      setStep("paste");
+    }
+  };
+
+  const submitIngest = async () => {
+    setStep("submitting");
+    setErr(null);
+    const token = session?.access_token ?? "";
+    try {
+      const r = await fetch("/api/ingest-order", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error ?? `API error ${r.status}`);
+      setResult({ ingested: data.ingested, failed: data.failed });
+      setStep("done");
+    } catch (e: any) {
+      setErr(e?.message ?? "Submission failed — try again.");
+      setStep("review");
+    }
+  };
+
+  const patchRow = (i: number, patch: Partial<ParsedRow>) =>
+    setRows((p) => p.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+
+  const deliveredCount = rows.filter((r) => !r.isRefund && r.include).length;
+
+  if (step === "done" && result) {
+    return (
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>Logged to catalog</h3>
+        <p style={{ fontSize: 14, color: "#52614f", marginTop: 8 }}>
+          {result.ingested} item{result.ingested !== 1 ? "s" : ""} added to the shared ALDI catalog
+          and your purchase history.
+          {result.failed > 0 && ` (${result.failed} failed — check console for details.)`}
+        </p>
+        <button
+          onClick={() => { setStep("paste"); setReceiptText(""); setRows([]); setResult(null); }}
+          style={{ ...s.ghostBtn, marginTop: 14 }}
+        >
+          Log another receipt
+        </button>
+      </div>
+    );
+  }
+
+  if (step === "review" || step === "submitting") {
+    return (
+      <div style={{ display: "grid", gap: 14 }}>
+        <div style={s.card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <h3 style={s.cardTitle}>Review parsed items</h3>
+            <span style={s.miniLabel}>{deliveredCount} of {rows.length} included</span>
+          </div>
+          <p style={s.cardSub}>Uncheck refunds or mis-parses. Edit names if needed.</p>
+          <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+            {rows.map((row, i) => (
+              <div key={i} style={{ ...s.dayBlock, opacity: !row.include ? 0.55 : 1 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <input
+                    type="checkbox"
+                    checked={row.include}
+                    onChange={(e) => patchRow(i, { include: e.target.checked })}
+                    style={{ marginTop: 3, width: 16, height: 16, flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, display: "grid", gap: 5 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, alignItems: "center" }}>
+                      {row.isRefund && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#a23b3b", background: "#fbeaea", padding: "1px 7px", borderRadius: 10 }}>
+                          REFUND
+                        </span>
+                      )}
+                      <input
+                        value={row.normalizedName}
+                        onChange={(e) => patchRow(i, { normalizedName: e.target.value })}
+                        placeholder="normalized name"
+                        style={{ ...s.input, flex: 1, minWidth: 120, fontSize: 12.5 }}
+                      />
+                      <input
+                        value={row.packageSize ?? ""}
+                        onChange={(e) => patchRow(i, { packageSize: e.target.value || null })}
+                        placeholder="size"
+                        style={{ ...s.input, width: 70, fontSize: 12 }}
+                      />
+                      <input
+                        type="number"
+                        value={row.qty}
+                        min={1}
+                        onChange={(e) => patchRow(i, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                        style={{ ...s.input, width: 44, textAlign: "center", fontSize: 12 }}
+                      />
+                      {row.unitPriceCents != null && (
+                        <span style={{ fontSize: 11, color: "#9aa89c", whiteSpace: "nowrap" as const }}>
+                          ${(row.unitPriceCents / 100).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11.5, color: "#7a8a7c" }}>{row.productName}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {err && (
+          <p style={{ color: "#a23b3b", fontSize: 13, display: "flex", gap: 5, alignItems: "center" }}>
+            <AlertCircle size={14} /> {err}
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={submitIngest}
+            disabled={step === "submitting" || deliveredCount === 0}
+            style={{ ...s.primaryBtn, opacity: step === "submitting" || deliveredCount === 0 ? 0.5 : 1 }}
+          >
+            {step === "submitting"
+              ? <><RefreshCw size={15} className="spin" /> Saving…</>
+              : <><Check size={15} /> Log {deliveredCount} item{deliveredCount !== 1 ? "s" : ""} to catalog</>}
+          </button>
+          <button onClick={() => setStep("paste")} disabled={step === "submitting"} style={s.ghostBtn}>
+            ← Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>Log a receipt</h3>
+        <p style={{ ...s.cardSub, marginTop: 4 }}>
+          Paste your ALDI order confirmation or receipt. Claude extracts each item; you review before it's logged to the shared catalog.
+        </p>
+        <textarea
+          value={receiptText}
+          onChange={(e) => setReceiptText(e.target.value)}
+          placeholder={"Paste ALDI receipt or order confirmation text here…\n\nExample:\nPRODUCE\nOrganic Bananas (3 lb)  $1.89\n\nMEAT\nBoneless Chicken Breasts (2.5 lb)  2 x $4.99\n\nREFUNDED\nSimply Nature Almond Milk — not available"}
+          rows={14}
+          style={{
+            ...s.input,
+            width: "100%",
+            marginTop: 12,
+            resize: "vertical",
+            fontFamily: "monospace",
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            boxSizing: "border-box",
+          } as any}
+        />
+        {err && (
+          <p style={{ color: "#a23b3b", fontSize: 13, marginTop: 8, display: "flex", gap: 5, alignItems: "center" }}>
+            <AlertCircle size={14} /> {err}
+          </p>
+        )}
+      </div>
+      <button
+        onClick={parseReceipt}
+        disabled={!receiptText.trim() || step === "parsing"}
+        style={{ ...s.primaryBtn, justifyContent: "center", opacity: !receiptText.trim() || step === "parsing" ? 0.5 : 1 }}
+      >
+        {step === "parsing"
+          ? <><RefreshCw size={16} className="spin" /> Parsing receipt…</>
+          : <><Sparkles size={16} /> Parse receipt</>}
+      </button>
+      <div style={{ background: "#eef2e9", border: "1px solid #d3ddc9", borderRadius: 12, padding: "12px 16px", fontSize: 12.5, color: "#52614f", lineHeight: 1.6 }}>
+        <strong>What gets logged:</strong> delivered items upsert the shared ALDI catalog (product name, size, price) and log to your purchase history. Re-submitting the same receipt will re-increment counts.
+      </div>
     </div>
   );
 }

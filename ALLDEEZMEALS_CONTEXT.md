@@ -155,7 +155,38 @@ session (status, decisions, next steps).
 - **Action required**: register free FDC API key at api.data.gov/signup; add as `FDC_API_KEY`
   server-side env var. DEMO_KEY (40 req/day) is insufficient for development.
 
+## Status (TER-186 — May 2026)
+- Order/receipt ingestion + self-building ALDI catalog.
+- **Schema migration** (`supabase/migrations/20260525_002_catalog_full_schema.sql`): drops the dormant
+  TER-173 catalog shell and recreates it with the full target shape: `normalized_name` (unique join
+  key), `product_name`, `brand`, `category`, `package_size`, `upc`, `last_price_cents`,
+  `last_seen_at`, nutrition columns (blank, for TER-195), `source`, `created_at`, `updated_at`.
+  RLS re-applied: SELECT for any authenticated user; no client INSERT/UPDATE/DELETE policy (service
+  role only). `item_usage.catalog_id` FK dropped before the table recreate and re-added after.
+  **TER-195 and TER-198 must populate existing columns, not add new migrations.**
+- **`/api/ingest-order.ts`** (new serverless function): validates Bearer JWT with the anon key,
+  derives `user_id` from the validated JWT (never from client input — the service role bypasses RLS
+  so ownership enforcement lives in code). Uses `SUPABASE_SERVICE_ROLE_KEY` to upsert the shared
+  `catalog` on `normalized_name` (only non-nutrition columns specified, so nutrition cols survive
+  re-submit). Upserts per-user `item_usage` with select+increment for `purchase_count`. Skips
+  refunds and rows the user unchecked in the review table (keyed off `isRefund` and `include`).
+- **Receipt tab** added to the app (5th tab, ReceiptText icon). Three-state flow:
+  1. Paste: user pastes ALDI order confirmation or receipt text.
+  2. Parse: calls `/api/generate` (Haiku for cost) with a structured extraction prompt → JSON
+     array of `{ normalizedName, productName, brand, category, packageSize, qty, unitPriceCents,
+     upc, isRefund }`. Refunds default to unchecked; user can toggle any row.
+  3. Review: editable table (normalizedName, size, qty, price) → "Log N items to catalog" calls
+     `/api/ingest-order` → success screen with count.
+- **`SUPABASE_SERVICE_ROLE_KEY`** must be set server-side (Vercel + local `.env`). Already live in
+  prod per prereq confirmed in issue. Added to `.env.example`.
+- Known v1 limitation: re-submitting the same receipt re-increments `item_usage.purchase_count`.
+  Acceptable for v1; optionally guard later by hashing the order ID.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
+- TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
+- TER-198: Seed catalog with ALDI core-range items.
+- TER-190: Per-user item affinity from item_usage purchase history.
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.
 - Optional: PWA / installable on phone.
 
