@@ -78,7 +78,20 @@ session (status, decisions, next steps).
   `APP_PASSPHRASE` env var no longer needed (removed from `.env.example`).
   Two new Vercel env vars required: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
-## Status (TER-184/185/181-partial — May 2026)
+## Status (TER-181 — May 2026)
+- "Mark as ordered" archive action (TER-181, final): "Mark ordered & start next week" button
+  added to List tab toolbar (next to Copy buttons). Disabled when no meals are accepted.
+  On confirm: builds a snapshot of `acceptedMealsForPrint` (day/date/mealData incl. recipes,
+  steps, ingredients with purchaseSize/purchaseQty), `groceryList`, `listText`, `startDate`,
+  `numDays`, and `location`, then inserts `{ user_id, plan: snapshot }` into the per-user
+  `orders` table (RLS owner `WITH CHECK (user_id = auth.uid())`). `resetPlan()` (shared
+  helper extracted from `handleStartOver`) is called only after a confirmed successful insert.
+  On insert failure (offline, etc.): plan is NOT cleared; error shown in toolbar area.
+  `handleStartOver` refactored to call `resetPlan()` — both actions stay in sync.
+  RLS: the row lands under the signed-in user via the anon key + user JWT (no service role).
+  `tsc --noEmit && vite build` pass.
+
+## Status (TER-184/185 — May 2026)
 - List hygiene (TER-184): `purchaseQty` floored at 1 (no zero-qty lines). Ingredient names
   normalized (lowercase, strip trailing parentheticals) before aggregation so near-dupes like
   "sour cream" + "sour cream (full fat)" merge into one line. Zero-qty items filtered from
@@ -88,10 +101,6 @@ session (status, decisions, next steps).
   mainstream items and instructs the model to omit common pantry seasonings (salt, pepper,
   dried spices) and basic cooking oils from the purchase list by default (they still appear
   in cooking steps; a defining/central spice may still be purchased at model's judgment).
-- "Start over" (TER-181, localStorage half): a "Start over" button in Setup tab (below
-  "Generate meal plan") clears `meals` and `checkedItems` after a confirm dialog. Keeps
-  all day configuration, staples, pantry/have-it list, and preferences (liked/avoid/rotation).
-  (The "Mark as ordered" archive half of TER-181 is deferred pending Supabase.)
 
 ## Status (TER-183 — May 2026)
 - Scaffold builds clean (`tsc --noEmit && vite build` OK).
@@ -126,6 +135,25 @@ session (status, decisions, next steps).
   `catalog` is NOT migrated (server-write-only, no client localStorage). Cross-device: first
   device to sign in migrates its local data; subsequent devices load the cloud row.
   `tsc --noEmit && vite build` pass.
+
+## Status (TER-193 — May 2026)
+- FDC spike complete. Full findings in `docs/spikes/TER-193-fdc-investigation.md`.
+- **Generic coverage**: 6/6 (100%) — Foundation/SR Legacy covers all common staples.
+- **ALDI private-label via FDC brand-name search**: ~0/4 — FDC stores the co-packer as
+  `brandOwner`, not the retail brand (Carlini → "Conagra Brands"). Text search is unreliable
+  for private-label items; UPC → FDC GTIN lookup is the correct path.
+- **Open Food Facts**: 57 Simply Nature results with real nutrition data; viable as
+  supplementary source for ALDI private-label by brand name or UPC.
+- **Parsing**: FDC `foodPortions` provides household-measure → gram conversions
+  (e.g. "1 clove" = 3g). Fallback table for pinch/dash; skip "to taste"/"as needed".
+- **Per-serving math**: validated (±5% of reference). Formula: `(grams/100) × kcal_per_100g`.
+- **Matching heuristic**: Foundation > SR Legacy > Branded; prefer "raw"; penalize "cooked".
+- **Cache design**: Supabase `nutrition_cache` table; key = normalized name or `upc:{gtin}`;
+  TTL 7 days; SELECT for auth'd users, INSERT/UPDATE server-side only.
+- **Bulk seed (TER-198)**: Go — OFF bulk CSV for availability (0 API calls), FDC GTIN for
+  nutrition enrichment (2–4 hr at 1,000 req/hr).
+- **Action required**: register free FDC API key at api.data.gov/signup; add as `FDC_API_KEY`
+  server-side env var. DEMO_KEY (40 req/day) is insufficient for development.
 
 ## Backlog / next
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.

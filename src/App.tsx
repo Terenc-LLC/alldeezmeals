@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
-  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut,
+  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
 } from "lucide-react";
 import { supabase } from "./supabase";
 
@@ -434,10 +434,11 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name);
   };
 
+  const resetPlan = () => { setMeals({}); setCheckedItems({}); };
+
   const handleStartOver = () => {
     if (!window.confirm("Clear the current meal plan and grocery list?\n\nYour setup (days, people, cuisine pins), staples, and preferences (liked/avoid/rotation) will be kept.")) return;
-    setMeals({});
-    setCheckedItems({});
+    resetPlan();
   };
 
   const thumbUp = (name: string) => { if (name) setLiked((p) => (p.includes(name) ? p : [...p, name])); };
@@ -503,6 +504,30 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     });
     return lines.join("\n").trim();
   }, [groceryList]);
+
+  const handleMarkOrdered = async (): Promise<{ error: string | null }> => {
+    const snapshot = {
+      startDate,
+      numDays,
+      location,
+      meals: acceptedMealsForPrint.map(({ day, date, meal }: any) => ({
+        day: day.label,
+        date,
+        mealData: meal.data,
+      })),
+      groceryList,
+      listText,
+    };
+    const { error } = await supabase
+      .from("orders")
+      .insert({ user_id: session.user.id, plan: snapshot });
+    if (error) {
+      console.warn("Failed to archive order:", error);
+      return { error: error.message };
+    }
+    resetPlan();
+    return { error: null };
+  };
 
   /* ---- auth gate ---- */
   if (!authLoaded) {
@@ -584,7 +609,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         {tab === "list" && (
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
             pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
-            acceptedCount={acceptedCount} slotCount={days.length} location={location} />
+            acceptedCount={acceptedCount} slotCount={days.length} location={location}
+            onMarkOrdered={handleMarkOrdered} />
         )}
         {tab === "rotation" && (
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
@@ -879,14 +905,24 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location }: any) {
+function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered }: any) {
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
+  const [ordering, setOrdering] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const copy = async () => { try { await navigator.clipboard.writeText(listText); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
   const copyForInstacart = async () => {
     const locName = location?.name ?? "ALDI";
     const prompt = `Add these groceries to an Instacart order from ALDI in ${locName}:\n\n${listText}`;
     try { await navigator.clipboard.writeText(prompt); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
+  };
+  const markOrdered = async () => {
+    if (!window.confirm("Archive this plan and start fresh?\n\nYour meals and grocery list will be cleared. Setup, staples, and preferences are kept.")) return;
+    setOrdering(true);
+    setOrderError(null);
+    const { error } = await onMarkOrdered();
+    setOrdering(false);
+    if (error) setOrderError(error);
   };
   const togglePantry = (n: string) => { const k = n.toLowerCase(); setPantry((p: string[]) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]); };
   const toggleCheck = (k: string) => setCheckedItems((p: any) => ({ ...p, [k]: !p[k] }));
@@ -894,11 +930,16 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     <div>
       <div style={s.listToolbar}>
         <p style={s.cardSub}>{totalItems} items - {acceptedCount}/{slotCount} dinners + staples</p>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
           <button onClick={copy} style={s.primaryBtn}>{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copied!" : "Copy list"}</button>
           <button onClick={copyForInstacart} style={s.ghostBtn}>{copiedCart ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copiedCart ? "Copied!" : "Copy for Instacart"}</button>
+          <button onClick={markOrdered} disabled={acceptedCount === 0 || ordering} style={{ ...s.ghostBtn, opacity: acceptedCount === 0 ? 0.4 : 1 }}>
+            {ordering ? <RefreshCw size={16} className="spin" /> : <Archive size={16} />}
+            {ordering ? "Archiving..." : "Mark ordered & start next week"}
+          </button>
         </div>
       </div>
+      {orderError && <p style={{ color: "#a23b3b", fontSize: 12, margin: "4px 0 8px" }}>Could not archive: {orderError}</p>}
       {totalItems === 0 ? <div style={s.card}><p style={s.empty}>Accept dinners to build the list (staples always included).</p></div> : (
         <div style={{ display: "grid", gap: 14 }}>
           {CATEGORIES.map((cat) => {
