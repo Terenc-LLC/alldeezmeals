@@ -4,7 +4,7 @@
 // no service-role key needed here (unlike /api/ingest-order).
 
 import { createClient } from "@supabase/supabase-js";
-import { normalizeIngName, normalizeGtin } from "../src/lib/normalize";
+import { normalizeIngName, normalizeGtin, gtinDigits } from "../src/lib/normalize";
 
 const FDC_BASE = "https://api.nal.usda.gov/fdc/v1";
 const OFF_BASE = "https://world.openfoodfacts.org/api/v0";
@@ -157,21 +157,22 @@ async function lookupByName(query: string, apiKey: string): Promise<LookupOutcom
   };
 }
 
-async function lookupByGtin(gtin: string, apiKey: string): Promise<LookupOutcome> {
+// offBarcode: digits-only, no padding — used for OFF URL (OFF stores barcodes as-printed).
+// canonicalGtin: 14-digit padded — used for FDC comparison, result.gtin, and cache key.
+async function lookupByGtin(offBarcode: string, canonicalGtin: string, apiKey: string): Promise<LookupOutcome> {
   // fdcDefinitive = true when FDC returned 2xx and confirmed no GTIN match (definitive miss).
   // If FDC is unreachable / non-2xx we must still try OFF — do not skip it on a rate-limit.
   let fdcDefinitive = false;
 
   try {
     const fdcUrl =
-      `${FDC_BASE}/foods/search?query=${encodeURIComponent(gtin)}` +
+      `${FDC_BASE}/foods/search?query=${encodeURIComponent(canonicalGtin)}` +
       `&dataType=Branded&pageSize=5&api_key=${encodeURIComponent(apiKey)}`;
     const fdcR = await fetch(fdcUrl);
     if (fdcR.ok) {
       const fdcData = await fdcR.json();
       const foods: any[] = fdcData.foods ?? [];
-      const normGtin = normalizeGtin(gtin);
-      const match = foods.find((f: any) => f.gtinUpc && normalizeGtin(f.gtinUpc) === normGtin);
+      const match = foods.find((f: any) => f.gtinUpc && normalizeGtin(f.gtinUpc) === canonicalGtin);
       if (!match) {
         // FDC searched successfully and confirmed this GTIN is absent — definitive miss from FDC.
         fdcDefinitive = true;
@@ -193,7 +194,7 @@ async function lookupByGtin(gtin: string, apiKey: string): Promise<LookupOutcome
                   ...(servingBasis ? { serving_basis: servingBasis } : {}),
                   ...(nutrients.macros ? { macros: nutrients.macros } : {}),
                   fdcId: detail.fdcId,
-                  gtin,
+                  gtin: canonicalGtin,
                   dataType: "Branded",
                   source: "usda",
                   attribution: USDA_ATTRIBUTION,
@@ -209,15 +210,16 @@ async function lookupByGtin(gtin: string, apiKey: string): Promise<LookupOutcome
     }
     // FDC non-2xx: fdcDefinitive stays false; fall through to OFF
   } catch (e: any) {
-    console.error("FDC GTIN fetch failed:", gtin, e?.message);
+    console.error("FDC GTIN fetch failed:", canonicalGtin, e?.message);
     // network error: fall through to OFF
   }
 
   // Open Food Facts fallback (keyless).
+  // Uses offBarcode (digits-only, no padding) — OFF resolves barcodes as-printed.
   // offDefinitive = true when OFF returned 2xx (regardless of whether it had the product).
   let offDefinitive = false;
   try {
-    const offR = await fetch(`${OFF_BASE}/product/${gtin}.json`);
+    const offR = await fetch(`${OFF_BASE}/product/${offBarcode}.json`);
     if (offR.ok) {
       offDefinitive = true;
       const offData = await offR.json();
@@ -240,7 +242,7 @@ async function lookupByGtin(gtin: string, apiKey: string): Promise<LookupOutcome
             data: {
               kcal_per_100g: kcal,
               ...(macros ? { macros } : {}),
-              gtin,
+              gtin: canonicalGtin,
               dataType: "Branded",
               source: "off",
               attribution: OFF_ATTRIBUTION,
@@ -252,7 +254,7 @@ async function lookupByGtin(gtin: string, apiKey: string): Promise<LookupOutcome
     }
     // OFF non-2xx: offDefinitive stays false
   } catch (e: any) {
-    console.error("OFF GTIN fetch failed:", gtin, e?.message);
+    console.error("OFF GTIN fetch failed:", offBarcode, e?.message);
   }
 
   // At least one source gave a definitive 2xx answer → genuine no-match (cacheable miss).
@@ -313,6 +315,7 @@ export default async function handler(req: any, res: any) {
   let cacheKey: string;
   let ingredient = "";
   let gtin = "";
+  let offBarcode = "";
 
   if (mode === "name") {
     ingredient = typeof body.ingredient === "string" ? body.ingredient.trim() : "";
@@ -331,7 +334,8 @@ export default async function handler(req: any, res: any) {
       res.status(400).json({ error: "gtin required for gtin mode" });
       return;
     }
-    gtin = normalizeGtin(rawGtin);
+    gtin = normalizeGtin(rawGtin);      // 14-digit canonical: cache key, FDC compare, stored gtin
+    offBarcode = gtinDigits(rawGtin);   // digits-only, no padding: OFF fetch URL
     cacheKey = `upc:${gtin}`;
   }
 
@@ -362,7 +366,7 @@ export default async function handler(req: any, res: any) {
   try {
     outcome = mode === "name"
       ? await lookupByName(ingredient, fdcKey)
-      : await lookupByGtin(gtin, fdcKey);
+      : await lookupByGtin(offBarcode, gtin, fdcKey);
   } catch (e: any) {
     // Defensive: lookups handle their own errors, but guard against unexpected throws.
     console.error("nutrition lookup threw:", cacheKey, e?.message);
