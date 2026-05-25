@@ -197,7 +197,32 @@ session (status, decisions, next steps).
   re-ingests of the same product correctly increment the existing row.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-194 — May 2026)
+- `/api/nutrition` USDA FDC proxy + shared cache (TER-194).
+- **`nutrition_cache` table**: new migration `20260525_004_nutrition_cache.sql`. Shape:
+  `{ id, cache_key text UNIQUE, result jsonb, fdc_id text, gtin text, source text, retrieved_at }`.
+  RLS: SELECT + INSERT + UPDATE for any authenticated user. Endpoint uses the caller's access
+  token for cache writes (no service-role key here); `auth.uid()` satisfies the write policy.
+- **`/api/nutrition.ts`**: POST, authed only (Bearer JWT validation matching `/api/generate`).
+  Two modes:
+  - `{ mode: "name", ingredient: "garlic" }` — FDC Foundation + SR Legacy search, scoring
+    heuristic from TER-193 (Foundation > SR Legacy; prefer "raw", penalise cooked), detail
+    fetch for `foodPortions` + macros.
+  - `{ mode: "gtin", gtin: "04099100042736" }` — FDC Branded GTIN lookup, Open Food Facts
+    fallback (keyless) if FDC misses.
+  Returns `{ hit: true, kcal_per_100g, serving_basis?, foodPortions?, macros?, fdcId|gtin,
+  dataType, source, attribution }` on a match, `{ hit: false, miss_reason }` on a miss (so
+  callers fall through to catalog/estimate tiers without throwing).
+  "to taste" / "as needed" ingredients short-circuit to `{ hit: false, miss_reason: "skip" }`.
+  Cache TTL 30 days; stale rows re-fetched and updated. Cache writes non-fatal.
+- **`FDC_API_KEY`** confirmed present in local `.env` (real key, not DEMO_KEY). Added to
+  `.env.example` with instructions. Never in the client bundle.
+- Attribution string: `"Nutrition data: USDA FoodData Central"` (exported as `USDA_ATTRIBUTION`
+  from the endpoint; callers reference it for display).
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
+- TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
 - TER-198: Seed catalog with ALDI core-range items.
 - TER-190: Per-user item affinity from item_usage purchase history.
