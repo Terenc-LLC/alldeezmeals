@@ -4,6 +4,7 @@ import {
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut,
 } from "lucide-react";
+import { supabase } from "./supabase";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -13,10 +14,7 @@ import {
 /* ------------------------------------------------------------------ */
 
 const STORAGE_KEY = "alldeezmeals-v1";
-const PASSPHRASE_KEY = "alldeez-passphrase";
 const uid = () => Math.random().toString(36).slice(2, 10);
-
-class UnauthorizedError extends Error {}
 
 const CATEGORIES = ["Produce", "Meat & Seafood", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other"];
 const CUISINES = ["Any", "American", "Comfort food", "Italian", "Mexican", "Tex-Mex", "Asian", "Chinese", "Thai", "Indian", "Mediterranean", "Greek", "BBQ", "Soup / Stew", "Salad-forward"];
@@ -87,30 +85,22 @@ function normalizeIngName(name: string): string {
 
 /* ====================================================================== */
 export default function App() {
-  /* ---- passphrase gate ---- */
-  const [passphrase, setPassphrase] = useState<string | null>(
-    () => localStorage.getItem(PASSPHRASE_KEY) || null
-  );
-  const [passphraseError, setPassphraseError] = useState(false);
+  /* ---- Supabase auth ---- */
+  const [session, setSession] = useState<any>(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
 
-  const handlePassphraseEnter = (pp: string) => {
-    localStorage.setItem(PASSPHRASE_KEY, pp);
-    setPassphrase(pp);
-    setPassphraseError(false);
-  };
-
-  const handleSignOut = () => {
-    localStorage.removeItem(PASSPHRASE_KEY);
-    setPassphrase(null);
-    setPassphraseError(false);
-  };
-
-  const handleAuthError = useCallback(() => {
-    localStorage.removeItem(PASSPHRASE_KEY);
-    setPassphrase(null);
-    setPassphraseError(true);
-    setBusy(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoaded(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
   }, []); // eslint-disable-line
+
+  const handleSignOut = () => supabase.auth.signOut();
 
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("setup");
@@ -221,13 +211,16 @@ export default function App() {
 
   /* ---- meal generation (via /api/generate proxy) ---- */
   const callClaude = async (prompt: string) => {
+    const token = session?.access_token ?? "";
     const r = await fetch("/api/generate", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-app-key": passphrase ?? "" },
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ prompt, max_tokens: 2000 }),
     });
     const data = await r.json();
-    if (r.status === 401) throw new UnauthorizedError();
     if (!r.ok) {
       // Anthropic errors arrive as { type, error: { type, message } }
       const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
@@ -341,7 +334,6 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null } }));
       return data;
     } catch (e: any) {
-      if (e instanceof UnauthorizedError) throw e;
       setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: e?.message || "Couldn't generate -- retry." } }));
       return null;
     }
@@ -350,26 +342,18 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   const generateAll = async () => {
     setBusy(true); setTab("plan");
     const committed = days.map((d) => meals[d.id]).filter((m) => m && m.status === "accepted").map((m) => m.data);
-    try {
-      for (let i = 0; i < days.length; i++) {
-        const day = days[i];
-        if (meals[day.id]?.status === "accepted") continue;
-        const data = await generateOne(day, i, [...committed]);
-        if (data) committed.push(data);
-      }
-    } catch (e: any) {
-      if (e instanceof UnauthorizedError) { handleAuthError(); return; }
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      if (meals[day.id]?.status === "accepted") continue;
+      const data = await generateOne(day, i, [...committed]);
+      if (data) committed.push(data);
     }
     setBusy(false);
   };
 
   const acceptMeal = (id: string) => setMeals((m) => ({ ...m, [id]: { ...m[id], status: "accepted" } }));
   const rejectMeal = async (day: any, idx: number) => {
-    try {
-      await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name);
-    } catch (e: any) {
-      if (e instanceof UnauthorizedError) handleAuthError();
-    }
+    await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name);
   };
 
   const handleStartOver = () => {
@@ -442,8 +426,12 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     return lines.join("\n").trim();
   }, [groceryList]);
 
-  /* ---- passphrase gate ---- */
-  if (!passphrase) {
+  /* ---- auth gate ---- */
+  if (!authLoaded) {
+    return <div style={s.shell}><style>{fontImport}</style></div>;
+  }
+
+  if (!session) {
     return (
       <div style={s.shell}>
         <style>{fontImport}</style>
@@ -456,7 +444,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             </div>
           </div>
         </header>
-        <GateView onEnter={handlePassphraseEnter} error={passphraseError} />
+        <SignInView />
       </div>
     );
   }
@@ -476,9 +464,12 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
               <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
             </div>
           </div>
-          <button onClick={handleSignOut} style={s.signOutBtn} title="Change passphrase">
-            <LogOut size={15} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11.5, color: "#7a8a7c", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session?.user?.email}</span>
+            <button onClick={handleSignOut} style={s.signOutBtn} title="Sign out">
+              <LogOut size={15} />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -560,34 +551,65 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   );
 }
 
-/* ============================ Gate ============================ */
-function GateView({ onEnter, error }: { onEnter: (pp: string) => void; error: boolean }) {
-  const [value, setValue] = useState("");
-  const submit = () => { if (value.trim()) onEnter(value.trim()); };
+/* ============================ Sign-in ============================ */
+function SignInView() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSend = async () => {
+    const addr = email.trim();
+    if (!addr) return;
+    setLoading(true);
+    setError("");
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: addr,
+      options: { shouldCreateUser: false },
+    });
+    setLoading(false);
+    if (err) {
+      setError(err.message);
+    } else {
+      setSent(true);
+    }
+  };
+
+  if (sent) {
+    return (
+      <div style={{ ...s.card, maxWidth: 340, margin: "48px auto", textAlign: "center" as const }}>
+        <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: "#2c3a2e" }}>Check your email</h2>
+        <p style={{ fontSize: 13.5, color: "#5b6b5e", margin: 0, lineHeight: 1.55 }}>
+          A sign-in link was sent to <strong>{email.trim()}</strong>. Click it to continue.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ ...s.card, maxWidth: 340, margin: "48px auto" }}>
-      <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 4px", color: "#2c3a2e" }}>Enter passphrase</h2>
-      <p style={s.cardSub}>Shared household access</p>
+      <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 4px", color: "#2c3a2e" }}>Sign in</h2>
+      <p style={s.cardSub}>Invite-only · magic link sent to your email</p>
       {error && (
         <p style={{ color: "#a23b3b", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
-          <AlertCircle size={14} /> Incorrect passphrase — try again.
+          <AlertCircle size={14} /> {error}
         </p>
       )}
       <input
-        type="password"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleSend()}
         style={{ ...s.input, width: "100%", marginTop: 14, boxSizing: "border-box" } as any}
-        placeholder="passphrase"
+        placeholder="your@email.com"
         autoFocus
       />
       <button
-        onClick={submit}
-        disabled={!value.trim()}
-        style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 10, opacity: value.trim() ? 1 : 0.5 }}
+        onClick={handleSend}
+        disabled={!email.trim() || loading}
+        style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 10, opacity: email.trim() && !loading ? 1 : 0.5 }}
       >
-        Enter
+        {loading ? <><RefreshCw size={16} className="spin" /> Sending...</> : "Send magic link"}
       </button>
     </div>
   );

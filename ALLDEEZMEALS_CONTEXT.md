@@ -10,6 +10,7 @@ Not a commercial product; built for household use. May later add shared (multi-u
 - Vite + React 18 + TypeScript + Tailwind
 - Weather: Open-Meteo (free, keyless, direct browser fetch)
 - Meal generation: Anthropic API via serverless proxy `/api/generate`
+- Auth: Supabase (magic-link / email OTP, invite-only)
 - Storage: localStorage (per device) — Supabase is the upgrade path for shared access
 - Hosting: Vercel
 
@@ -30,6 +31,31 @@ session (status, decisions, next steps).
 - Generate dinners sequentially so each can reuse earlier ingredients and avoid double-buying.
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
+
+## Status (TER-188 — May 2026)
+- `/api/generate` server-side auth (TER-188): Supabase JWT validation added, closing the
+  open-proxy gap from TER-187. After the method and API-key guards, the handler reads the
+  `Authorization: Bearer <token>` header, rejects missing/malformed tokens with 401, then
+  calls `supabase.auth.getUser(token)` using the anon key (`VITE_SUPABASE_URL` /
+  `VITE_SUPABASE_ANON_KEY` — no new env vars needed). Invalid/expired tokens → 401; valid
+  session → proceeds to the Anthropic call. No service-role key used or introduced.
+  TER-187 stub comment replaced. `tsc --noEmit && vite build` pass.
+
+## Status (TER-187 — May 2026)
+- Supabase auth (TER-187): passphrase gate replaced by Supabase magic-link / email OTP.
+  `@supabase/supabase-js` added; client initialised from `VITE_SUPABASE_URL` +
+  `VITE_SUPABASE_ANON_KEY` (anon/publishable key only — no service_role in client).
+  Sign-in screen: email input → "Send magic link" → "Check your email" confirmation.
+  Session persists across reloads via Supabase's default localStorage persistence.
+  "Signed in as <email>" shown in the header next to the sign-out button.
+  App boots signed-out; unauthenticated users see only the sign-in screen.
+  Invite-only enforced at the Supabase dashboard (public sign-ups off); `shouldCreateUser:
+  false` added as belt-and-suspenders.
+  `/api/generate` x-app-key check removed (stub comment left for TER-188 JWT validation).
+  Supabase access token forwarded as `Authorization: Bearer <token>` on every API call
+  so TER-188 can validate it server-side without a client change.
+  `APP_PASSPHRASE` env var no longer needed (removed from `.env.example`).
+  Two new Vercel env vars required: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
 ## Status (TER-184/185/181-partial — May 2026)
 - List hygiene (TER-184): `purchaseQty` floored at 1 (no zero-qty lines). Ingredient names
@@ -69,14 +95,12 @@ session (status, decisions, next steps).
   `VITE_APP_PASSPHRASE` must be DELETED from Vercel if previously set.
 
 ## Backlog / next
-- Verify end-to-end generation on a Vercel preview deploy (both server env vars set).
-- Optional: Supabase persistence so Jen can use it on her own device.
+- TER-173: Per-user schema + RLS (references `auth.uid()` — needs TER-187/188 first).
+- TER-189: Data migration (post TER-173).
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.
 - Optional: PWA / installable on phone.
 
 ## Known caveats
 - Open-Meteo forecasts ~16 days out; beyond that, days fall back to neutral weather.
 - AI ingredient quantities are estimates suitable for a shopping list, not exact recipes.
-- localStorage is per-device until/unless Supabase is added.
-- Single shared household passphrase (not per-user accounts); persists in the browser after
-  entry. Spend cap remains the hard backstop against abuse.
+- localStorage is per-device until TER-173 (Supabase schema) lands.
