@@ -6,6 +6,7 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { normalizeIngName } from "./lib/normalize";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -78,10 +79,6 @@ function fmtPurchaseQty(qty: number, unit: string, isPurchaseStyle: boolean): st
   if (isPurchaseStyle) return qty <= 1 ? unit : `${qty} × ${unit}`;
   const q = Number.isInteger(qty) ? qty : Math.round(qty * 100) / 100;
   return unit ? `${q} ${unit}` : String(q);
-}
-
-function normalizeIngName(name: string): string {
-  return name.toLowerCase().trim().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /* ====================================================================== */
