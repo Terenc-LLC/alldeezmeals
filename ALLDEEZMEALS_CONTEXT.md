@@ -158,29 +158,39 @@ session (status, decisions, next steps).
 ## Status (TER-186 — May 2026)
 - Order/receipt ingestion + self-building ALDI catalog.
 - **Schema migration** (`supabase/migrations/20260525_002_catalog_full_schema.sql`): drops the dormant
-  TER-173 catalog shell and recreates it with the full target shape: `normalized_name` (unique join
-  key), `product_name`, `brand`, `category`, `package_size`, `upc`, `last_price_cents`,
-  `last_seen_at`, nutrition columns (blank, for TER-195), `source`, `created_at`, `updated_at`.
-  RLS re-applied: SELECT for any authenticated user; no client INSERT/UPDATE/DELETE policy (service
-  role only). `item_usage.catalog_id` FK dropped before the table recreate and re-added after.
+  TER-173 catalog shell and recreates it with the full target shape: `normalized_name` (non-unique
+  indexed column for future generic→product lookup), `product_name`, `brand`, `category`,
+  `package_size`, `upc`, `last_price_cents`, `last_seen_at`, nutrition columns (blank, for TER-195),
+  `source`, `created_at`, `updated_at`. RLS re-applied. FK from item_usage dropped and re-added.
   **TER-195 and TER-198 must populate existing columns, not add new migrations.**
-- **`/api/ingest-order.ts`** (new serverless function): validates Bearer JWT with the anon key,
-  derives `user_id` from the validated JWT (never from client input — the service role bypasses RLS
-  so ownership enforcement lives in code). Uses `SUPABASE_SERVICE_ROLE_KEY` to upsert the shared
-  `catalog` on `normalized_name` (only non-nutrition columns specified, so nutrition cols survive
-  re-submit). Upserts per-user `item_usage` with select+increment for `purchase_count`. Skips
-  refunds and rows the user unchecked in the review table (keyed off `isRefund` and `include`).
-- **Receipt tab** added to the app (5th tab, ReceiptText icon). Three-state flow:
-  1. Paste: user pastes ALDI order confirmation or receipt text.
-  2. Parse: calls `/api/generate` (Haiku for cost) with a structured extraction prompt → JSON
-     array of `{ normalizedName, productName, brand, category, packageSize, qty, unitPriceCents,
-     upc, isRefund }`. Refunds default to unchecked; user can toggle any row.
-  3. Review: editable table (normalizedName, size, qty, price) → "Log N items to catalog" calls
-     `/api/ingest-order` → success screen with count.
-- **`SUPABASE_SERVICE_ROLE_KEY`** must be set server-side (Vercel + local `.env`). Already live in
-  prod per prereq confirmed in issue. Added to `.env.example`.
+- **`/api/ingest-order.ts`**: validates Bearer JWT; derives `user_id`; uses `SUPABASE_SERVICE_ROLE_KEY`
+  to upsert shared `catalog`; upserts per-user `item_usage` with select+increment. Skips refunds and
+  unchecked rows.
+- **Receipt tab**: paste → parse (Haiku) → review → `/api/ingest-order`.
 - Known v1 limitation: re-submitting the same receipt re-increments `item_usage.purchase_count`.
-  Acceptable for v1; optionally guard later by hashing the order ID.
+- `tsc --noEmit && vite build` pass.
+
+## Status (TER-202 — May 2026)
+- Fixed two bugs in the TER-186 ingestion flow found after the first real receipt ingest.
+- **Bug 1 — duplicate catalog rows for the same product**: the dedup key changed from `normalized_name`
+  (LLM generic name, noisy and many-to-one) to `normalized_product` (= lowercased/trimmed/
+  whitespace-collapsed `product_name`). Migration `20260525_003_catalog_product_key.sql`:
+  adds `normalized_product text NOT NULL`, drops `UNIQUE (normalized_name)`, adds
+  `UNIQUE (normalized_product)`, adds non-unique index on `normalized_name` (for future
+  generic→product lookup in v2). `normalized_name` is kept on the row as the latest generic name
+  seen for that product (lossy v1; a proper alias table is deferred to v2).
+  Batch-level dedup: within a single submit, items are deduplicated by `normalized_product` before
+  any DB writes (last-wins on size/price), so two-line cases like "hard salami" + "lunch mate hard
+  salami" collapse to one row.
+  After applying the migration, truncate `public.item_usage` and `public.catalog` (first-run test
+  data only) via SQL editor, then re-ingest.
+- **Bug 2 — purchase date = upload date, not receipt date**: parse prompt now returns
+  `{ "orderDate": "YYYY-MM-DD", "items": [...] }` instead of a bare array. Review UI shows a single
+  editable order date field (defaulted to the parsed value or today). Endpoint accepts `orderDate`;
+  uses it for `catalog.last_seen_at` and `item_usage.last_purchased_at`; falls back to `now()` if
+  missing or unparseable. `created_at`/`updated_at` remain ingestion-time row-audit timestamps.
+- `item_usage.item_name` now stores `normalized_product` (consistent with the catalog dedup key) so
+  re-ingests of the same product correctly increment the existing row.
 - `tsc --noEmit && vite build` pass.
 
 ## Backlog / next
