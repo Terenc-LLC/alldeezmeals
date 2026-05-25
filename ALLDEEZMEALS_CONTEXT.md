@@ -32,6 +32,27 @@ session (status, decisions, next steps).
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
 
+## Status (TER-173 — May 2026)
+- Per-user Supabase schema + RLS (TER-173): created five tables with row-level security.
+  `user_state` (one row per user, full CRUD, `user_id = auth.uid()`), `orders` (per-user
+  archive shell for TER-181), `catalog` (shared ALDI product catalog — SELECT for any
+  authenticated user, no client INSERT/UPDATE/DELETE; service role only for writes),
+  `item_usage` (per-user purchase history shell for TER-190), `allowed_emails` (invite
+  allowlist from TER-187, IF NOT EXISTS). Migration SQL in
+  `supabase/migrations/20260525_001_per_user_schema.sql`; RLS test queries in
+  `supabase/rls_test.sql`.
+- App now writes to and reads from `user_state` via the Supabase client (anon key + user
+  JWT, no service role in client bundle). Load order: localStorage (instant) then Supabase
+  (overrides on first sign-in for that user). Save order: localStorage (immediate) + Supabase
+  upsert debounced 2 s (offline-safe fire-and-forget). `checkedItems` added to persisted
+  state (was missing from localStorage save before this issue).
+- `catalog` and `item_usage` are schema+RLS only — not populated or wired into the UI.
+  Population arrives with TER-186 (receipt ingestion) and TER-190 (affinity).
+- No service-role key in the client bundle; `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`
+  are the only Supabase vars needed on the client (already set in Vercel from TER-187).
+  Service role key is needed server-side only for catalog ingestion (TER-186).
+- `tsc --noEmit && vite build` pass.
+
 ## Status (TER-188 — May 2026)
 - `/api/generate` server-side auth (TER-188): Supabase JWT validation added, closing the
   open-proxy gap from TER-187. After the method and API-key guards, the handler reads the
@@ -95,12 +116,13 @@ session (status, decisions, next steps).
   `VITE_APP_PASSPHRASE` must be DELETED from Vercel if previously set.
 
 ## Backlog / next
-- TER-173: Per-user schema + RLS (references `auth.uid()` — needs TER-187/188 first).
-- TER-189: Data migration (post TER-173).
+- TER-189: localStorage→Supabase data migration (post TER-173).
 - Optional: per-plan cost estimate (rough ALDI prices) and "reshuffle week" action.
 - Optional: PWA / installable on phone.
 
 ## Known caveats
 - Open-Meteo forecasts ~16 days out; beyond that, days fall back to neutral weather.
 - AI ingredient quantities are estimates suitable for a shopping list, not exact recipes.
-- localStorage is per-device until TER-173 (Supabase schema) lands.
+- Existing localStorage data (pre-TER-173) is NOT auto-migrated to Supabase — that's TER-189.
+  New users start with a blank Supabase row; returning users will see their localStorage data
+  until TER-189 runs the one-time migration.
