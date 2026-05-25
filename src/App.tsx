@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
@@ -88,6 +88,8 @@ export default function App() {
   /* ---- Supabase auth ---- */
   const [session, setSession] = useState<any>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
+  const prevUserId = useRef<string | null>(null);
+  const hydrated = useRef(false); // true once this user's Supabase row has been fetched
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -125,7 +127,9 @@ export default function App() {
   const [liked, setLiked] = useState<string[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
 
-  /* ---- persistence (localStorage) ---- */
+  /* ---- persistence ---- */
+
+  // 1. Load from localStorage immediately for fast offline-first boot.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -139,6 +143,7 @@ export default function App() {
         setMeals(d.meals ?? {});
         setStaples(d.staples ?? DEFAULT_STAPLES);
         setPantry(d.pantry ?? []);
+        setCheckedItems(d.checkedItems ?? {});
         setDefaultPeople(d.defaultPeople ?? 4);
         setEfficiency(d.efficiency ?? true);
         setMixCuisines(d.mixCuisines ?? true);
@@ -150,15 +155,67 @@ export default function App() {
     setLoaded(true);
   }, []); // eslint-disable-line
 
+  // 2. When a user signs in, pull their state from Supabase.
+  //    Resets on sign-out so a re-login (same or different user) always re-fetches.
+  //    Falls back to whatever localStorage loaded if no Supabase row exists yet.
+  //    Sets hydrated=true in both branches so effect 3 never writes before the fetch resolves.
+  useEffect(() => {
+    const userId = session?.user?.id ?? null;
+    if (!userId) { prevUserId.current = null; hydrated.current = false; return; }
+    if (userId === prevUserId.current) return;
+    prevUserId.current = userId;
+    hydrated.current = false;
+    supabase
+      .from("user_state")
+      .select("state")
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) console.warn("user_state fetch failed:", error.message);
+        if (data?.state) {
+          const d = data.state;
+          if (d.location !== undefined) setLocation(d.location);
+          if (d.startDate !== undefined) setStartDate(d.startDate);
+          if (d.numDays !== undefined) setNumDays(d.numDays);
+          if (d.days !== undefined) setDays(d.days);
+          if (d.forecast !== undefined) setForecast(d.forecast);
+          if (d.meals !== undefined) setMeals(d.meals);
+          if (d.staples !== undefined) setStaples(d.staples);
+          if (d.pantry !== undefined) setPantry(d.pantry);
+          if (d.checkedItems !== undefined) setCheckedItems(d.checkedItems);
+          if (d.defaultPeople !== undefined) setDefaultPeople(d.defaultPeople);
+          if (d.efficiency !== undefined) setEfficiency(d.efficiency);
+          if (d.mixCuisines !== undefined) setMixCuisines(d.mixCuisines);
+          if (d.rotation !== undefined) setRotation(d.rotation);
+          if (d.liked !== undefined) setLiked(d.liked);
+          if (d.avoid !== undefined) setAvoid(d.avoid);
+        }
+        hydrated.current = true;
+      });
+  }, [session]); // eslint-disable-line
+
+  // 3. Save to localStorage immediately and to Supabase (debounced 2 s) on every change.
+  //    localStorage acts as offline cache; Supabase is the authoritative cross-device store.
   useEffect(() => {
     if (!loaded) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        location, startDate, numDays, days, forecast, meals, staples, pantry,
-        defaultPeople, efficiency, mixCuisines, rotation, liked, avoid,
-      }));
-    } catch {}
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, loaded]);
+    const payload = {
+      location, startDate, numDays, days, forecast, meals, staples, pantry,
+      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid,
+    };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
+    if (!session) return;
+    if (!hydrated.current) return; // don't push to Supabase before the row is hydrated
+    const t = setTimeout(() => {
+      supabase
+        .from("user_state")
+        .upsert(
+          { user_id: session.user.id, state: payload, updated_at: new Date().toISOString() },
+          { onConflict: "user_id" },
+        )
+        .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
