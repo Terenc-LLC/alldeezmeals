@@ -43,6 +43,14 @@ type HitResponse = { hit: true } & NutritionResult;
 type MissResponse = { hit: false; miss_reason: string };
 type CachedPayload = HitResponse | MissResponse;
 
+// Three-way discriminated outcome for lookup helpers.
+// "miss"  = searched successfully, nothing usable matched (cacheable).
+// "error" = upstream unreachable / non-2xx / parse failure (NOT cacheable).
+type LookupOutcome =
+  | { status: "hit"; data: NutritionResult }
+  | { status: "miss" }
+  | { status: "error" };
+
 // Scoring heuristic from TER-193 spike: Foundation > SR Legacy; prefer "raw", penalise cooked.
 function scoreFood(food: { dataType?: string; description?: string }): number {
   let score = 0;
@@ -100,104 +108,165 @@ async function fetchFdcDetail(fdcId: number | string, apiKey: string): Promise<a
   return r.json();
 }
 
-async function lookupByName(query: string, apiKey: string): Promise<NutritionResult | null> {
+async function lookupByName(query: string, apiKey: string): Promise<LookupOutcome> {
   const url =
     `${FDC_BASE}/foods/search?query=${encodeURIComponent(query)}` +
     `&dataType=Foundation,SR%20Legacy&pageSize=10&api_key=${encodeURIComponent(apiKey)}`;
-  const r = await fetch(url);
-  if (!r.ok) return null;
+
+  let r: Response;
+  try {
+    r = await fetch(url);
+  } catch (e: any) {
+    console.error("FDC search network error:", query, e?.message);
+    return { status: "error" };
+  }
+  if (!r.ok) {
+    console.error("FDC search non-2xx:", query, r.status);
+    return { status: "error" };
+  }
+
   const data = await r.json();
   const foods: any[] = data.foods ?? [];
-  if (foods.length === 0) return null;
+  if (foods.length === 0) return { status: "miss" };
 
   const best = foods.reduce((a, b) => (scoreFood(a) >= scoreFood(b) ? a : b));
 
-  const detail = await fetchFdcDetail(best.fdcId, apiKey);
-  if (!detail) return null;
+  let detail: any;
+  try {
+    detail = await fetchFdcDetail(best.fdcId, apiKey);
+  } catch (e: any) {
+    console.error("FDC detail network error:", best.fdcId, e?.message);
+    return { status: "error" };
+  }
+  if (!detail) {
+    console.error("FDC detail non-2xx:", best.fdcId);
+    return { status: "error" };
+  }
 
   const nutrients = extractNutrients(detail.foodNutrients ?? []);
-  if (!nutrients) return null;
+  // Food found but no usable energy data — treat as a definitive miss, not a transient error.
+  if (!nutrients) return { status: "miss" };
 
   const portions = extractPortions(detail);
-  const servingBasis = portions.length > 0 ? `${portions[0].modifier} = ${portions[0].gramWeight}g` : undefined;
+  const servingBasis =
+    portions.length > 0 ? `${portions[0].modifier} = ${portions[0].gramWeight}g` : undefined;
 
   return {
-    kcal_per_100g: nutrients.kcal_per_100g,
-    ...(servingBasis ? { serving_basis: servingBasis } : {}),
-    ...(portions.length > 0 ? { foodPortions: portions } : {}),
-    ...(nutrients.macros ? { macros: nutrients.macros } : {}),
-    fdcId: detail.fdcId ?? best.fdcId,
-    dataType: detail.dataType ?? best.dataType ?? "Foundation",
-    source: "usda",
-    attribution: USDA_ATTRIBUTION,
+    status: "hit",
+    data: {
+      kcal_per_100g: nutrients.kcal_per_100g,
+      ...(servingBasis ? { serving_basis: servingBasis } : {}),
+      ...(portions.length > 0 ? { foodPortions: portions } : {}),
+      ...(nutrients.macros ? { macros: nutrients.macros } : {}),
+      fdcId: detail.fdcId ?? best.fdcId,
+      dataType: detail.dataType ?? best.dataType ?? "Foundation",
+      source: "usda",
+      attribution: USDA_ATTRIBUTION,
+    },
   };
 }
 
-async function lookupByGtin(gtin: string, apiKey: string): Promise<NutritionResult | null> {
-  // FDC GTIN lookup: search Branded by GTIN, match on gtinUpc field.
-  const fdcUrl =
-    `${FDC_BASE}/foods/search?query=${encodeURIComponent(gtin)}` +
-    `&dataType=Branded&pageSize=5&api_key=${encodeURIComponent(apiKey)}`;
-  const fdcR = await fetch(fdcUrl);
-  if (fdcR.ok) {
-    const fdcData = await fdcR.json();
-    const foods: any[] = fdcData.foods ?? [];
-    const match = foods.find((f: any) => f.gtinUpc === gtin);
-    if (match) {
-      const detail = await fetchFdcDetail(match.fdcId, apiKey);
-      if (detail) {
-        const nutrients = extractNutrients(detail.foodNutrients ?? []);
-        if (nutrients) {
-          const servingSize = detail.servingSize;
-          const servingUnit = detail.servingSizeUnit ?? "";
-          const servingBasis =
-            servingSize != null ? `${servingSize}${servingUnit}` : undefined;
-          return {
-            kcal_per_100g: nutrients.kcal_per_100g,
-            ...(servingBasis ? { serving_basis: servingBasis } : {}),
-            ...(nutrients.macros ? { macros: nutrients.macros } : {}),
-            fdcId: detail.fdcId,
-            gtin,
-            dataType: "Branded",
-            source: "usda",
-            attribution: USDA_ATTRIBUTION,
-          };
+async function lookupByGtin(gtin: string, apiKey: string): Promise<LookupOutcome> {
+  // fdcDefinitive = true when FDC returned 2xx and confirmed no GTIN match (definitive miss).
+  // If FDC is unreachable / non-2xx we must still try OFF — do not skip it on a rate-limit.
+  let fdcDefinitive = false;
+
+  try {
+    const fdcUrl =
+      `${FDC_BASE}/foods/search?query=${encodeURIComponent(gtin)}` +
+      `&dataType=Branded&pageSize=5&api_key=${encodeURIComponent(apiKey)}`;
+    const fdcR = await fetch(fdcUrl);
+    if (fdcR.ok) {
+      const fdcData = await fdcR.json();
+      const foods: any[] = fdcData.foods ?? [];
+      const match = foods.find((f: any) => f.gtinUpc === gtin);
+      if (!match) {
+        // FDC searched successfully and confirmed this GTIN is absent — definitive miss from FDC.
+        fdcDefinitive = true;
+      } else {
+        // GTIN found; attempt detail fetch. A failure here is a transient error, not a miss.
+        try {
+          const detail = await fetchFdcDetail(match.fdcId, apiKey);
+          if (detail) {
+            const nutrients = extractNutrients(detail.foodNutrients ?? []);
+            if (nutrients) {
+              const servingSize = detail.servingSize;
+              const servingUnit = detail.servingSizeUnit ?? "";
+              const servingBasis =
+                servingSize != null ? `${servingSize}${servingUnit}` : undefined;
+              return {
+                status: "hit",
+                data: {
+                  kcal_per_100g: nutrients.kcal_per_100g,
+                  ...(servingBasis ? { serving_basis: servingBasis } : {}),
+                  ...(nutrients.macros ? { macros: nutrients.macros } : {}),
+                  fdcId: detail.fdcId,
+                  gtin,
+                  dataType: "Branded",
+                  source: "usda",
+                  attribution: USDA_ATTRIBUTION,
+                },
+              };
+            }
+          }
+          // detail null (non-2xx) or no kcal: fall through to OFF
+        } catch {
+          // detail fetch threw: fall through to OFF
         }
       }
     }
+    // FDC non-2xx: fdcDefinitive stays false; fall through to OFF
+  } catch (e: any) {
+    console.error("FDC GTIN fetch failed:", gtin, e?.message);
+    // network error: fall through to OFF
   }
 
   // Open Food Facts fallback (keyless).
-  const offR = await fetch(`${OFF_BASE}/product/${gtin}.json`);
-  if (offR.ok) {
-    const offData = await offR.json();
-    if (offData.status === 1 && offData.product) {
-      const p = offData.product;
-      const kcal =
-        p.nutriments?.["energy-kcal_100g"] ??
-        p.nutriments?.["energy-kcal"] ??
-        null;
-      if (kcal != null && kcal > 0) {
-        const protein = p.nutriments?.proteins_100g ?? null;
-        const fat = p.nutriments?.fat_100g ?? null;
-        const carbs = p.nutriments?.carbohydrates_100g ?? null;
-        const macros =
-          protein != null && fat != null && carbs != null
-            ? { protein_g: protein, fat_g: fat, carbs_g: carbs }
-            : undefined;
-        return {
-          kcal_per_100g: kcal,
-          ...(macros ? { macros } : {}),
-          gtin,
-          dataType: "Branded",
-          source: "off",
-          attribution: OFF_ATTRIBUTION,
-        };
+  // offDefinitive = true when OFF returned 2xx (regardless of whether it had the product).
+  let offDefinitive = false;
+  try {
+    const offR = await fetch(`${OFF_BASE}/product/${gtin}.json`);
+    if (offR.ok) {
+      offDefinitive = true;
+      const offData = await offR.json();
+      if (offData.status === 1 && offData.product) {
+        const p = offData.product;
+        const kcal =
+          p.nutriments?.["energy-kcal_100g"] ??
+          p.nutriments?.["energy-kcal"] ??
+          null;
+        if (kcal != null && kcal > 0) {
+          const protein = p.nutriments?.proteins_100g ?? null;
+          const fat = p.nutriments?.fat_100g ?? null;
+          const carbs = p.nutriments?.carbohydrates_100g ?? null;
+          const macros =
+            protein != null && fat != null && carbs != null
+              ? { protein_g: protein, fat_g: fat, carbs_g: carbs }
+              : undefined;
+          return {
+            status: "hit",
+            data: {
+              kcal_per_100g: kcal,
+              ...(macros ? { macros } : {}),
+              gtin,
+              dataType: "Branded",
+              source: "off",
+              attribution: OFF_ATTRIBUTION,
+            },
+          };
+        }
       }
+      // OFF 2xx but product absent or no kcal: offDefinitive already true (definitive miss).
     }
+    // OFF non-2xx: offDefinitive stays false
+  } catch (e: any) {
+    console.error("OFF GTIN fetch failed:", gtin, e?.message);
   }
 
-  return null;
+  // At least one source gave a definitive 2xx answer → genuine no-match (cacheable miss).
+  // Neither source reachable → transient error (do not cache; caller should retry).
+  if (fdcDefinitive || offDefinitive) return { status: "miss" };
+  return { status: "error" };
 }
 
 export default async function handler(req: any, res: any) {
@@ -296,41 +365,47 @@ export default async function handler(req: any, res: any) {
   }
 
   // FDC / OFF lookup.
-  let nutrition: NutritionResult | null = null;
+  let outcome: LookupOutcome;
   try {
-    if (mode === "name") {
-      nutrition = await lookupByName(ingredient, fdcKey);
-    } else {
-      nutrition = await lookupByGtin(gtin, fdcKey);
-    }
+    outcome = mode === "name"
+      ? await lookupByName(ingredient, fdcKey)
+      : await lookupByGtin(gtin, fdcKey);
   } catch (e: any) {
-    console.error("nutrition lookup error:", cacheKey, e?.message);
+    // Defensive: lookups handle their own errors, but guard against unexpected throws.
+    console.error("nutrition lookup threw:", cacheKey, e?.message);
+    outcome = { status: "error" };
   }
 
-  const payload: CachedPayload = nutrition
-    ? { hit: true, ...nutrition }
-    : { hit: false, miss_reason: "no_match" };
+  const payload: CachedPayload =
+    outcome.status === "hit"
+      ? { hit: true, ...outcome.data }
+      : outcome.status === "miss"
+      ? { hit: false, miss_reason: "no_match" }
+      : { hit: false, miss_reason: "upstream_error" };
 
-  // Cache write is non-fatal — a failed write must never break the lookup.
-  try {
-    const now = new Date().toISOString();
-    const row = {
-      cache_key: cacheKey,
-      result: payload,
-      fdc_id: nutrition?.fdcId != null ? String(nutrition.fdcId) : null,
-      gtin: nutrition?.gtin ?? (mode === "gtin" ? gtin : null),
-      source: nutrition?.source ?? "miss",
-      retrieved_at: now,
-    };
-    // upsert handles both fresh insert and stale-row update.
-    const { error: upsertErr } = await userClient
-      .from("nutrition_cache")
-      .upsert(row, { onConflict: "cache_key" });
-    if (upsertErr) {
-      console.error("nutrition_cache upsert failed (non-fatal):", cacheKey, upsertErr.message);
+  // Gate: upsert only for "hit" or "miss" — never cache "upstream_error".
+  // An error must not poison the cache and suppress retries for 30 days.
+  if (outcome.status !== "error") {
+    try {
+      const now = new Date().toISOString();
+      const hitData = outcome.status === "hit" ? outcome.data : null;
+      const row = {
+        cache_key: cacheKey,
+        result: payload,
+        fdc_id: hitData?.fdcId != null ? String(hitData.fdcId) : null,
+        gtin: hitData?.gtin ?? (mode === "gtin" ? gtin : null),
+        source: hitData?.source ?? "miss",
+        retrieved_at: now,
+      };
+      const { error: upsertErr } = await userClient
+        .from("nutrition_cache")
+        .upsert(row, { onConflict: "cache_key" });
+      if (upsertErr) {
+        console.error("nutrition_cache upsert failed (non-fatal):", cacheKey, upsertErr.message);
+      }
+    } catch (e: any) {
+      console.error("nutrition_cache write threw (non-fatal):", cacheKey, e?.message);
     }
-  } catch (e: any) {
-    console.error("nutrition_cache write threw (non-fatal):", cacheKey, e?.message);
   }
 
   res.status(200).json(payload);
