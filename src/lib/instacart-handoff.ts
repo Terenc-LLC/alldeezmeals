@@ -3,13 +3,28 @@ import { normalizeIngName } from "./normalize";
 // Instacart-supported units (Layer 3 of the Instacart Handoff Format Spec, TER-180).
 // Source: docs.instacart.com/developer_platform_api/api/units_of_measurement (2026-05-26)
 const SUPPORTED_UNITS = new Set([
-  "cup", "c", "fl oz can", "fl oz container", "fl oz jar", "fl oz pouch", "fl oz ounce",
-  "gallon", "gal", "ml", "liter", "l", "pint", "pt", "pt container", "quart", "qt",
-  "tablespoon", "tbs", "teaspoon", "tsp",
-  "g", "kg", "lb", "lb bag", "lb can", "lb container", "per lb",
-  "oz", "oz bag", "oz can", "oz container", "pound",
-  "bunch", "can", "each", "ears", "head", "large", "lg", "medium", "md",
-  "package", "packet", "small", "sm", "small ears", "small head",
+  // Measured
+  "cup", "cups", "c",
+  "fl oz can", "fl oz container", "fl oz jar", "fl oz pouch", "fl oz ounce",
+  "gallon", "gallons", "gal", "gals",
+  "milliliter", "millilitre", "milliliters", "millilitres", "ml", "mls",
+  "liter", "litre", "liters", "litres", "l",
+  "pint", "pints", "pt", "pts", "pt container",
+  "quart", "quarts", "qt", "qts",
+  "tablespoon", "tablespoons", "tb", "tbs",
+  "teaspoon", "teaspoons", "ts", "tsp", "tspn",
+  // Weighed
+  "gram", "grams", "g", "gs",
+  "kilogram", "kilograms", "kg", "kgs",
+  "lb bag", "lb can", "lb container", "lb", "per lb",
+  "ounce", "ounces", "oz",
+  "ounces bag", "oz bag", "ounces can", "oz can", "ounces container", "oz container",
+  "pound", "pounds", "lbs",
+  // Countable
+  "bunch", "bunches", "can", "cans", "each", "ears",
+  "head", "heads", "large", "lrg", "lge", "lg",
+  "medium", "med", "md", "package", "packages", "packet",
+  "small", "sm", "small ears", "small head", "small heads",
 ]);
 
 // Rule 1: Whole countable produce → "each"
@@ -186,9 +201,10 @@ export function buildInstacartHandoff(
         seenUpcs.add(hit);
       }
 
+      const sizeLabel = (it.unit || "").trim();
       lineItems.push({
         name: it.name,
-        display_text: textDisplay,
+        display_text: sizeLabel ? `${it.name} (${sizeLabel})` : it.name,
         quantity: qty,
         unit,
         ...(upc ? { upc } : {}),
