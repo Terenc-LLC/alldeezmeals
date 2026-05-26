@@ -112,7 +112,7 @@ session (status, decisions, next steps).
   Server now fail-closes: returns 500 if `APP_PASSPHRASE` is not set.
 - Full recipes (TER-178): generation returns `prepMinutes`, `cookMinutes`, `steps[]`.
   max_tokens = 2000. Displayed on meal cards. "Print recipes" prints all accepted meals.
-- Instacart copy (TER-180): "Copy for Instacart" on List tab copies a ChatGPT-ready prompt.
+- Instacart copy (TER-180 stub, superseded): earlier scaffold; replaced by the full TER-180 implementation below.
 - Purchase-quantity grocery list (TER-183): ingredient JSON shape changed — each ingredient
   now carries `recipeAmount {qty, unit}` (cooking amount) and `purchaseSize` / `purchaseQty`
   (whole ALDI package). Grocery list aggregates on purchaseSize, summing purchaseQty (whole
@@ -237,6 +237,31 @@ session (status, decisions, next steps).
   - "★ Always have" management panel at the top of the List tab shows all always-have items as
     dark-green removable chips (X to remove), plus an add-by-name input (Enter or Add button).
 - No schema change, no migration, no endpoint change. `tsc --noEmit && vite build` pass.
+
+## Status (TER-180 — May 2026)
+- **Ordering path confirmed**: Instacart Developer Platform (IDP) is closed (TER-179 ruled
+  out). The ordering path is user-driven copy/paste: user taps "Copy for Instacart (AI)",
+  pastes into Claude or ChatGPT (with Instacart enabled), the assistant builds the ALDI
+  Instacart cart, user finalizes on Instacart. No third-party app can programmatically drive
+  a consumer assistant's Instacart connector — this is intentional by design.
+- **`src/lib/instacart-handoff.ts`**: pure `buildInstacartHandoff(groceryList, catalog)` →
+  `{ preamble, lines[], lineItems[] }`. Implements Layer 1 (internal API-aligned line-item
+  model: name, display_text, quantity, unit, upc[]) and Layer 2 (text rendering). Unit
+  normalization follows Layer 3 of the Instacart Handoff Format Spec (TER-180 Linear doc):
+  countable produce → "each"; leafy heads → "head"; eggs → "large"/dozen; compound container
+  ("14.5 oz can") → "oz can"; unsupported container ("box") → "package"; bare weight → unit+qty;
+  fallback → "package". Size-based rules fire before name-based rules so "Diced tomatoes —
+  14.5 oz can" resolves to "oz can" not "each".
+- **Catalog join**: `normalized_name → upc` lookup; UPCs validated 12/14 digits; de-duped
+  across line items. Catalog loaded lazily in ListView on mount (normalized_name + upc only).
+- **"Copy for Instacart (AI)" button** added to List tab, replacing the TER-183 stub. Copies
+  preamble + matcher-aligned item lines. "Copy list" retained for plain/print use.
+- **Unit tests** (`src/lib/instacart-handoff.test.ts`, Vitest): 23 tests cover all 6 required
+  normalization cases plus catalog join, UPC validation, zero-qty exclusion, and UPC de-dupe.
+  `npm test` to run. Vitest configured in `vite.config.ts`.
+- Spec: Linear doc "Instacart Handoff Format Spec (TER-180)" is the source of truth for
+  the line-item field model, supported units, and normalization rules.
+- `tsc --noEmit && vite build` pass.
 
 ## Backlog / next
 - TER-196: Calorie cascade + UI (depends on TER-194).
