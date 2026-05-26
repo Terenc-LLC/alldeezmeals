@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
+import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/nutritionResolve";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -307,6 +308,7 @@ export default function App() {
     if (!obj.name || !Array.isArray(obj.ingredients)) throw new Error("bad shape");
     obj.prepMinutes = typeof obj.prepMinutes === "number" ? Math.round(obj.prepMinutes) : null;
     obj.cookMinutes = typeof obj.cookMinutes === "number" ? Math.round(obj.cookMinutes) : null;
+    obj.estKcalPerServing = typeof obj.estKcalPerServing === "number" && obj.estKcalPerServing > 0 ? Math.round(obj.estKcalPerServing) : null;
     obj.steps = Array.isArray(obj.steps) ? obj.steps.map(String).filter(Boolean) : [];
     obj.ingredients = obj.ingredients.map((i: any) => {
       const name = String(i.name || "").trim();
@@ -391,8 +393,8 @@ ${prior}
 
 Each ingredient requires: recipeAmount {qty, unit} (the cooking amount used in the recipe), purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen"), purchaseQty (integer ≥ 1, whole packages rounded UP to cover recipeAmount — usually 1).
 
-Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers -- exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
+Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Exactly:
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -404,13 +406,24 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   const usedCuisinesFrom = (data: any[]) => Array.from(new Set(data.map((m) => m.cuisine).filter(Boolean)));
 
   const generateOne = async (day: any, idx: number, committed: any[], reject?: string) => {
-    setMeals((m) => ({ ...m, [day.id]: { status: "loading", data: null, error: null } }));
+    setMeals((m) => ({ ...m, [day.id]: { status: "loading", data: null, error: null, kcalInfo: null } }));
     try {
       const data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
-      setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null } }));
+      setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null, kcalInfo: null } }));
+      // Kick off nutrition resolution in background (non-blocking).
+      const tok = session?.access_token ?? "";
+      if (tok) {
+        resolveNutrition(data, tok).then((kcalInfo: NutritionResult) => {
+          setMeals((m) => {
+            const cur = m[day.id];
+            if (!cur?.data || cur.data.name !== data.name) return m; // stale guard
+            return { ...m, [day.id]: { ...cur, kcalInfo } };
+          });
+        }).catch(() => {});
+      }
       return data;
     } catch (e: any) {
-      setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: e?.message || "Couldn't generate -- retry." } }));
+      setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: e?.message || "Couldn't generate -- retry.", kcalInfo: null } }));
       return null;
     }
   };
@@ -637,6 +650,13 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
               {meal.data.prepMinutes != null && meal.data.cookMinutes != null ? " | " : ""}
               {meal.data.cookMinutes != null ? `Cook: ${meal.data.cookMinutes} min` : ""}
               {" | "}Serves: {meal.data.servings}
+            </p>
+          )}
+          {meal.kcalInfo && (
+            <p style={{ fontSize: 12, margin: "0 0 8px", color: "#52614f" }}>
+              {meal.kcalInfo.tier === "estimate" ? "~" : ""}{meal.kcalInfo.kcalPerServing} kcal/serving
+              {" · "}<strong>{meal.kcalInfo.tier === "catalog" ? "ALDI catalog" : meal.kcalInfo.tier === "usda" ? "USDA" : "Estimated"}</strong>
+              {meal.kcalInfo.tier === "usda" && ` · ${USDA_ATTRIBUTION}`}
             </p>
           )}
           {meal.data.reuseNote && <p style={{ fontSize: 12, fontStyle: "italic", color: "#7a6030", margin: "0 0 8px" }}>Note: {meal.data.reuseNote}</p>}
@@ -874,6 +894,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                     {" · "}Serves: {m.data.servings}
                   </div>
                 )}
+                {m.kcalInfo && <KcalBadge kcalPerServing={m.kcalInfo.kcalPerServing} tier={m.kcalInfo.tier} />}
                 <div style={s.tagWrap}>
                   {m.data.ingredients.map((ing: any, idx: number) => {
                     const rStr = fmtRecipeQty(ing);
@@ -1555,6 +1576,26 @@ function CatalogView({ session }: { session: any }) {
 }
 
 /* ============================ bits + styles ============================ */
+function KcalBadge({ kcalPerServing, tier }: { kcalPerServing: number; tier: string }) {
+  const isEst = tier === "estimate";
+  const isUSDA = tier === "usda";
+  const label = tier === "catalog" ? "ALDI catalog" : tier === "usda" ? "USDA" : "Estimated";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, flexWrap: "wrap" as const }}>
+      <span style={{ fontSize: 13.5, fontWeight: 700, color: "#2c3a2e" }}>
+        {isEst ? "~" : ""}{kcalPerServing} kcal/serving
+      </span>
+      <span style={{
+        fontSize: 10, fontWeight: 700,
+        color: isEst ? "#8a6d3b" : "#3d5141",
+        background: isEst ? "#fdf3e3" : "#eef2e9",
+        padding: "1px 7px", borderRadius: 10,
+      }}>{label}</span>
+      {isUSDA && <span style={{ fontSize: 10, color: "#9aa89c" }}>{USDA_ATTRIBUTION}</span>}
+    </div>
+  );
+}
+
 function TabBtn({ active, onClick, icon, label }: any) {
   return <button onClick={onClick} style={{ ...s.tab, ...(active ? s.tabActive : {}) }}>{icon}<span>{label}</span></button>;
 }
