@@ -4,7 +4,7 @@
 // no service-role key needed here (unlike /api/ingest-order).
 
 import { createClient } from "@supabase/supabase-js";
-import { normalizeIngName, normalizeGtin, gtinDigits } from "../src/lib/normalize";
+import { normalizeIngName, normalizeGtin, gtinDigits } from "../src/lib/normalize.js";
 
 const FDC_BASE = "https://api.nal.usda.gov/fdc/v1";
 const OFF_BASE = "https://world.openfoodfacts.org/api/v0";
