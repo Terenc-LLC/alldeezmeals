@@ -174,15 +174,15 @@ describe("normalizeUnit", () => {
     expect(r.qty).toBe(1);
   });
 
-  it("'tbsp' → tbsp (tablespoon alias)", () => {
-    const r = normalizeUnit("tbsp", 2, "Butter");
-    expect(r.unit).toBe("tbsp");
+  it("'tb' → tb (tablespoon alias)", () => {
+    const r = normalizeUnit("tb", 2, "Butter");
+    expect(r.unit).toBe("tb");
     expect(r.qty).toBe(2);
   });
 
-  it("'tbspn' → tbspn (tablespoon alias)", () => {
-    const r = normalizeUnit("tbspn", 1, "Honey");
-    expect(r.unit).toBe("tbspn");
+  it("'tbs' → tbs (tablespoon alias)", () => {
+    const r = normalizeUnit("tbs", 1, "Honey");
+    expect(r.unit).toBe("tbs");
     expect(r.qty).toBe(1);
   });
 
