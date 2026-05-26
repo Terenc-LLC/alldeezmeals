@@ -123,6 +123,80 @@ describe("normalizeUnit", () => {
     expect(r.unit).toBe("lb");
     expect(r.qty).toBe(1);
   });
+
+  // New alias/plural forms
+  it("'cups' → cups (plural alias)", () => {
+    const r = normalizeUnit("cups", 2, "Water");
+    expect(r.unit).toBe("cups");
+    expect(r.qty).toBe(2);
+    expect(r.textDisplay).toBe("2 cups");
+  });
+
+  it("'gallons' → gallons (plural alias)", () => {
+    const r = normalizeUnit("gallons", 1, "Whole milk");
+    expect(r.unit).toBe("gallons");
+    expect(r.qty).toBe(1);
+  });
+
+  it("'liters' → liters (plural alias)", () => {
+    const r = normalizeUnit("liters", 2, "Sparkling water");
+    expect(r.unit).toBe("liters");
+    expect(r.qty).toBe(2);
+  });
+
+  it("'litre' → litre (British spelling)", () => {
+    const r = normalizeUnit("litre", 1, "Olive oil");
+    expect(r.unit).toBe("litre");
+    expect(r.qty).toBe(1);
+  });
+
+  it("'teaspoons' → teaspoons (plural alias)", () => {
+    const r = normalizeUnit("teaspoons", 2, "Salt");
+    expect(r.unit).toBe("teaspoons");
+    expect(r.qty).toBe(2);
+  });
+
+  it("'tablespoons' → tablespoons (plural alias)", () => {
+    const r = normalizeUnit("tablespoons", 3, "Olive oil");
+    expect(r.unit).toBe("tablespoons");
+    expect(r.qty).toBe(3);
+  });
+
+  it("'ts' → ts (teaspoon alias)", () => {
+    const r = normalizeUnit("ts", 1, "Vanilla extract");
+    expect(r.unit).toBe("ts");
+    expect(r.qty).toBe(1);
+  });
+
+  it("'tspn' → tspn (teaspoon alias)", () => {
+    const r = normalizeUnit("tspn", 1, "Baking powder");
+    expect(r.unit).toBe("tspn");
+    expect(r.qty).toBe(1);
+  });
+
+  it("'tbsp' → tbsp (tablespoon alias)", () => {
+    const r = normalizeUnit("tbsp", 2, "Butter");
+    expect(r.unit).toBe("tbsp");
+    expect(r.qty).toBe(2);
+  });
+
+  it("'tbspn' → tbspn (tablespoon alias)", () => {
+    const r = normalizeUnit("tbspn", 1, "Honey");
+    expect(r.unit).toBe("tbspn");
+    expect(r.qty).toBe(1);
+  });
+
+  it("'pints' → pints (plural alias)", () => {
+    const r = normalizeUnit("pints", 2, "Heavy cream");
+    expect(r.unit).toBe("pints");
+    expect(r.qty).toBe(2);
+  });
+
+  it("'quarts' → quarts (plural alias)", () => {
+    const r = normalizeUnit("quarts", 1, "Chicken broth");
+    expect(r.unit).toBe("quarts");
+    expect(r.qty).toBe(1);
+  });
 });
 
 describe("buildInstacartHandoff", () => {
@@ -172,6 +246,28 @@ describe("buildInstacartHandoff", () => {
     };
     const result = buildInstacartHandoff(list, []);
     expect(result.lines).toHaveLength(0);
+  });
+
+  it("lineItem.display_text is '{name} ({size})' for packaged item", () => {
+    const list = {
+      Pantry: [{ name: "Diced tomatoes", qty: 2, unit: "14.5 oz can" }],
+      Produce: [], "Meat & Seafood": [], "Dairy & Eggs": [], Frozen: [], Bakery: [], Other: [],
+    };
+    const result = buildInstacartHandoff(list, []);
+    expect(result.lineItems[0].display_text).toBe("Diced tomatoes (14.5 oz can)");
+    // text path is unchanged
+    expect(result.lines[0]).toBe("- Diced tomatoes — 2 × 14.5 oz can");
+  });
+
+  it("lineItem.display_text includes size for produce", () => {
+    const list = {
+      Produce: [{ name: "Yellow onion", qty: 3, unit: "each" }],
+      "Meat & Seafood": [], "Dairy & Eggs": [], Pantry: [], Frozen: [], Bakery: [], Other: [],
+    };
+    const result = buildInstacartHandoff(list, []);
+    expect(result.lineItems[0].display_text).toBe("Yellow onion (each)");
+    // text path is unchanged
+    expect(result.lines[0]).toBe("- Yellow onion — 3 each");
   });
 
   it("de-duplicates UPCs across line items", () => {
