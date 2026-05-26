@@ -1,15 +1,20 @@
 # ALLDEEZMeals — Claude Code instructions
 
-## Push-before-done rule
+## Branch and PR rules
 
-After every implementation task, push the branch to origin and confirm the remote commit SHA before reporting the work as complete. A local-only commit is not done.
+- **One branch per issue.** Create a fresh `feat/ter-NNN-…` branch off the latest `main` for each issue. Never re-push to a branch whose PR is already merged.
+- **Every task ends with an open PR.** A local commit is not done. A pushed branch with no PR is not done. "Done" means: branch pushed, PR open on GitHub, PR URL reported.
+- **Push-before-done.** After every implementation task, push to origin and confirm the remote commit SHA before reporting the work as complete.
 
 ```
-git push -u origin <branch>
-# confirm the SHA shown by git matches what's on origin
+git checkout main && git pull origin main
+git checkout -b feat/ter-NNN-short-description
+# … make changes …
+git push -u origin feat/ter-NNN-short-description
+gh pr create --base main …
 ```
 
-Do not say "done" until `git push` has succeeded and the SHA is verified against the remote.
+Do not say "done" until `git push` has succeeded and a PR URL is confirmed on GitHub (not 404).
 
 ## Linear comment rule
 
