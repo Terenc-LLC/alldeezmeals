@@ -8,6 +8,7 @@ import {
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
 import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/nutritionResolve";
+import { buildInstacartHandoff } from "./lib/instacart-handoff";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -639,7 +640,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
             pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
             acceptedCount={acceptedCount} slotCount={days.length} location={location}
-            onMarkOrdered={handleMarkOrdered} alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave} />
+            onMarkOrdered={handleMarkOrdered} alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave}
+            session={session} />
         )}
         {tab === "rotation" && (
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
@@ -953,17 +955,26 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave }: any) {
+function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave, session }: any) {
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [newAlwaysHave, setNewAlwaysHave] = useState("");
+  const [catalog, setCatalog] = useState<Array<{ normalized_name: string | null; upc: string | null }>>([]);
+
+  useEffect(() => {
+    if (!session) return;
+    supabase.from("catalog").select("normalized_name, upc").then(({ data }) => {
+      if (data) setCatalog(data as Array<{ normalized_name: string | null; upc: string | null }>);
+    });
+  }, [session]);
+
   const copy = async () => { try { await navigator.clipboard.writeText(listText); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
-  const copyForInstacart = async () => {
-    const locName = location?.name ?? "ALDI";
-    const prompt = `Add these groceries to an Instacart order from ALDI in ${locName}:\n\n${listText}`;
-    try { await navigator.clipboard.writeText(prompt); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
+  const copyForInstacartAI = async () => {
+    const { preamble, lines } = buildInstacartHandoff(groceryList, catalog);
+    const text = `${preamble}\n\n${lines.join("\n")}`;
+    try { await navigator.clipboard.writeText(text); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
   };
   const markOrdered = async () => {
     if (!window.confirm("Archive this plan and start fresh?\n\nYour meals and grocery list will be cleared. Setup, staples, and preferences are kept.")) return;
@@ -991,7 +1002,7 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
         <p style={s.cardSub}>{totalItems} items - {acceptedCount}/{slotCount} dinners + staples</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
           <button onClick={copy} style={s.primaryBtn}>{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copied!" : "Copy list"}</button>
-          <button onClick={copyForInstacart} style={s.ghostBtn}>{copiedCart ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copiedCart ? "Copied!" : "Copy for Instacart"}</button>
+          <button onClick={copyForInstacartAI} style={s.ghostBtn}>{copiedCart ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copiedCart ? "Copied!" : "Copy for Instacart (AI)"}</button>
           <button onClick={markOrdered} disabled={acceptedCount === 0 || ordering} style={{ ...s.ghostBtn, opacity: acceptedCount === 0 ? 0.4 : 1 }}>
             {ordering ? <RefreshCw size={16} className="spin" /> : <Archive size={16} />}
             {ordering ? "Archiving..." : "Mark ordered & start next week"}
@@ -1060,7 +1071,11 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
       )}
       <div style={s.howto}>
         <h4 style={s.howtoTitle}>Order from ALDI (free)</h4>
-        <ol style={s.howtoList}><li>Tap <strong>Copy list</strong>.</li><li>Open the <strong>ALDI app</strong> (or ChatGPT + Instacart) and add items.</li><li>Pick delivery or curbside and check out.</li></ol>
+        <ol style={s.howtoList}>
+          <li>Tap <strong>Copy list</strong> for the plain list — paste into the ALDI app or print.</li>
+          <li>Or tap <strong>Copy for Instacart (AI)</strong> — paste into Claude or ChatGPT (with Instacart enabled) and it builds your cart.</li>
+          <li>Review the cart, pick your store, and check out.</li>
+        </ol>
       </div>
     </div>
   );
