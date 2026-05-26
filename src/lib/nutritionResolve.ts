@@ -45,7 +45,7 @@ type FoodPortion = { modifier: string; gramWeight: number };
 export type NutritionTier = "catalog" | "usda" | "estimate";
 
 export type NutritionResult = {
-  kcalPerServing: number;
+  kcalPerServing: number | null; // null = unresolved with no usable estimate
   tier: NutritionTier;
 };
 
@@ -147,8 +147,9 @@ export async function resolveNutrition(
         supabase
           .from("catalog")
           .select("kcal_per_100g")
-          .eq("normalized_product", ing.key)
+          .eq("normalized_name", ing.key)       // generic ingredient lookup column
           .not("kcal_per_100g", "is", null)
+          .limit(1)                             // normalized_name is non-unique (TER-202)
           .maybeSingle()
           .then(
             ({ data }) => (data?.kcal_per_100g as number | null) ?? null,
@@ -190,16 +191,17 @@ export async function resolveNutrition(
   });
 
   // Any material ingredient unresolved → fall back to LLM estimate.
+  // Return null (not 0) when the estimate is also absent — never fabricate a number.
   const hasUnresolved = ingResults.some((r) => r.kind === "unresolved");
   if (hasUnresolved) {
     const est = meal.estKcalPerServing;
-    return { kcalPerServing: est && est > 0 ? est : 0, tier: "estimate" };
+    return { kcalPerServing: est && est > 0 ? est : null, tier: "estimate" };
   }
 
   // All skipped (entirely "to taste" ingredients) → fall back to estimate.
   if (ingResults.every((r) => r.kind === "skip")) {
     const est = meal.estKcalPerServing;
-    return { kcalPerServing: est && est > 0 ? est : 0, tier: "estimate" };
+    return { kcalPerServing: est && est > 0 ? est : null, tier: "estimate" };
   }
 
   // Sum computed kcal; track weakest tier.

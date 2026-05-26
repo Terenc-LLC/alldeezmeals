@@ -654,7 +654,9 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           )}
           {meal.kcalInfo && (
             <p style={{ fontSize: 12, margin: "0 0 8px", color: "#52614f" }}>
-              {meal.kcalInfo.tier === "estimate" ? "~" : ""}{meal.kcalInfo.kcalPerServing} kcal/serving
+              {meal.kcalInfo.kcalPerServing !== null
+                ? `${meal.kcalInfo.tier === "estimate" ? "~" : ""}${meal.kcalInfo.kcalPerServing} kcal/serving`
+                : "— kcal/serving"}
               {" · "}<strong>{meal.kcalInfo.tier === "catalog" ? "ALDI catalog" : meal.kcalInfo.tier === "usda" ? "USDA" : "Estimated"}</strong>
               {meal.kcalInfo.tier === "usda" && ` · ${USDA_ATTRIBUTION}`}
             </p>
@@ -1576,15 +1578,19 @@ function CatalogView({ session }: { session: any }) {
 }
 
 /* ============================ bits + styles ============================ */
-function KcalBadge({ kcalPerServing, tier }: { kcalPerServing: number; tier: string }) {
+function KcalBadge({ kcalPerServing, tier }: { kcalPerServing: number | null; tier: string }) {
   const isEst = tier === "estimate";
   const isUSDA = tier === "usda";
   const label = tier === "catalog" ? "ALDI catalog" : tier === "usda" ? "USDA" : "Estimated";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, flexWrap: "wrap" as const }}>
-      <span style={{ fontSize: 13.5, fontWeight: 700, color: "#2c3a2e" }}>
-        {isEst ? "~" : ""}{kcalPerServing} kcal/serving
-      </span>
+      {kcalPerServing !== null ? (
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: "#2c3a2e" }}>
+          {isEst ? "~" : ""}{kcalPerServing} kcal/serving
+        </span>
+      ) : (
+        <span style={{ fontSize: 13, color: "#8a6d3b" }}>— kcal/serving</span>
+      )}
       <span style={{
         fontSize: 10, fontWeight: 700,
         color: isEst ? "#8a6d3b" : "#3d5141",
