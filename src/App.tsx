@@ -309,6 +309,9 @@ export default function App() {
     obj.prepMinutes = typeof obj.prepMinutes === "number" ? Math.round(obj.prepMinutes) : null;
     obj.cookMinutes = typeof obj.cookMinutes === "number" ? Math.round(obj.cookMinutes) : null;
     obj.estKcalPerServing = typeof obj.estKcalPerServing === "number" && obj.estKcalPerServing > 0 ? Math.round(obj.estKcalPerServing) : null;
+    obj.difficulty = typeof obj.difficulty === "number"
+      ? Math.min(5, Math.max(0, Math.round(obj.difficulty)))
+      : null;
     obj.steps = Array.isArray(obj.steps) ? obj.steps.map(String).filter(Boolean) : [];
     obj.ingredients = obj.ingredients.map((i: any) => {
       const name = String(i.name || "").trim();
@@ -393,8 +396,8 @@ ${prior}
 
 Each ingredient requires: recipeAmount {qty, unit} (the cooking amount used in the recipe), purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen"), purchaseQty (integer ≥ 1, whole packages rounded UP to cover recipeAmount — usually 1).
 
-Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
+Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. Exactly:
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -661,6 +664,12 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
               {meal.kcalInfo.tier === "usda" && ` · ${USDA_ATTRIBUTION}`}
             </p>
           )}
+          {meal.data.difficulty != null && (
+            <p style={{ fontSize: 12, margin: "0 0 8px" }}>
+              {`Effort: ${Array.from({ length: 5 }, (_, i) => i < meal.data.difficulty ? "●" : "○").join("")} (${meal.data.difficulty}/5) · `}
+              <strong>{["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"][meal.data.difficulty]}</strong>
+            </p>
+          )}
           {meal.data.reuseNote && <p style={{ fontSize: 12, fontStyle: "italic", color: "#7a6030", margin: "0 0 8px" }}>Note: {meal.data.reuseNote}</p>}
           <h3 style={{ fontSize: 13, margin: "0 0 4px" }}>Ingredients</h3>
           <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13 }}>
@@ -897,6 +906,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                   </div>
                 )}
                 {m.kcalInfo && <KcalBadge kcalPerServing={m.kcalInfo.kcalPerServing} tier={m.kcalInfo.tier} />}
+                {m.data.difficulty != null && <DifficultyBadge difficulty={m.data.difficulty} />}
                 <div style={s.tagWrap}>
                   {m.data.ingredients.map((ing: any, idx: number) => {
                     const rStr = fmtRecipeQty(ing);
@@ -1598,6 +1608,23 @@ function KcalBadge({ kcalPerServing, tier }: { kcalPerServing: number | null; ti
         padding: "1px 7px", borderRadius: 10,
       }}>{label}</span>
       {isUSDA && <span style={{ fontSize: 10, color: "#9aa89c" }}>{USDA_ATTRIBUTION}</span>}
+    </div>
+  );
+}
+
+const DIFFICULTY_LABELS = ["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"] as const;
+
+function DifficultyBadge({ difficulty }: { difficulty: number }) {
+  const pips = Array.from({ length: 5 }, (_, i) => i < difficulty ? "●" : "○").join("");
+  const label = DIFFICULTY_LABELS[difficulty] ?? "";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, flexWrap: "wrap" as const }}>
+      <span style={{ fontSize: 13, color: "#2c3a2e" }}>
+        Effort: <span style={{ letterSpacing: 2 }}>{pips}</span> ({difficulty}/5)
+      </span>
+      <span style={{ fontSize: 10, fontWeight: 700, color: "#3d5141", background: "#eef2e9", padding: "1px 7px", borderRadius: 10 }}>
+        {label}
+      </span>
     </div>
   );
 }
