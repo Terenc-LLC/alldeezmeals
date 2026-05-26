@@ -961,7 +961,7 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
   const [ordering, setOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [newAlwaysHave, setNewAlwaysHave] = useState("");
-  const [catalog, setCatalog] = useState<Array<{ normalized_name: string | null; upc: string | null }>>([]);
+  const [catalog, setCatalog] = useState<Array<{ normalized_name: string | null; upc: string | null; last_price_cents: number | null }>>([]);
 
   useEffect(() => {
     if (!session) return;
@@ -970,8 +970,8 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
       .map((it) => normalizeIngName(it.name))
       .filter(Boolean);
     if (names.length === 0) { setCatalog([]); return; }
-    supabase.from("catalog").select("normalized_name, upc").in("normalized_name", names).then(({ data }) => {
-      if (data) setCatalog(data as Array<{ normalized_name: string | null; upc: string | null }>);
+    supabase.from("catalog").select("normalized_name, upc, last_price_cents").in("normalized_name", names).then(({ data }) => {
+      if (data) setCatalog(data as Array<{ normalized_name: string | null; upc: string | null; last_price_cents: number | null }>);
     });
   }, [session, groceryList]);
 
@@ -1001,6 +1001,32 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     setAlwaysHave((p: string[]) => p.includes(k) ? p : [...p, k]);
     setNewAlwaysHave("");
   };
+
+  const catalogPriceMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const row of catalog) {
+      if (row.normalized_name && row.last_price_cents != null) {
+        m.set(normalizeIngName(row.normalized_name), row.last_price_cents);
+      }
+    }
+    return m;
+  }, [catalog]);
+
+  const priceEstimate = useMemo(() => {
+    let sumCents = 0;
+    let pricedCount = 0;
+    for (const cat of CATEGORIES) {
+      for (const it of (groceryList[cat] ?? [])) {
+        if (!it.isPurchaseStyle) continue;
+        const price = catalogPriceMap.get(normalizeIngName(it.name));
+        if (price == null) continue;
+        sumCents += price * it.qty;
+        pricedCount++;
+      }
+    }
+    return { sumCents, pricedCount };
+  }, [groceryList, catalogPriceMap]);
+
   return (
     <div>
       <div style={s.listToolbar}>
@@ -1057,11 +1083,12 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
                 <div style={{ display: "grid", gap: 4 }}>
                   {items.map((it: any) => {
                     const key = `${it.name}|${it.unit}`; const checked = !!checkedItems[key]; const isP = pantry.includes(it.name.toLowerCase()); const isAH = alwaysHave.includes(normalizeIngName(it.name));
+                    const itemPrice = catalogPriceMap.get(normalizeIngName(it.name));
                     return (
                       <div key={key} style={s.listItem}>
                         <button onClick={() => toggleCheck(key)} style={{ ...s.check, background: checked ? "#3d5141" : "transparent" }}>{checked && <Check size={13} color="#fff" />}</button>
                         <span style={{ flex: 1, textDecoration: checked ? "line-through" : "none", color: checked ? "#9aa89c" : "#2c3a2e" }}>
-                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{it.staple && <span style={s.stapleDot}>staple</span>}
+                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{itemPrice != null && <span style={{ fontSize: 11, color: "#9aa89c", marginLeft: 5 }}>${(itemPrice / 100).toFixed(2)} ea</span>}{it.staple && <span style={s.stapleDot}>staple</span>}
                         </span>
                         <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP || isAH ? "#fff" : "#b6c0b7", background: isAH ? "#3d5141" : isP ? "#3d5141" : "transparent", borderColor: isP || isAH ? "#3d5141" : "#d8ddd4" }}>have it</button>
                         <button onClick={() => toggleAlwaysHave(it.name)} style={{ ...s.starBtn, color: isAH ? "#8a6d3b" : "#c8d1c4" }} title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}>★</button>
@@ -1072,6 +1099,12 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
               </div>
             );
           })}
+        </div>
+      )}
+      {session && priceEstimate.pricedCount > 0 && (
+        <div style={{ marginTop: 14, padding: "10px 14px", background: "#f5f9f4", border: "1px solid #d3ddc9", borderRadius: 10, fontSize: 12.5, color: "#52614f" }}>
+          <strong>Est. ${(priceEstimate.sumCents / 100).toFixed(2)}</strong>
+          <span style={{ color: "#7a8a7c" }}> — based on {priceEstimate.pricedCount} of {totalItems} items priced · most-recent ALDI prices, not a quote</span>
         </div>
       )}
       <div style={s.howto}>
