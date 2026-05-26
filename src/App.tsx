@@ -965,10 +965,15 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
 
   useEffect(() => {
     if (!session) return;
-    supabase.from("catalog").select("normalized_name, upc").then(({ data }) => {
+    const names = (Object.values(groceryList) as Array<Array<{ name: string }>>)
+      .flat()
+      .map((it) => normalizeIngName(it.name))
+      .filter(Boolean);
+    if (names.length === 0) { setCatalog([]); return; }
+    supabase.from("catalog").select("normalized_name, upc").in("normalized_name", names).then(({ data }) => {
       if (data) setCatalog(data as Array<{ normalized_name: string | null; upc: string | null }>);
     });
-  }, [session]);
+  }, [session, groceryList]);
 
   const copy = async () => { try { await navigator.clipboard.writeText(listText); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
   const copyForInstacartAI = async () => {
