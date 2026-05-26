@@ -3,6 +3,7 @@
 // user_id is derived from the validated JWT — never from client-supplied input.
 
 import { createClient } from "@supabase/supabase-js";
+import { normalizeIngName } from "../src/lib/normalize.ts";
 
 const VALID_CATEGORIES = [
   "Produce", "Meat & Seafood", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other",
@@ -112,7 +113,7 @@ export default async function handler(req: any, res: any) {
   const failed: string[] = [];
 
   for (const [normalizedProduct, row] of seenProducts.entries()) {
-    const normalizedName = row.normalizedName.trim().toLowerCase();
+    const normalizedName = normalizeIngName(row.normalizedName);
     const category = VALID_CATEGORIES.includes(row.category ?? "")
       ? (row.category as string)
       : null;
