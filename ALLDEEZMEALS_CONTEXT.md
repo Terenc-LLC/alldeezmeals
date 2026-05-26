@@ -221,6 +221,23 @@ session (status, decisions, next steps).
   from the endpoint; callers reference it for display).
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-182 — May 2026)
+- Persistent "always have" staples tier added (client-side, no DB/endpoint change).
+- **State**: `alwaysHave: string[]` added to all three persistence points (localStorage load,
+  Supabase load in sign-in effect, and save payload + dependency array). Stores normalized item
+  names via `normalizeIngName` so matching is case-insensitive and parenthetical-stripped.
+- **Grocery list**: always-have items excluded in `groceryList` useMemo alongside existing pantry
+  exclusion (same filter block, not a parallel path). `alwaysHave` added to dependency array.
+- **ListView UI**:
+  - Each grocery item gains a ★ star button (new `starBtn` style). Clicking normalizes the item
+    name and toggles it in `alwaysHave`. When starred: item disappears from the list (excluded)
+    and appears in the Always Have panel.
+  - "Have it" button styling updated: when an item is always-have OR pantry, button shows filled
+    (dark green background, white text) instead of just a border color change.
+  - "★ Always have" management panel at the top of the List tab shows all always-have items as
+    dark-green removable chips (X to remove), plus an add-by-name input (Enter or Add button).
+- No schema change, no migration, no endpoint change. `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).

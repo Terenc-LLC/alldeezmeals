@@ -116,6 +116,7 @@ export default function App() {
   const [meals, setMeals] = useState<Record<string, any>>({});
   const [staples, setStaples] = useState(DEFAULT_STAPLES);
   const [pantry, setPantry] = useState<string[]>([]);
+  const [alwaysHave, setAlwaysHave] = useState<string[]>([]);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [defaultPeople, setDefaultPeople] = useState(4);
   const [efficiency, setEfficiency] = useState(true);
@@ -142,6 +143,7 @@ export default function App() {
         setMeals(d.meals ?? {});
         setStaples(d.staples ?? DEFAULT_STAPLES);
         setPantry(d.pantry ?? []);
+        setAlwaysHave(d.alwaysHave ?? []);
         setCheckedItems(d.checkedItems ?? {});
         setDefaultPeople(d.defaultPeople ?? 4);
         setEfficiency(d.efficiency ?? true);
@@ -181,6 +183,7 @@ export default function App() {
           if (d.meals !== undefined) setMeals(d.meals);
           if (d.staples !== undefined) setStaples(d.staples);
           if (d.pantry !== undefined) setPantry(d.pantry);
+          if (d.alwaysHave !== undefined) setAlwaysHave(d.alwaysHave);
           if (d.checkedItems !== undefined) setCheckedItems(d.checkedItems);
           if (d.defaultPeople !== undefined) setDefaultPeople(d.defaultPeople);
           if (d.efficiency !== undefined) setEfficiency(d.efficiency);
@@ -219,7 +222,7 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     const payload = {
-      location, startDate, numDays, days, forecast, meals, staples, pantry,
+      location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
       checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
@@ -235,7 +238,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -494,10 +497,15 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       agg[k].staple = true;
     });
     const byCat: Record<string, any[]> = {}; CATEGORIES.forEach((c) => (byCat[c] = []));
-    Object.values(agg).forEach((it: any) => { if (it.qty === 0) return; if (pantry.includes(it.name.toLowerCase())) return; (byCat[it.category] || byCat.Other).push(it); });
+    Object.values(agg).forEach((it: any) => {
+      if (it.qty === 0) return;
+      if (pantry.includes(it.name.toLowerCase())) return;
+      if (alwaysHave.includes(normalizeIngName(it.name))) return;
+      (byCat[it.category] || byCat.Other).push(it);
+    });
     CATEGORIES.forEach((c) => byCat[c].sort((a, b) => a.name.localeCompare(b.name)));
     return byCat;
-  }, [days, meals, staples, pantry]);
+  }, [days, meals, staples, pantry, alwaysHave]);
 
   const totalItems = useMemo(() => Object.values(groceryList).reduce((n, a) => n + a.length, 0), [groceryList]);
 
@@ -631,7 +639,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
             pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
             acceptedCount={acceptedCount} slotCount={days.length} location={location}
-            onMarkOrdered={handleMarkOrdered} />
+            onMarkOrdered={handleMarkOrdered} alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave} />
         )}
         {tab === "rotation" && (
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
@@ -945,11 +953,12 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered }: any) {
+function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave }: any) {
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [newAlwaysHave, setNewAlwaysHave] = useState("");
   const copy = async () => { try { await navigator.clipboard.writeText(listText); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
   const copyForInstacart = async () => {
     const locName = location?.name ?? "ALDI";
@@ -966,6 +975,16 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
   };
   const togglePantry = (n: string) => { const k = n.toLowerCase(); setPantry((p: string[]) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]); };
   const toggleCheck = (k: string) => setCheckedItems((p: any) => ({ ...p, [k]: !p[k] }));
+  const toggleAlwaysHave = (name: string) => {
+    const k = normalizeIngName(name);
+    setAlwaysHave((p: string[]) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]);
+  };
+  const addAlwaysHave = () => {
+    const k = normalizeIngName(newAlwaysHave);
+    if (!k) return;
+    setAlwaysHave((p: string[]) => p.includes(k) ? p : [...p, k]);
+    setNewAlwaysHave("");
+  };
   return (
     <div>
       <div style={s.listToolbar}>
@@ -980,6 +999,38 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
         </div>
       </div>
       {orderError && <p style={{ color: "#a23b3b", fontSize: 12, margin: "4px 0 8px" }}>Could not archive: {orderError}</p>}
+
+      {/* Always Have management panel */}
+      <div style={{ ...s.card, marginBottom: 14, background: "#faf8f2", border: "1px solid #ece7d9" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: alwaysHave.length > 0 ? 10 : 0 }}>
+          <div>
+            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14.5, fontWeight: 600, color: "#3d5141" }}>★ Always have</span>
+            <span style={{ fontSize: 12, color: "#7a8a7c", marginLeft: 7 }}>auto-excluded every week</span>
+          </div>
+          {alwaysHave.length > 0 && <span style={{ fontSize: 11.5, color: "#8a6d3b", fontWeight: 700 }}>{alwaysHave.length} item{alwaysHave.length !== 1 ? "s" : ""}</span>}
+        </div>
+        {alwaysHave.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6, marginBottom: 10 }}>
+            {alwaysHave.map((k: string) => (
+              <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#3d5141", color: "#fff", fontSize: 12, fontWeight: 600, padding: "3px 9px 3px 10px", borderRadius: 20 }}>
+                {k}
+                <button onClick={() => setAlwaysHave((p: string[]) => p.filter((x) => x !== k))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", color: "#b6d4ba", lineHeight: 1 }}><X size={12} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            value={newAlwaysHave}
+            onChange={(e) => setNewAlwaysHave(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addAlwaysHave()}
+            placeholder="Add item (e.g. olive oil)…"
+            style={{ ...s.input, flex: 1, fontSize: 12.5, padding: "6px 9px" }}
+          />
+          <button onClick={addAlwaysHave} disabled={!newAlwaysHave.trim()} style={{ ...s.addBtn, opacity: newAlwaysHave.trim() ? 1 : 0.45 }}><Plus size={14} /> Add</button>
+        </div>
+      </div>
+
       {totalItems === 0 ? <div style={s.card}><p style={s.empty}>Accept dinners to build the list (staples always included).</p></div> : (
         <div style={{ display: "grid", gap: 14 }}>
           {CATEGORIES.map((cat) => {
@@ -989,14 +1040,15 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
                 <h3 style={s.catTitle}>{cat}</h3>
                 <div style={{ display: "grid", gap: 4 }}>
                   {items.map((it: any) => {
-                    const key = `${it.name}|${it.unit}`; const checked = !!checkedItems[key]; const isP = pantry.includes(it.name.toLowerCase());
+                    const key = `${it.name}|${it.unit}`; const checked = !!checkedItems[key]; const isP = pantry.includes(it.name.toLowerCase()); const isAH = alwaysHave.includes(normalizeIngName(it.name));
                     return (
                       <div key={key} style={s.listItem}>
                         <button onClick={() => toggleCheck(key)} style={{ ...s.check, background: checked ? "#3d5141" : "transparent" }}>{checked && <Check size={13} color="#fff" />}</button>
                         <span style={{ flex: 1, textDecoration: checked ? "line-through" : "none", color: checked ? "#9aa89c" : "#2c3a2e" }}>
                           {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{it.staple && <span style={s.stapleDot}>staple</span>}
                         </span>
-                        <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP ? "#3d5141" : "#b6c0b7", borderColor: isP ? "#3d5141" : "#d8ddd4" }}>have it</button>
+                        <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP || isAH ? "#fff" : "#b6c0b7", background: isAH ? "#3d5141" : isP ? "#3d5141" : "transparent", borderColor: isP || isAH ? "#3d5141" : "#d8ddd4" }}>have it</button>
+                        <button onClick={() => toggleAlwaysHave(it.name)} style={{ ...s.starBtn, color: isAH ? "#8a6d3b" : "#c8d1c4" }} title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}>★</button>
                       </div>
                     );
                   })}
@@ -1690,7 +1742,8 @@ const s: Record<string, any> = {
   check: { width: 20, height: 20, borderRadius: 6, border: "1.5px solid #b6c0b7", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 },
   qtyText: { color: "#9aa89c", fontSize: 12.5 },
   stapleDot: { marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#8a6d3b", background: "#fdf3e3", padding: "1px 6px", borderRadius: 10 },
-  pantryBtn: { fontSize: 11, fontWeight: 700, border: "1px solid", background: "transparent", borderRadius: 14, padding: "2px 9px", cursor: "pointer" },
+  pantryBtn: { fontSize: 11, fontWeight: 700, border: "1px solid", borderRadius: 14, padding: "2px 9px", cursor: "pointer" },
+  starBtn: { background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px", flexShrink: 0 },
   rotItem: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "#faf8f2", border: "1px solid #ece7d9", borderRadius: 9, padding: "10px 12px" },
   howto: { marginTop: 22, background: "#eef2e9", borderRadius: 13, padding: "14px 18px", border: "1px solid #d3ddc9" },
   howtoTitle: { fontFamily: serif, fontSize: 15, fontWeight: 600, margin: "0 0 6px", color: "#3d5141" },
