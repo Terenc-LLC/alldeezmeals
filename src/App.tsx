@@ -1585,7 +1585,7 @@ function IngestView({ session }: { session: any }) {
   const [receiptText, setReceiptText] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [orderDate, setOrderDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [result, setResult] = useState<{ ingested: number; failed: number } | null>(null);
+  const [result, setResult] = useState<{ submissionId: string; itemsCount: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const parseReceipt = async () => {
@@ -1658,7 +1658,7 @@ function IngestView({ session }: { session: any }) {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error ?? `API error ${r.status}`);
-      setResult({ ingested: data.ingested, failed: data.failed });
+      setResult({ submissionId: data.submissionId, itemsCount: data.itemsCount });
       setStep("done");
     } catch (e: any) {
       setErr(e?.message ?? "Submission failed — try again.");
@@ -1674,11 +1674,10 @@ function IngestView({ session }: { session: any }) {
   if (step === "done" && result) {
     return (
       <div style={s.card}>
-        <h3 style={s.cardTitle}>Logged to catalog</h3>
+        <h3 style={s.cardTitle}>Submitted for review</h3>
         <p style={{ fontSize: 14, color: "var(--c-text-muted)", marginTop: 8 }}>
-          {result.ingested} item{result.ingested !== 1 ? "s" : ""} added to the shared ALDI catalog
-          and your purchase history.
-          {result.failed > 0 && ` (${result.failed} failed — check console for details.)`}
+          {result.itemsCount} item{result.itemsCount !== 1 ? "s" : ""} submitted for review. An admin will
+          approve before the shared catalog updates. Your own purchase history was recorded immediately.
         </p>
         <button
           onClick={() => { setStep("paste"); setReceiptText(""); setRows([]); setResult(null); setOrderDate(new Date().toISOString().slice(0, 10)); }}
@@ -1842,6 +1841,15 @@ type CatalogItem = {
   nutrition_stale: boolean | null;
 };
 
+type PendingSubmission = {
+  id: string;
+  submitter_email: string | null;
+  order_date: string | null;
+  rows: any[];
+  status: string;
+  created_at: string;
+};
+
 function CatalogView({ session }: { session: any }) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1852,7 +1860,13 @@ function CatalogView({ session }: { session: any }) {
   const [manualVals, setManualVals] = useState({ kcal: "", serving_g: "", protein: "", fat: "", carbs: "" });
   const [savingManual, setSavingManual] = useState(false);
 
-  useEffect(() => { loadItems(); }, []);
+  // Pending submissions queue (admin only)
+  const [submissions, setSubmissions] = useState<PendingSubmission[]>([]);
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [subRowsExpanded, setSubRowsExpanded] = useState<Record<string, boolean>>({});
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+
+  useEffect(() => { loadItems(); loadSubmissions(); }, []);
 
   const loadItems = async () => {
     setLoading(true);
@@ -1863,6 +1877,61 @@ function CatalogView({ session }: { session: any }) {
       .limit(200);
     setLoading(false);
     if (data) setItems(data as CatalogItem[]);
+  };
+
+  const loadSubmissions = async () => {
+    const token = session?.access_token ?? "";
+    if (!token) return;
+    setSubsLoading(true);
+    try {
+      const r = await fetch("/api/admin/list-submissions", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) { setSubsLoading(false); return; } // 401/403 = not admin, fail closed
+      const data = await r.json();
+      setSubmissions(data.submissions ?? []);
+    } catch { /* ignore */ }
+    setSubsLoading(false);
+  };
+
+  const handleApprove = async (subId: string) => {
+    if (!confirm("Approve this submission? Its items will be written to the shared catalog.")) return;
+    const token = session?.access_token ?? "";
+    setReviewingId(subId);
+    try {
+      const r = await fetch("/api/admin/approve-submission", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ submissionId: subId }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+      setSubmissions(p => p.filter(s => s.id !== subId));
+      await loadItems();
+    } catch (e: any) {
+      alert(`Approve failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setReviewingId(null);
+  };
+
+  const handleReject = async (subId: string) => {
+    const reason = prompt("Reject reason (optional):") ?? "";
+    if (reason === null) return; // user hit Cancel
+    const token = session?.access_token ?? "";
+    setReviewingId(subId);
+    try {
+      const r = await fetch("/api/admin/reject-submission", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ submissionId: subId, reason }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+      setSubmissions(p => p.filter(s => s.id !== subId));
+    } catch (e: any) {
+      alert(`Reject failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setReviewingId(null);
   };
 
   const handleExpand = (id: string, item: CatalogItem) => {
@@ -1946,6 +2015,80 @@ function CatalogView({ session }: { session: any }) {
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
+      {/* ── Pending submissions (admin review queue) ── */}
+      {(subsLoading || submissions.length > 0) && (
+        <div style={{ ...s.card, borderColor: "var(--c-border)", marginBottom: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h3 style={{ ...s.cardTitle, margin: 0 }}>
+              Pending submissions ({subsLoading ? "…" : submissions.length})
+            </h3>
+            <button onClick={loadSubmissions} style={s.ghostBtn} disabled={subsLoading}>
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
+          {!subsLoading && submissions.length === 0 && (
+            <p style={s.empty}>No pending submissions.</p>
+          )}
+          {submissions.map(sub => {
+            const rowsVisible = subRowsExpanded[sub.id] ?? false;
+            const isBusy = reviewingId === sub.id;
+            return (
+              <div key={sub.id} style={{ ...s.dayBlock, marginBottom: 8, padding: "10px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" as const }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: "var(--c-text)" }}>
+                      {sub.submitter_email ?? "unknown"}
+                    </span>
+                    <span style={s.miniLabel as any}>
+                      {sub.order_date ?? "no date"} · {Array.isArray(sub.rows) ? sub.rows.length : 0} items
+                    </span>
+                    <div style={{ fontSize: 11, color: "var(--c-text-muted)", marginTop: 2 }}>
+                      {new Date(sub.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <button
+                      onClick={() => setSubRowsExpanded(p => ({ ...p, [sub.id]: !rowsVisible }))}
+                      style={s.ghostBtn}
+                      disabled={isBusy}
+                    >
+                      {rowsVisible ? "Hide" : "View"}
+                    </button>
+                    <button
+                      onClick={() => handleApprove(sub.id)}
+                      style={s.primaryBtn}
+                      disabled={isBusy}
+                    >
+                      {isBusy ? "…" : "Approve"}
+                    </button>
+                    <button
+                      onClick={() => handleReject(sub.id)}
+                      style={s.iconBtn}
+                      disabled={isBusy}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+                {rowsVisible && Array.isArray(sub.rows) && (
+                  <div style={{ marginTop: 10, maxHeight: 220, overflowY: "auto" as const, fontSize: 12, color: "var(--c-text-muted)" }}>
+                    {sub.rows.map((r: any, i: number) => (
+                      <div key={i} style={{ padding: "3px 0", borderBottom: "1px solid var(--c-border)" }}>
+                        <span style={{ fontWeight: 600, color: "var(--c-text)" }}>{r.productName || r.normalizedProduct}</span>
+                        {r.brand && <span> · {r.brand}</span>}
+                        {r.category && <span> · {r.category}</span>}
+                        {r.packageSize && <span> · {r.packageSize}</span>}
+                        {r.unitPriceCents != null && <span> · ${(r.unitPriceCents / 100).toFixed(2)}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ ...s.cardTitle, margin: 0 }}>Catalog ({filtered.length}{filtered.length !== items.length ? ` of ${items.length}` : ""})</h3>
         <button onClick={loadItems} style={s.ghostBtn}><RefreshCw size={13} /> Refresh</button>
