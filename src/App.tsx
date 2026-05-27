@@ -83,6 +83,16 @@ function fmtPurchaseQty(qty: number, unit: string, isPurchaseStyle: boolean): st
   return unit ? `${q} ${unit}` : String(q);
 }
 
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 480);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 480);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
+
 /* ====================================================================== */
 export default function App() {
   /* ---- Supabase auth ---- */
@@ -137,7 +147,6 @@ export default function App() {
       if (raw) {
         const d = JSON.parse(raw);
         setLocation(d.location ?? DEFAULT_LOCATION);
-        setStartDate(d.startDate ?? isoToday());
         setNumDays(d.numDays ?? 7);
         setDays(d.days ?? days);
         setForecast(d.forecast ?? {});
@@ -177,7 +186,6 @@ export default function App() {
         if (data?.state) {
           const d = data.state;
           if (d.location !== undefined) setLocation(d.location);
-          if (d.startDate !== undefined) setStartDate(d.startDate);
           if (d.numDays !== undefined) setNumDays(d.numDays);
           if (d.days !== undefined) setDays(d.days);
           if (d.forecast !== undefined) setForecast(d.forecast);
@@ -557,14 +565,16 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     }
   };
 
+  const isMobile = useIsMobile();
+
   /* ---- auth gate ---- */
   if (!authLoaded) {
-    return <div style={s.shell}><style>{fontImport}</style></div>;
+    return <div style={{ ...s.shell, padding: isMobile ? 12 : 20 }}><style>{fontImport}</style></div>;
   }
 
   if (!session) {
     return (
-      <div style={s.shell}>
+      <div style={{ ...s.shell, padding: isMobile ? 12 : 20 }}>
         <style>{fontImport}</style>
         <header style={s.header}>
           <div style={s.logoRow}>
@@ -580,11 +590,11 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     );
   }
 
-  if (!loaded) return <div style={s.shell}><p style={{ fontFamily: serif, color: "var(--c-text-muted)" }}>Loading your kitchen...</p></div>;
+  if (!loaded) return <div style={{ ...s.shell, padding: isMobile ? 12 : 20 }}><p style={{ fontFamily: serif, color: "var(--c-text-muted)" }}>Loading your kitchen...</p></div>;
 
   return (
     <>
-    <div className="no-print" style={s.shell}>
+    <div className="no-print" style={{ ...s.shell, padding: isMobile ? 12 : 20 }}>
       <style>{fontImport}</style>
       <header style={s.header}>
         <div style={{ ...s.logoRow, justifyContent: "space-between" }}>
@@ -624,7 +634,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             efficiency={efficiency} setEfficiency={setEfficiency}
             mixCuisines={mixCuisines} setMixCuisines={setMixCuisines}
             staples={staples} setStaples={setStaples}
-            onGenerate={generateAll} busy={busy} onStartOver={handleStartOver}
+            onGenerate={generateAll} busy={busy} onStartOver={handleStartOver} isMobile={isMobile}
           />
         )}
         {tab === "plan" && (
@@ -770,7 +780,7 @@ function SignInView() {
 /* ============================ Setup ============================ */
 function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
-    defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples, onGenerate, busy, onStartOver } = p;
+    defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples, onGenerate, busy, onStartOver, isMobile } = p;
   const [showStaples, setShowStaples] = useState(false);
   const [locInput, setLocInput] = useState("");
 
@@ -814,13 +824,13 @@ function SetupView(p: any) {
                   <span style={s.dayDate}>{weekdayLabel(date)}</span>
                   {fx ? <span style={s.fxChip}>{w!.e} {fx.hi}/{fx.lo}F - {w!.l}</span> : <span style={s.fxChipMuted}>no forecast</span>}
                 </div>
-                <div style={s.slotRow}>
+                <div style={{ ...s.slotRow, flexWrap: isMobile ? "wrap" as const : undefined }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <input type="number" min={1} value={day.people} onChange={(e) => updDay(day.id, { people: Math.max(1, Number(e.target.value) || 1) })} style={{ ...s.input, width: 50, textAlign: "center" }} />
                     <span style={s.miniLabel}>ppl</span>
                   </div>
-                  <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
-                  <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
+                  <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
+                  <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: isMobile ? "100%" : 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
                 </div>
                 <input value={day.note} onChange={(e) => updDay(day.id, { note: e.target.value })} placeholder="optional note" style={{ ...s.input, fontSize: 12.5, marginTop: 6, width: "100%" }} />
               </div>
@@ -1207,6 +1217,7 @@ type ParsedRow = {
 };
 
 function IngestView({ session }: { session: any }) {
+  const isMobile = useIsMobile();
   const [step, setStep] = useState<"paste" | "parsing" | "review" | "submitting" | "done">("paste");
   const [receiptText, setReceiptText] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
@@ -1355,7 +1366,7 @@ function IngestView({ session }: { session: any }) {
                         value={row.normalizedName}
                         onChange={(e) => patchRow(i, { normalizedName: e.target.value })}
                         placeholder="normalized name"
-                        style={{ ...s.input, flex: 1, minWidth: 120, fontSize: 12.5 }}
+                        style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 120, fontSize: 12.5 }}
                       />
                       <input
                         value={row.packageSize ?? ""}
@@ -1735,7 +1746,7 @@ function DifficultyBadge({ difficulty }: { difficulty: number }) {
 }
 
 function TabBtn({ active, onClick, icon, label }: any) {
-  return <button onClick={onClick} style={{ ...s.tab, ...(active ? s.tabActive : {}) }}>{icon}<span>{label}</span></button>;
+  return <button onClick={onClick} style={{ ...s.tab, ...(active ? s.tabActive : {}) }}>{icon}<span className="tab-label">{label}</span></button>;
 }
 
 const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');

@@ -25,4 +25,9 @@
 }
 
 html, body, #root { height: 100%; margin: 0; }
+html, body { overflow-x: hidden; }
 body { background: var(--c-bg); }
+
+@media (max-width: 479px) {
+  .tab-label { display: none; }
+}
