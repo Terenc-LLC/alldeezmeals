@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Help · ALLDEEZMeals</title>
+<meta name="robots" content="index,follow" />
+<style>
+  :root {
+    --c-bg:#FBF7F1; --c-surface:#FFFFFF; --c-text:#1A3A34; --c-text-muted:#7C8A80;
+    --c-primary:#2B8C7E; --c-primary-hover:#236F64; --c-border:#E6DDD0;
+  }
+  html,body{margin:0;background:var(--c-bg);color:var(--c-text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,sans-serif;
+    font-size:15px;line-height:1.6;}
+  a{color:var(--c-primary);text-decoration:underline;text-underline-offset:2px;}
+  a:hover{color:var(--c-primary-hover);}
+  .wrap{max-width:760px;margin:0 auto;padding:24px 20px 64px;}
+  header.site{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+    border-bottom:1px solid var(--c-border);padding-bottom:14px;margin-bottom:24px;}
+  .brand{font-weight:700;font-size:18px;color:var(--c-text);}
+  .back{font-size:13.5px;color:var(--c-text-muted);}
+  main.policy{background:var(--c-surface);border:1px solid var(--c-border);
+    border-radius:10px;padding:24px 24px 28px;}
+  main.policy h1{font-size:24px;margin:0 0 4px;}
+  main.policy h2{font-size:18px;margin:26px 0 8px;}
+  main.policy h3{font-size:15.5px;margin:18px 0 6px;}
+  main.policy p,main.policy li{font-size:14.5px;color:var(--c-text);}
+  main.policy ul,main.policy ol{padding-left:22px;}
+  main.policy table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px;}
+  main.policy th,main.policy td{border:1px solid var(--c-border);padding:8px 10px;text-align:left;vertical-align:top;}
+  main.policy th{background:#F4F1E9;font-weight:600;}
+  main.policy pre{background:#F4F1E9;border:1px solid var(--c-border);border-radius:6px;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.5;}
+  main.policy code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
+  main.policy blockquote{border-left:3px solid var(--c-border);margin:12px 0;padding:6px 14px;color:var(--c-text-muted);}
+  .eff{font-size:13px;color:var(--c-text-muted);margin:0 0 18px;}
+  footer.site{margin-top:24px;font-size:12.5px;color:var(--c-text-muted);text-align:center;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <div class="brand">ALLDEEZMeals</div>
+      <a class="back" href="/">← Back to app</a>
+    </header>
+    <main class="policy">
+      <h1>How to use ALLDEEZMeals</h1>
+      <p class="eff"><strong>Updated:</strong> May 27, 2026</p>
+      <!-- BEGIN HELP BODY -->
+      <h2>What this is</h2>
+      <p>ALLDEEZMeals plans your week of dinners, builds the grocery list, and hands the list off to <strong>Claude</strong> or <strong>ChatGPT</strong> to drop into your <strong>Instacart</strong> cart. It's tuned around items stocked at ALDI stores, learns what your family likes, and is mobile-friendly.</p>
+      <p>It's <strong>not affiliated with ALDI or Instacart</strong> — we just plan around their products and use Instacart for delivery via your own ChatGPT or Claude account.</p>
+
+      <h2>The 5-minute first run</h2>
+      <ol>
+        <li><strong>Sign in.</strong> Enter your email; you'll get a one-time link in your inbox. Click it. (No passwords — if the link expires, ask for another.)</li>
+        <li><strong>Set up the week</strong> on the <strong>Setup</strong> tab. Let it find your location (so it can weather-adjust suggestions), set the start date, how many days, and how many people per day. Tweak cuisine, temp, and effort per day if you want to steer it.</li>
+        <li><strong>Generate</strong> on the <strong>Meals</strong> tab. Each day gets a dinner suggestion with ingredients, calories, and a difficulty rating.</li>
+        <li><strong>Accept / reject / swap</strong> suggestions until each day feels right. Tap ★ on a meal to save it to your rotation.</li>
+        <li><strong>Review the list</strong> on the <strong>List</strong> tab. Add any weekly staples (bread, milk…), mark anything you already have at home so it drops off, then…</li>
+        <li><strong>Send it to Instacart</strong> by tapping <strong>Copy for Instacart (AI)</strong> and pasting into Claude or ChatGPT. (Detailed walkthrough below — this is the most novel part.)</li>
+      </ol>
+
+      <h2>The tabs</h2>
+
+      <h3>Setup — tell the app about your week</h3>
+      <p>Where you set the week's parameters:</p>
+      <ul>
+        <li><strong>Location</strong> — used for weather-aware suggestions (hot day → lean toward cooler meals).</li>
+        <li><strong>Start date</strong> and <strong>number of days</strong> — defaults to today and 7.</li>
+        <li><strong>Default people</strong> — applies to every new day; you can override per-day.</li>
+        <li><strong>Per-day controls</strong> for each day: people, cuisine, temp, desired effort, optional pinned recipe, and a free-form note. See "Per-day controls explained" below.</li>
+        <li><strong>Weekly staples</strong> (also visible from List) — items added to every list automatically (e.g. bread, milk).</li>
+        <li><strong>Mix up cuisines</strong> toggle — when on, the app forces variety across the week instead of letting the same cuisine repeat.</li>
+      </ul>
+
+      <h3>Meals — your week of dinners</h3>
+      <p>Once generated, each day shows a card with the dish name, cuisine, calorie estimate, a difficulty badge (Premade → Intricate, 0–5), prep + cook times, and the full ingredient list.</p>
+      <p>What you can do on each card:</p>
+      <ul>
+        <li><strong>Accept</strong> — locks the dinner in. Only accepted dinners contribute to the grocery list.</li>
+        <li><strong>Reject</strong> — asks for a different option for that day.</li>
+        <li><strong>Swap</strong> — pick a direction (e.g. "lighter," "different protein") and regenerate.</li>
+        <li><strong>👍 / 👎</strong> — teaches the app your taste. Liked dishes bias future generation toward similar styles; disliked ones are avoided.</li>
+        <li><strong>★ Save to rotation</strong> — adds to your Saved tab so you can pin it to a future day.</li>
+      </ul>
+      <p>A day with <strong>📌 Pinned</strong> uses a recipe you locked from the Setup tab and skips generation.</p>
+
+      <h3>List — the grocery list, ready to send</h3>
+      <p>The full week's shopping list, aggregated across all accepted meals plus your staples. Items group by aisle: Produce, Meat &amp; Seafood, Dairy &amp; Eggs, Pantry, Frozen, Bakery, Other.</p>
+      <p>Each item shows the quantity to buy and (where we have data) a calorie estimate. At the bottom you'll see an estimated total — see the <strong>estimate caveat</strong> below.</p>
+      <p>Per-item controls:</p>
+      <ul>
+        <li><strong>have it</strong> — you have this at home; skip it this week.</li>
+        <li><strong>★ (Always have)</strong> — you always keep this stocked; skip it every week.</li>
+      </ul>
+      <p>Above the list:</p>
+      <ul>
+        <li><strong>Copy for Instacart (AI)</strong> — copies a perfectly-formatted message to your clipboard. See the Instacart section below.</li>
+        <li><strong>Print</strong> — opens a paper-friendly printout (the list and recipes; the app's footer and tabs are hidden).</li>
+        <li><strong>Mark as ordered</strong> — archive the current week. Your Setup, staples, preferences, and pinned recipes are kept; meals and the list reset so you can plan next week.</li>
+      </ul>
+
+      <h3>Saved — your recipe rotation</h3>
+      <p>The recipes you've starred, plus any you've hand-entered yourself. From here you can:</p>
+      <ul>
+        <li><strong>Pin a recipe to a day</strong> (do this in Setup) — that day uses the saved recipe instead of generating, scaled to the day's headcount.</li>
+        <li><strong>Add a recipe manually</strong> with your own ingredients, servings, and steps.</li>
+        <li><strong>Like / dislike / remove</strong> to keep the rotation tidy.</li>
+      </ul>
+
+      <h3>Receipt — close the price loop</h3>
+      <p>Paste an Instacart or ALDI receipt and the app extracts items and prices to improve the shared catalog. The more receipts the community submits, the more accurate the calorie and price estimates get over time.</p>
+      <blockquote><p><em>Coming soon:</em> receipt submissions will go to a review queue before they affect the live catalog. Until then they update directly.</p></blockquote>
+
+      <h2>Per-day controls explained</h2>
+      <table>
+        <thead>
+          <tr><th>Control</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>People</strong></td><td>Servings to plan for that day. Scales ingredient quantities.</td></tr>
+          <tr><td><strong>Cuisine</strong></td><td>"Any" for variety, or pick a specific cuisine (Italian, Mexican, Asian, Mediterranean, BBQ, etc.).</td></tr>
+          <tr><td><strong>Temp</strong></td><td>Meal temperature: <strong>Auto</strong> (decided by the day's forecast), <strong>Hot</strong> (warm dish), <strong>Cold</strong> (salad/wrap/chilled), <strong>Either</strong> (no preference).</td></tr>
+          <tr><td><strong>Effort</strong></td><td>How much work you want: <strong>Any</strong>, <strong>Easy (Premade–Minimal)</strong> for heat-and-serve nights, <strong>Simple or less</strong> for one-pan weeknights, <strong>Moderate</strong>, or <strong>Involved+</strong> for a more ambitious cook.</td></tr>
+          <tr><td><strong>Pinned recipe</strong></td><td>Lock a saved recipe to this day — it skips generation and rescales to your headcount.</td></tr>
+          <tr><td><strong>Note</strong></td><td>Free-form request the AI tries to honor ("use up the chicken in the fridge," "kid-friendly," etc.).</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Send your list to Instacart (the magic part)</h2>
+      <p>ALLDEEZMeals doesn't talk to Instacart directly. Instead, it gives you a perfectly-formatted message that you paste into <strong>Claude</strong> or <strong>ChatGPT</strong>, which build the cart for you. Set it up once, and the whole flow is about 30 seconds.</p>
+
+      <h3>Step 1 — Copy the list</h3>
+      <p>On the <strong>List</strong> tab, tap <strong>Copy for Instacart (AI)</strong>. Your clipboard now has a preamble plus your items, like this:</p>
+      <pre><code>Add these items to my Instacart cart, matching each to the closest available
+product. The number before each item is how many packages to buy. After building
+the cart, give me the link so I can pick my store and check out.
+
+- Yellow onions — 2 each
+- Boneless chicken breast — 1 × 2 lb bag
+- Diced tomatoes — 2 × 14.5 oz can
+…</code></pre>
+      <p>The preamble is the instruction to the AI; the lines below are your list. You don't need to type anything else.</p>
+
+      <h3>Step 2A — If you use Claude (claude.ai)</h3>
+      <ol>
+        <li>Open Claude and start a new chat.</li>
+        <li>Click the <strong>+</strong> at the bottom-left of the chat, hover over <strong>Connectors</strong>, and turn on <strong>Instacart</strong>. (Or set it up under <strong>Customize → Connectors</strong>.) Sign in to Instacart when prompted — you only do this once.</li>
+        <li>Paste your copied list as a single message and send.</li>
+        <li>Claude builds your cart and <strong>confirms with you before purchasing</strong>. Review the items, tell it about anything you want swapped in plain English (<em>"swap the diced tomatoes for crushed"</em>), then approve to finish checkout on Instacart.</li>
+      </ol>
+
+      <h3>Step 2B — If you use ChatGPT (chat.openai.com)</h3>
+      <ol>
+        <li>Open ChatGPT and start a new chat.</li>
+        <li>Open the <strong>Apps</strong> directory (it lives in the sidebar or behind the <strong>+</strong> menu), find <strong>Instacart</strong>, and enable it. Sign in to Instacart when prompted — once only.</li>
+        <li>Paste your copied list as a single message and send.</li>
+        <li>ChatGPT builds the cart and lets you <strong>check out directly inside ChatGPT</strong> with Instant Checkout — no need to switch tabs. Pay with your card and you're done.</li>
+      </ol>
+
+      <h3>Tips</h3>
+      <ul>
+        <li>The AI will sometimes pick a slightly different brand or pack size. Tell it what to swap in plain language; both Claude and ChatGPT handle this conversationally.</li>
+        <li>You only sign in to Instacart once. The connection sticks for future weeks.</li>
+        <li>If an item is out of stock at your local store, Instacart will suggest a replacement at checkout — that's Instacart's own logic, not the AI's.</li>
+        <li>If the AI seems confused, double-check that Instacart is actually toggled <strong>on</strong> for the current chat (in Claude, look for the carrot icon; in ChatGPT, the Instacart app should appear in the chat composer).</li>
+      </ul>
+
+      <h3>About the relationship</h3>
+      <p>The order is between you and Instacart. ALLDEEZMeals only generates the list — we don't see your Instacart account, your card, or what you end up buying. Same goes for Claude and ChatGPT: those are your accounts, not ours.</p>
+
+      <h2>Tips &amp; gotchas</h2>
+      <ul>
+        <li><strong>The AI suggestions are estimates.</strong> Calorie counts come from public databases and are approximate. Price totals on the List tab are estimates from past receipts — useful for sizing, not for budgeting to the dollar.</li>
+        <li><strong>Verify allergens yourself.</strong> AI-generated recipes can omit allergens or cross-contamination risk. Always read product labels if you or anyone you cook for has restrictions.</li>
+        <li><strong>Magic-link sign-in.</strong> No password to remember. Links expire after a short window; if yours is stale, request another from the sign-in screen.</li>
+        <li><strong>Print view</strong> strips the app chrome (tabs, footer) so you get clean, paper-friendly recipes + list.</li>
+        <li><strong>Mark as ordered</strong> is non-destructive — your setup, preferences, staples, and pinned recipes survive. It just clears the current meals + list so next week is a blank slate.</li>
+        <li><strong>Your data.</strong> What you save (recipes, preferences, plans) is private to your account. See the <a href="/privacy.html">Privacy Policy</a> for details.</li>
+      </ul>
+
+      <h2>Get in touch</h2>
+      <p>Bug reports, feature ideas, "this recipe was great," "this recipe was terrible," "Instacart found a weird substitute" — send it to <a href="mailto:alldeezmeals@terenc.com">alldeezmeals@terenc.com</a>. This is a small project; your feedback shapes what gets fixed and added next.</p>
+      <!-- END HELP BODY -->
+    </main>
+    <footer class="site">© ALLDEEZMeals</footer>
+  </div>
+</body>
+</html>
