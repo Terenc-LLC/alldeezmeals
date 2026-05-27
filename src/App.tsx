@@ -23,6 +23,14 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const CATEGORIES = ["Produce", "Meat & Seafood", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other"];
 const CUISINES = ["Any", "American", "Comfort food", "Italian", "Mexican", "Tex-Mex", "Asian", "Chinese", "Thai", "Indian", "Mediterranean", "Greek", "BBQ", "Soup / Stew", "Salad-forward"];
 const TEMPS = ["Auto", "Either", "Hot", "Cold"];
+const DIFFICULTY_LABELS = ["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"] as const;
+const EFFORT_LEVELS: { key: string; label: string; min: number; max: number }[] = [
+  { key: "any",      label: "Any effort",             min: 0, max: 5 },
+  { key: "easy",     label: "Easy (Premade–Minimal)", min: 0, max: 1 },
+  { key: "simple",   label: "Simple or less",         min: 0, max: 2 },
+  { key: "moderate", label: "Moderate",               min: 2, max: 3 },
+  { key: "involved", label: "Involved+",              min: 4, max: 5 },
+];
 
 const DEFAULT_LOCATION = { name: "Bloomfield, IA", lat: 40.7517, lon: -92.4154 };
 
@@ -62,7 +70,7 @@ function wx(code: number) {
 }
 const tempBand = (hi: number | null | undefined) => (hi == null ? "mild" : hi >= 82 ? "hot" : hi <= 45 ? "cold" : "mild");
 
-const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Auto", note: "", pinnedRecipe: undefined as any });
+const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Auto", effort: "any", note: "", pinnedRecipe: undefined as any });
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -406,6 +414,13 @@ export default function App() {
         ? `Choose a cuisine that adds VARIETY to the week. Cuisines already used this week: ${usedCuisines.length ? usedCuisines.join(", ") : "none"}. Pick a DIFFERENT one.`
         : `Any cuisine is fine.`;
 
+    const lvl = EFFORT_LEVELS.find((l) => l.key === (day.effort ?? "any"));
+    const effortGuide = (lvl && lvl.key !== "any")
+      ? `Desired effort: set "difficulty" between ${lvl.min} (${DIFFICULTY_LABELS[lvl.min]}) and ${lvl.max} (${DIFFICULTY_LABELS[lvl.max]}).` +
+        (lvl.max <= 1 ? ` Favor a quick, convenient, low-effort dinner.`
+         : lvl.min >= 4 ? ` A more ambitious, involved dinner is welcome.` : ``)
+      : "";
+
     const prior = committed.length
       ? committed.map((m) => `- ${m.name}: ${m.ingredients.map((i: any) => {
           const buy = i.purchaseSize
@@ -436,6 +451,7 @@ ${wlabel}
 People eating: ${day.people}
 ${tempGuide}
 ${cuisineGuide}
+${effortGuide}
 ${day.note ? `Extra request: ${day.note}` : ""}
 ${prefLines.join("\n")}
 
@@ -884,6 +900,16 @@ function SetupView(p: any) {
                   </div>
                   <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
                   <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: isMobile ? "100%" : 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
+                  <select
+                    aria-label="Desired effort"
+                    value={day.effort ?? "any"}
+                    onChange={(e) => updDay(day.id, { effort: e.target.value })}
+                    disabled={!!day.pinnedRecipe}
+                    title={day.pinnedRecipe ? "Pinned days skip generation" : "Desired cooking effort"}
+                    style={{ ...s.input, width: isMobile ? "100%" : 130 }}
+                  >
+                    {EFFORT_LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+                  </select>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
                   <select
@@ -2047,8 +2073,6 @@ function KcalBadge({ kcalPerServing, tier }: { kcalPerServing: number | null; ti
     </div>
   );
 }
-
-const DIFFICULTY_LABELS = ["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"] as const;
 
 function DifficultyBadge({ difficulty }: { difficulty: number }) {
   const pips = Array.from({ length: 5 }, (_, i) => i < difficulty ? "●" : "○").join("");
