@@ -502,7 +502,16 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name);
   };
 
-  const resetPlan = () => { setMeals({}); setCheckedItems({}); };
+  const resetPlan = () => {
+    const pinned: Record<string, any> = {};
+    for (const day of days) {
+      if (day.pinnedRecipe) {
+        pinned[day.id] = { status: "accepted", data: scaleRecipeToHeadcount(day.pinnedRecipe, day.people), error: null, kcalInfo: null, pinned: true };
+      }
+    }
+    setMeals(pinned);
+    setCheckedItems({});
+  };
 
   const handleStartOver = () => {
     if (!window.confirm("Clear the current meal plan and grocery list?\n\nYour setup (days, people, cuisine pins), staples, and preferences (liked/avoid/rotation) will be kept.")) return;
@@ -2057,7 +2066,7 @@ function DifficultyBadge({ difficulty }: { difficulty: number }) {
 }
 
 function TabBtn({ active, onClick, icon, label }: any) {
-  return <button onClick={onClick} style={{ ...s.tab, ...(active ? s.tabActive : {}) }}>{icon}<span className="tab-label">{label}</span></button>;
+  return <button onClick={onClick} aria-label={label} style={{ ...s.tab, ...(active ? s.tabActive : {}) }}>{icon}<span className="tab-label">{label}</span></button>;
 }
 
 const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
