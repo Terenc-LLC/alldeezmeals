@@ -34,20 +34,7 @@ const EFFORT_LEVELS: { key: string; label: string; min: number; max: number }[] 
 
 const DEFAULT_LOCATION = { name: "Bloomfield, IA", lat: 40.7517, lon: -92.4154 };
 
-const DEFAULT_STAPLES = [
-  { id: uid(), name: "whole milk plain Greek yogurt", qty: 2, unit: "container", category: "Dairy & Eggs", enabled: true },
-  { id: uid(), name: "frozen mixed berries / fruit", qty: 1, unit: "bag", category: "Frozen", enabled: true },
-  { id: uid(), name: "Honey Nut Cheerios (generic)", qty: 1, unit: "box", category: "Pantry", enabled: true },
-  { id: uid(), name: "plain oat milk", qty: 1, unit: "1/2 gal", category: "Dairy & Eggs", enabled: true },
-  { id: uid(), name: "ground Sumatra coffee", qty: 1, unit: "bag", category: "Pantry", enabled: true },
-  { id: uid(), name: "salted butter", qty: 1, unit: "lb", category: "Dairy & Eggs", enabled: true },
-  { id: uid(), name: "2% milk", qty: 1, unit: "1/2 gal", category: "Dairy & Eggs", enabled: true },
-  { id: uid(), name: "sliced deli honey ham", qty: 1, unit: "lb", category: "Meat & Seafood", enabled: true },
-  { id: uid(), name: "sliced Jack cheese", qty: 1, unit: "pack", category: "Dairy & Eggs", enabled: true },
-  { id: uid(), name: "whole wheat bread", qty: 2, unit: "loaf", category: "Bakery", enabled: true },
-  { id: uid(), name: "multi-grain bread", qty: 1, unit: "loaf", category: "Bakery", enabled: true },
-  { id: uid(), name: "burrito-size tortillas", qty: 1, unit: "pack", category: "Bakery", enabled: true },
-];
+const DEFAULT_STAPLES: any[] = [];
 
 /* ---- date helpers ---- */
 const isoToday = () => toISO(new Date());
@@ -751,7 +738,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       <h1 style={{ fontFamily: serif, fontSize: 22, marginBottom: 4 }}>ALLDEEZMeals — Weekly Recipes</h1>
       <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginBottom: 24 }}>Printed {new Date().toLocaleDateString()}</p>
       {acceptedMealsForPrint.map(({ day, date, meal }, pi) => (
-        <div key={pi} style={{ pageBreakAfter: pi < acceptedMealsForPrint.length - 1 ? "always" : "auto", marginBottom: 32 }}>
+        <div key={pi} className="recipe-page" style={{ marginBottom: 32 }}>
           <h2 style={{ fontFamily: serif, fontSize: 18, margin: "0 0 4px" }}>{meal.data.name}</h2>
           <p style={{ fontSize: 12, color: "var(--c-text-muted)", margin: "0 0 6px" }}>{weekdayLabel(date)} &mdash; {meal.data.cuisine}</p>
           {(meal.data.prepMinutes != null || meal.data.cookMinutes != null) && (
@@ -2121,7 +2108,13 @@ function TabBtn({ active, onClick, icon, label }: any) {
 const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
 .spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 .print-only{display:none}
-@media print{.no-print{display:none!important}.print-only{display:block!important}}`;
+@media print{
+  html,body,#root{height:auto!important;overflow:visible!important;}
+  .no-print{display:none!important}
+  .print-only{display:block!important}
+  .recipe-page{break-after:page;page-break-after:always;}
+  .recipe-page:last-child{break-after:auto;page-break-after:auto;}
+}`;
 const serif = "'Fraunces', Georgia, serif";
 const sans = "'Nunito Sans', -apple-system, sans-serif";
 
