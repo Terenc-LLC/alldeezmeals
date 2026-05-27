@@ -1,6 +1,7 @@
 # ALLDEEZMEALS_CONTEXT
 
 ## Overview
+Canonical URL: https://alldeezmeals.com
 ALLDEEZMeals is a personal/family ALDI meal-planning web app. Weather-aware dinner
 generation, ingredient reuse across the week, standing breakfast/lunch staples, one
 consolidated ALDI shopping list, and lightweight preference learning (thumbs + rotation).
