@@ -3,7 +3,7 @@ import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
-  ReceiptText,
+  ReceiptText, HelpCircle,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
@@ -689,6 +689,9 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11.5, color: "var(--c-text-muted)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session?.user?.email}</span>
+            <a href="/help.html" style={{ ...s.signOutBtn, textDecoration: "none", display: "inline-flex", alignItems: "center" }} title="Help" aria-label="Help">
+              <HelpCircle size={15} />
+            </a>
             <button onClick={handleSignOut} style={s.signOutBtn} title="Sign out">
               <LogOut size={15} />
             </button>
@@ -742,6 +745,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         {tab === "catalog" && isAdmin && <CatalogView session={session} />}
       </main>
       <footer className="no-print" style={{ marginTop: 24, padding: "16px 4px 8px", borderTop: "1px solid var(--c-border)", fontSize: 12, color: "var(--c-text-muted)", textAlign: "center" as const }}>
+        <a href="/help.html" style={{ color: "var(--c-text-muted)" }}>Help</a>
+        {" · "}
         <a href="/terms.html" style={{ color: "var(--c-text-muted)" }}>Terms</a>
         {" · "}
         <a href="/privacy.html" style={{ color: "var(--c-text-muted)" }}>Privacy</a>
