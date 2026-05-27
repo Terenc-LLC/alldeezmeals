@@ -120,6 +120,7 @@ function useIsMobile(): boolean {
 export default function App() {
   /* ---- Supabase auth ---- */
   const [session, setSession] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [authLoaded, setAuthLoaded] = useState(false);
   const prevUserId = useRef<string | null>(null);
   const hydrated = useRef(false); // true once this user's Supabase row has been fetched
@@ -135,10 +136,23 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []); // eslint-disable-line
 
+  // TER-236: resolve admin flag from server (server reads ADMIN_EMAILS, never bundled to client).
+  useEffect(() => {
+    if (!session?.access_token) { setIsAdmin(false); return; }
+    let cancelled = false;
+    fetch("/api/me", { headers: { authorization: `Bearer ${session.access_token}` } })
+      .then((r) => (r.ok ? r.json() : { isAdmin: false }))
+      .then((d) => { if (!cancelled) setIsAdmin(!!d.isAdmin); })
+      .catch(() => { if (!cancelled) setIsAdmin(false); });
+    return () => { cancelled = true; };
+  }, [session?.access_token]);
+
   const handleSignOut = () => supabase.auth.signOut();
 
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("setup");
+  // TER-236: safety reset — if admin flips off while Catalog is open, redirect to setup.
+  useEffect(() => { if (!isAdmin && tab === "catalog") setTab("setup"); }, [isAdmin, tab]);
 
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [startDate, setStartDate] = useState(isoToday());
@@ -688,7 +702,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Saved (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
-        <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Archive size={15} />} label="Catalog" />
+        {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Archive size={15} />} label="Catalog" />}
       </nav>
 
       <main style={s.main}>
@@ -725,7 +739,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
         )}
         {tab === "receipt" && <IngestView session={session} />}
-        {tab === "catalog" && <CatalogView session={session} />}
+        {tab === "catalog" && isAdmin && <CatalogView session={session} />}
       </main>
     </div>
     <div className="print-only">
