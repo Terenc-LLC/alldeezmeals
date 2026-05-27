@@ -1088,7 +1088,7 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
                       <div key={key} style={s.listItem}>
                         <button onClick={() => toggleCheck(key)} style={{ ...s.check, background: checked ? "#3d5141" : "transparent" }}>{checked && <Check size={13} color="#fff" />}</button>
                         <span style={{ flex: 1, textDecoration: checked ? "line-through" : "none", color: checked ? "#9aa89c" : "#2c3a2e" }}>
-                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{itemPrice != null && <span style={{ fontSize: 11, color: "#9aa89c", marginLeft: 5 }}>${(itemPrice / 100).toFixed(2)} ea</span>}{it.staple && <span style={s.stapleDot}>staple</span>}
+                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{it.isPurchaseStyle && itemPrice != null && <span style={{ fontSize: 11, color: "#9aa89c", marginLeft: 5 }}>${(itemPrice / 100).toFixed(2)} ea</span>}{it.staple && <span style={s.stapleDot}>staple</span>}
                         </span>
                         <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP || isAH ? "#fff" : "#b6c0b7", background: isAH ? "#3d5141" : isP ? "#3d5141" : "transparent", borderColor: isP || isAH ? "#3d5141" : "#d8ddd4" }}>have it</button>
                         <button onClick={() => toggleAlwaysHave(it.name)} style={{ ...s.starBtn, color: isAH ? "#8a6d3b" : "#c8d1c4" }} title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}>★</button>
