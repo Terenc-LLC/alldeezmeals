@@ -108,6 +108,7 @@ export default function App() {
   /* ---- Supabase auth ---- */
   const [session, setSession] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [approvedStatus, setApprovedStatus] = useState<boolean | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const prevUserId = useRef<string | null>(null);
   const hydrated = useRef(false); // true once this user's Supabase row has been fetched
@@ -135,6 +136,26 @@ export default function App() {
   }, [session?.access_token]);
 
   const handleSignOut = () => supabase.auth.signOut();
+
+  // TER-238: check profiles.approved; recheck on window focus so approval propagates.
+  useEffect(() => {
+    if (!session?.user?.id) { setApprovedStatus(null); return; }
+    let cancelled = false;
+    const checkApproval = () => {
+      supabase
+        .from("profiles")
+        .select("approved")
+        .eq("id", session.user.id)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (cancelled) return;
+          setApprovedStatus(error || !data ? false : !!data.approved);
+        });
+    };
+    checkApproval();
+    window.addEventListener("focus", checkApproval);
+    return () => { cancelled = true; window.removeEventListener("focus", checkApproval); };
+  }, [session?.user?.id]); // eslint-disable-line
 
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("setup");
@@ -659,7 +680,21 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     );
   }
 
-  if (!loaded) return <div style={{ ...s.shell, padding: isMobile ? 12 : 20 }}><p style={{ fontFamily: serif, color: "var(--c-text-muted)" }}>Loading your kitchen...</p></div>;
+  // TER-238: approval gate — fail closed (null = not yet checked, false = unapproved).
+  if (approvedStatus === null) {
+    return <div style={{ ...s.shell, padding: isMobile ? 12 : 20 }}><style>{fontImport}</style><p style={{ fontFamily: serif, color: "var(--c-text-muted)" }}>Loading your kitchen...</p></div>;
+  }
+
+  if (!approvedStatus) {
+    return (
+      <div style={{ ...s.shell, padding: isMobile ? 12 : 20 }}>
+        <style>{fontImport}</style>
+        <PendingView onSignOut={handleSignOut} />
+      </div>
+    );
+  }
+
+  if (!loaded) return <div style={{ ...s.shell, padding: isMobile ? 12 : 20 }}><style>{fontImport}</style><p style={{ fontFamily: serif, color: "var(--c-text-muted)" }}>Loading your kitchen...</p></div>;
 
   return (
     <>
@@ -792,14 +827,18 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   );
 }
 
-/* ============================ Sign-in ============================ */
+/* ============================ Sign-in / Sign-up ============================ */
 function SignInView() {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [nearestAldi, setNearestAldi] = useState("");
+  const [reason, setReason] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSend = async () => {
+  const handleSignIn = async () => {
     const addr = email.trim();
     if (!addr) return;
     setLoading(true);
@@ -809,28 +848,130 @@ function SignInView() {
       options: { shouldCreateUser: false },
     });
     setLoading(false);
-    if (err) {
-      setError(err.message);
-    } else {
-      setSent(true);
-    }
+    if (err) { setError(err.message); } else { setSent(true); }
   };
+
+  const handleSignUp = async () => {
+    const addr = email.trim();
+    if (!addr || !name.trim()) return;
+    setLoading(true);
+    setError("");
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: addr,
+      options: {
+        shouldCreateUser: true,
+        data: { name: name.trim(), nearest_aldi: nearestAldi.trim(), reason: reason.trim() },
+      },
+    });
+    setLoading(false);
+    if (err) { setError(err.message); } else { setSent(true); }
+  };
+
+  const switchMode = (m: "signin" | "signup") => { setMode(m); setError(""); setSent(false); };
+
+  const consentLine = (
+    <p style={{ fontSize: 11.5, color: "var(--c-text-muted)", margin: "12px 0 0", textAlign: "center" as const, lineHeight: 1.5 }}>
+      By continuing you agree to our{" "}
+      <a href="/terms.html" style={{ color: "var(--c-primary)" }}>Terms</a>
+      {" · "}
+      <a href="/privacy.html" style={{ color: "var(--c-primary)" }}>Privacy Policy</a>.
+    </p>
+  );
 
   if (sent) {
     return (
-      <div style={{ ...s.card, maxWidth: 340, margin: "48px auto", textAlign: "center" as const }}>
+      <div style={{ ...s.card, maxWidth: 360, margin: "48px auto", textAlign: "center" as const }}>
         <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: "var(--c-text)" }}>Check your email</h2>
         <p style={{ fontSize: 13.5, color: "var(--c-text-muted)", margin: 0, lineHeight: 1.55 }}>
-          A sign-in link was sent to <strong>{email.trim()}</strong>. Click it to continue.
+          {mode === "signup"
+            ? <>A sign-in link was sent to <strong>{email.trim()}</strong>. Click it to continue — your account will be pending admin approval once you sign in.</>
+            : <>A sign-in link was sent to <strong>{email.trim()}</strong>. Click it to continue.</>}
         </p>
       </div>
     );
   }
 
+  if (mode === "signup") {
+    const canSubmit = email.trim() && name.trim() && !loading;
+    return (
+      <div style={{ ...s.card, maxWidth: 360, margin: "48px auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+          <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: 0, color: "var(--c-text)" }}>Request access</h2>
+          <button onClick={() => switchMode("signin")} style={{ background: "none", border: "none", fontSize: 12.5, color: "var(--c-primary)", cursor: "pointer", padding: 0 }}>
+            Sign in instead
+          </button>
+        </div>
+        <p style={s.cardSub}>Fill in a few details — an admin approves before you get full access.</p>
+        {error && (
+          <p style={{ color: "var(--c-danger)", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
+            <AlertCircle size={14} /> {error}
+          </p>
+        )}
+        <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+          <div>
+            <label style={s.fieldLabel}>Name *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
+              placeholder="Your name"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label style={s.fieldLabel}>Email *</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
+              placeholder="your@email.com"
+            />
+          </div>
+          <div>
+            <label style={s.fieldLabel}>Nearest ALDI store</label>
+            <input
+              type="text"
+              value={nearestAldi}
+              onChange={(e) => setNearestAldi(e.target.value)}
+              style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
+              placeholder="e.g. ALDI Bloomfield, IA"
+            />
+          </div>
+          <div>
+            <label style={s.fieldLabel}>Why do you want to test?</label>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && canSubmit && handleSignUp()}
+              style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
+              placeholder="Tell us a little about yourself"
+            />
+          </div>
+        </div>
+        <button
+          onClick={handleSignUp}
+          disabled={!canSubmit}
+          style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 14, opacity: canSubmit ? 1 : 0.5 }}
+        >
+          {loading ? <><RefreshCw size={16} className="spin" /> Sending…</> : "Request access"}
+        </button>
+        {consentLine}
+      </div>
+    );
+  }
+
   return (
-    <div style={{ ...s.card, maxWidth: 340, margin: "48px auto" }}>
-      <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 4px", color: "var(--c-text)" }}>Sign in</h2>
-      <p style={s.cardSub}>Invite-only · magic link sent to your email</p>
+    <div style={{ ...s.card, maxWidth: 360, margin: "48px auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+        <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: 0, color: "var(--c-text)" }}>Sign in</h2>
+        <button onClick={() => switchMode("signup")} style={{ background: "none", border: "none", fontSize: 12.5, color: "var(--c-primary)", cursor: "pointer", padding: 0 }}>
+          New? Request access
+        </button>
+      </div>
+      <p style={s.cardSub}>Magic link sent to your email</p>
       {error && (
         <p style={{ color: "var(--c-danger)", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
           <AlertCircle size={14} /> {error}
@@ -840,24 +981,37 @@ function SignInView() {
         type="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleSend()}
+        onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
         style={{ ...s.input, width: "100%", marginTop: 14, boxSizing: "border-box" } as any}
         placeholder="your@email.com"
         autoFocus
       />
       <button
-        onClick={handleSend}
+        onClick={handleSignIn}
         disabled={!email.trim() || loading}
         style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 10, opacity: email.trim() && !loading ? 1 : 0.5 }}
       >
-        {loading ? <><RefreshCw size={16} className="spin" /> Sending...</> : "Send magic link"}
+        {loading ? <><RefreshCw size={16} className="spin" /> Sending…</> : "Send magic link"}
       </button>
-      <p style={{ fontSize: 11.5, color: "var(--c-text-muted)", margin: "12px 0 0", textAlign: "center" as const, lineHeight: 1.5 }}>
-        By signing in you agree to our{" "}
-        <a href="/terms.html" style={{ color: "var(--c-primary)" }}>Terms</a>
-        {" · "}
-        <a href="/privacy.html" style={{ color: "var(--c-primary)" }}>Privacy Policy</a>.
+      {consentLine}
+    </div>
+  );
+}
+
+/* ============================ Pending approval ============================ */
+function PendingView({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <div style={{ ...s.card, maxWidth: 400, margin: "64px auto", textAlign: "center" as const }}>
+      <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+      <h2 style={{ fontFamily: serif, fontSize: 20, fontWeight: 600, margin: "0 0 10px", color: "var(--c-text)" }}>
+        You're in the queue
+      </h2>
+      <p style={{ fontSize: 14, color: "var(--c-text-muted)", margin: "0 0 20px", lineHeight: 1.6 }}>
+        Your account is pending admin approval. You'll get full access as soon as an admin reviews your request — just leave this tab open and it'll update automatically.
       </p>
+      <button onClick={onSignOut} style={{ ...s.ghostBtn, margin: "0 auto" }}>
+        <LogOut size={15} /> Sign out
+      </button>
     </div>
   );
 }
@@ -1850,6 +2004,15 @@ type PendingSubmission = {
   created_at: string;
 };
 
+type PendingUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  nearest_aldi: string | null;
+  reason: string | null;
+  requested_at: string;
+};
+
 function CatalogView({ session }: { session: any }) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1866,7 +2029,12 @@ function CatalogView({ session }: { session: any }) {
   const [subRowsExpanded, setSubRowsExpanded] = useState<Record<string, boolean>>({});
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
-  useEffect(() => { loadItems(); loadSubmissions(); }, []);
+  // TER-238: pending user approvals queue
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
+
+  useEffect(() => { loadItems(); loadSubmissions(); loadPendingUsers(); }, []);
 
   const loadItems = async () => {
     setLoading(true);
@@ -1892,6 +2060,57 @@ function CatalogView({ session }: { session: any }) {
       setSubmissions(data.submissions ?? []);
     } catch { /* ignore */ }
     setSubsLoading(false);
+  };
+
+  const loadPendingUsers = async () => {
+    const token = session?.access_token ?? "";
+    if (!token) return;
+    setUsersLoading(true);
+    try {
+      const r = await fetch("/api/admin/list-pending-users", { headers: { authorization: `Bearer ${token}` } });
+      if (!r.ok) { setUsersLoading(false); return; }
+      const data = await r.json();
+      setPendingUsers(data.users ?? []);
+    } catch { /* ignore */ }
+    setUsersLoading(false);
+  };
+
+  const handleApproveUser = async (userId: string) => {
+    if (!confirm("Approve this user? They'll get full app access immediately.")) return;
+    const token = session?.access_token ?? "";
+    setApprovingUserId(userId);
+    try {
+      const r = await fetch("/api/admin/approve-user", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+      setPendingUsers(p => p.filter(u => u.id !== userId));
+    } catch (e: any) {
+      alert(`Approve failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setApprovingUserId(null);
+  };
+
+  const handleRejectUser = async (userId: string, email: string | null) => {
+    if (!confirm(`Reject and delete ${email ?? userId}? This cannot be undone.`)) return;
+    const token = session?.access_token ?? "";
+    setApprovingUserId(userId);
+    try {
+      const r = await fetch("/api/admin/reject-user", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+      setPendingUsers(p => p.filter(u => u.id !== userId));
+    } catch (e: any) {
+      alert(`Reject failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setApprovingUserId(null);
   };
 
   const handleApprove = async (subId: string) => {
@@ -2015,6 +2234,56 @@ function CatalogView({ session }: { session: any }) {
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
+      {/* ── Pending user approvals (TER-238) ── */}
+      {(usersLoading || pendingUsers.length > 0) && (
+        <div style={{ ...s.card, borderColor: "var(--c-warning-bg)", marginBottom: 4 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h3 style={{ ...s.cardTitle, margin: 0, color: "var(--c-warning)" }}>
+              Pending users ({usersLoading ? "…" : pendingUsers.length})
+            </h3>
+            <button onClick={loadPendingUsers} style={s.ghostBtn} disabled={usersLoading}>
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </div>
+          {!usersLoading && pendingUsers.length === 0 && (
+            <p style={s.empty}>No pending users.</p>
+          )}
+          {pendingUsers.map(user => {
+            const isBusy = approvingUserId === user.id;
+            return (
+              <div key={user.id} style={{ ...s.dayBlock, marginBottom: 8, padding: "10px 12px", borderColor: "var(--c-warning-bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" as const }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--c-text)" }}>{user.name ?? "—"}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--c-text-muted)", marginTop: 1 }}>{user.email ?? "—"}</div>
+                    {user.nearest_aldi && <div style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 2 }}>📍 {user.nearest_aldi}</div>}
+                    {user.reason && <div style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 2, fontStyle: "italic" }}>"{user.reason}"</div>}
+                    <div style={{ fontSize: 11, color: "var(--c-text-muted)", marginTop: 3 }}>
+                      {new Date(user.requested_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <button
+                      onClick={() => handleApproveUser(user.id)}
+                      style={s.primaryBtn}
+                      disabled={isBusy}
+                    >
+                      {isBusy ? "…" : "Approve"}
+                    </button>
+                    <button
+                      onClick={() => handleRejectUser(user.id, user.email)}
+                      style={s.iconBtn}
+                      disabled={isBusy}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {/* ── Pending submissions (admin review queue) ── */}
       {(subsLoading || submissions.length > 0) && (
         <div style={{ ...s.card, borderColor: "var(--c-border)", marginBottom: 4 }}>
