@@ -5,7 +5,7 @@
 //   "manual" — client supplies raw field values; persisted with nutrition_source = "manual".
 
 import { createClient } from "@supabase/supabase-js";
-import { adminEmails } from "./_admin.ts";
+import { adminEmails } from "./_admin.js";
 
 type AutoResult = {
   kcal_per_100g: number;
