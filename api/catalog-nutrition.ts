@@ -5,6 +5,7 @@
 //   "manual" — client supplies raw field values; persisted with nutrition_source = "manual".
 
 import { createClient } from "@supabase/supabase-js";
+import { adminEmails } from "./_admin.ts";
 
 type AutoResult = {
   kcal_per_100g: number;
@@ -46,6 +47,13 @@ export default async function handler(req: any, res: any) {
   const { data: userData, error: authError } = await anonClient.auth.getUser(token);
   if (authError || !userData.user) {
     res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // TER-236: catalog writes are admin-only (shared catalog, service-role key).
+  const callerEmail = (userData.user.email ?? "").toLowerCase();
+  if (!adminEmails().includes(callerEmail)) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
 
