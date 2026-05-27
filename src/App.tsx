@@ -62,7 +62,22 @@ function wx(code: number) {
 }
 const tempBand = (hi: number | null | undefined) => (hi == null ? "mild" : hi >= 82 ? "hot" : hi <= 45 ? "cold" : "mild");
 
-const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Auto", note: "" });
+const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Auto", note: "", pinnedRecipe: undefined as any });
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function scaleRecipeToHeadcount(recipe: any, dayPeople: number) {
+  const denom = Number(recipe?.servings) > 0 ? Number(recipe.servings) : dayPeople;
+  const factor = denom > 0 ? dayPeople / denom : 1;
+  const ingredients = (recipe.ingredients ?? []).map((i: any) => ({
+    ...i,
+    recipeAmount: i.recipeAmount
+      ? { qty: round2((Number(i.recipeAmount.qty) || 0) * factor), unit: i.recipeAmount.unit }
+      : i.recipeAmount,
+    purchaseQty: Math.max(1, Math.ceil((Number(i.purchaseQty) || 1) * factor)),
+  }));
+  return { ...recipe, servings: dayPeople, ingredients };
+}
 
 /* ---- display helpers ---- */
 function fmtRecipeQty(ing: any): string {
@@ -137,6 +152,31 @@ export default function App() {
   const [rotation, setRotation] = useState<any[]>([]);
   const [liked, setLiked] = useState<string[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
+
+  /* ---- pinned-recipe materialization ---- */
+  const pinnedSignature = useMemo(
+    () => days.map((d) => `${d.id}:${d.pinnedRecipe?.name ?? ""}:${d.people}`).join("|"),
+    [days]
+  );
+
+  useEffect(() => {
+    setMeals((prev) => {
+      let next = { ...prev };
+      let changed = false;
+      for (const day of days) {
+        if (day.pinnedRecipe) {
+          const scaled = scaleRecipeToHeadcount(day.pinnedRecipe, day.people);
+          next = { ...next, [day.id]: { status: "accepted", data: scaled, error: null, kcalInfo: null, pinned: true } };
+          changed = true;
+        } else if (prev[day.id]?.pinned) {
+          const { [day.id]: _removed, ...rest } = next;
+          next = rest;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [pinnedSignature]); // eslint-disable-line
 
   /* ---- persistence ---- */
 
@@ -448,6 +488,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     const committed = days.map((d) => meals[d.id]).filter((m) => m && m.status === "accepted").map((m) => m.data);
     for (let i = 0; i < days.length; i++) {
       const day = days[i];
+      if (day.pinnedRecipe) continue;
       if (meals[day.id]?.status === "accepted") continue;
       const data = await generateOne(day, i, [...committed]);
       if (data) committed.push(data);
@@ -457,6 +498,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
 
   const acceptMeal = (id: string) => setMeals((m) => ({ ...m, [id]: { ...m[id], status: "accepted" } }));
   const rejectMeal = async (day: any, idx: number) => {
+    if (day.pinnedRecipe) return;
     await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name);
   };
 
@@ -469,6 +511,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
 
   const thumbUp = (name: string) => { if (name) setLiked((p) => (p.includes(name) ? p : [...p, name])); };
   const thumbDown = async (day: any, idx: number) => {
+    if (day.pinnedRecipe) return;
     const name = meals[day.id]?.data?.name;
     if (name) { setAvoid((p) => (p.includes(name) ? p : [...p, name])); setLiked((p) => p.filter((x) => x !== name)); }
     await rejectMeal(day, idx);
@@ -633,7 +676,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             defaultPeople={defaultPeople} setDefaultPeople={setEveryonePeople}
             efficiency={efficiency} setEfficiency={setEfficiency}
             mixCuisines={mixCuisines} setMixCuisines={setMixCuisines}
-            staples={staples} setStaples={setStaples}
+            staples={staples} setStaples={setStaples} rotation={rotation}
             onGenerate={generateAll} busy={busy} onStartOver={handleStartOver} isMobile={isMobile}
           />
         )}
@@ -780,7 +823,8 @@ function SignInView() {
 /* ============================ Setup ============================ */
 function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
-    defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples, onGenerate, busy, onStartOver, isMobile } = p;
+    defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples,
+    rotation, onGenerate, busy, onStartOver, isMobile } = p;
   const [showStaples, setShowStaples] = useState(false);
   const [locInput, setLocInput] = useState("");
 
@@ -831,6 +875,22 @@ function SetupView(p: any) {
                   </div>
                   <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
                   <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: isMobile ? "100%" : 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+                  <select
+                    value={day.pinnedRecipe?.name ?? ""}
+                    onChange={(e) => {
+                      const found = rotation.find((r: any) => r.name === e.target.value);
+                      updDay(day.id, { pinnedRecipe: found ? { ...found } : undefined });
+                    }}
+                    style={{ ...s.input, flex: 1 }}
+                    disabled={rotation.length === 0}
+                    title={rotation.length === 0 ? "Save a recipe to your rotation first" : ""}
+                  >
+                    <option value="">{rotation.length === 0 ? "Save a recipe first to pin" : "None (generate)"}</option>
+                    {rotation.map((r: any) => <option key={r.name} value={r.name}>{r.name}</option>)}
+                  </select>
+                  {day.pinnedRecipe && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, whiteSpace: "nowrap" as const }}>📌 Pinned</span>}
                 </div>
                 <input value={day.note} onChange={(e) => updDay(day.id, { note: e.target.value })} placeholder="optional note" style={{ ...s.input, fontSize: 12.5, marginTop: 6, width: "100%" }} />
               </div>
@@ -894,10 +954,12 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
       {days.map((day: any, i: number) => {
         const m = meals[day.id]; const date = dateFor(i); const fx = forecast[date]; const w = fx ? wx(fx.code) : null;
         const isLiked = m?.data && liked.includes(m.data.name);
+        const isPinned = !!day.pinnedRecipe;
         return (
           <div key={day.id} style={s.mealCard}>
             <div style={s.mealTop}>
               <span style={s.slotTag}>{weekdayLabel(date)} - {day.people} ppl{fx ? ` - ${w!.e} ${fx.hi}F` : ""}</span>
+              {isPinned && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, marginLeft: 8 }}>📌 Pinned</span>}
             </div>
             {!m && <p style={s.empty}>Not generated.</p>}
             {m?.status === "loading" && <p style={{ ...s.empty, display: "flex", gap: 8, alignItems: "center" }}><RefreshCw size={15} className="spin" /> Thinking up a dish...</p>}
@@ -914,7 +976,8 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                     <h3 style={s.mealName}>{m.data.name}</h3>
                     <p style={s.mealDesc}>{m.data.cuisine ? <span style={s.cuisineTag}>{m.data.cuisine}</span> : null} {m.data.description}</p>
                   </div>
-                  {m.status === "accepted" && <span style={s.acceptedPill}><Check size={13} /> Accepted</span>}
+                  {m.status === "accepted" && !isPinned && <span style={s.acceptedPill}><Check size={13} /> Accepted</span>}
+                  {isPinned && <span style={s.acceptedPill}>📌 Pinned</span>}
                 </div>
                 {m.data.reuseNote && <div style={s.reuseNote}><Repeat size={13} /> {m.data.reuseNote}</div>}
                 {(m.data.prepMinutes != null || m.data.cookMinutes != null) && (
@@ -947,14 +1010,21 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                     ))}
                   </ol>
                 )}
-                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-                  {m.status !== "accepted" && <button onClick={() => onAccept(day.id)} style={s.acceptBtn}><Check size={15} /> Accept</button>}
-                  <button onClick={() => onReject(day, i)} style={s.rejectBtn}><RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}</button>
-                  <div style={{ flex: 1 }} />
-                  <button onClick={() => onThumbUp(day)} style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }} title="Like"><ThumbsUp size={15} /></button>
-                  <button onClick={() => onThumbDown(day, i)} style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }} title="Dislike (avoid + swap)"><ThumbsDown size={15} /></button>
-                  <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to rotation"><Star size={14} /> Rotation</button>
-                </div>
+                {!isPinned && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    {m.status !== "accepted" && <button onClick={() => onAccept(day.id)} style={s.acceptBtn}><Check size={15} /> Accept</button>}
+                    <button onClick={() => onReject(day, i)} style={s.rejectBtn}><RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}</button>
+                    <div style={{ flex: 1 }} />
+                    <button onClick={() => onThumbUp(day)} style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }} title="Like"><ThumbsUp size={15} /></button>
+                    <button onClick={() => onThumbDown(day, i)} style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }} title="Dislike (avoid + swap)"><ThumbsDown size={15} /></button>
+                    <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to rotation"><Star size={14} /> Rotation</button>
+                  </div>
+                )}
+                {isPinned && (
+                  <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 10, fontStyle: "italic" }}>
+                    Pinned in Setup — unpin there to enable generation or swapping.
+                  </p>
+                )}
               </>
             )}
           </div>
