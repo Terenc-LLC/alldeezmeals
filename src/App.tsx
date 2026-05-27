@@ -568,7 +568,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <style>{fontImport}</style>
         <header style={s.header}>
           <div style={s.logoRow}>
-            <div style={s.logoMark}><Utensils size={20} color="#fff" /></div>
+            <div style={s.logoMark}><Utensils size={20} color="var(--c-on-primary)" /></div>
             <div>
               <h1 style={s.h1}>ALLDEEZMeals</h1>
               <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
@@ -580,7 +580,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     );
   }
 
-  if (!loaded) return <div style={s.shell}><p style={{ fontFamily: serif, color: "#5b6b5e" }}>Loading your kitchen...</p></div>;
+  if (!loaded) return <div style={s.shell}><p style={{ fontFamily: serif, color: "var(--c-text-muted)" }}>Loading your kitchen...</p></div>;
 
   return (
     <>
@@ -589,14 +589,14 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       <header style={s.header}>
         <div style={{ ...s.logoRow, justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={s.logoMark}><Utensils size={20} color="#fff" /></div>
+            <div style={s.logoMark}><Utensils size={20} color="var(--c-on-primary)" /></div>
             <div>
               <h1 style={s.h1}>ALLDEEZMeals</h1>
               <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11.5, color: "#7a8a7c", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session?.user?.email}</span>
+            <span style={{ fontSize: 11.5, color: "var(--c-text-muted)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session?.user?.email}</span>
             <button onClick={handleSignOut} style={s.signOutBtn} title="Sign out">
               <LogOut size={15} />
             </button>
@@ -652,11 +652,11 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     </div>
     <div className="print-only">
       <h1 style={{ fontFamily: serif, fontSize: 22, marginBottom: 4 }}>ALLDEEZMeals — Weekly Recipes</h1>
-      <p style={{ fontSize: 12, color: "#666", marginBottom: 24 }}>Printed {new Date().toLocaleDateString()}</p>
+      <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginBottom: 24 }}>Printed {new Date().toLocaleDateString()}</p>
       {acceptedMealsForPrint.map(({ day, date, meal }, pi) => (
         <div key={pi} style={{ pageBreakAfter: pi < acceptedMealsForPrint.length - 1 ? "always" : "auto", marginBottom: 32 }}>
           <h2 style={{ fontFamily: serif, fontSize: 18, margin: "0 0 4px" }}>{meal.data.name}</h2>
-          <p style={{ fontSize: 12, color: "#555", margin: "0 0 6px" }}>{weekdayLabel(date)} &mdash; {meal.data.cuisine}</p>
+          <p style={{ fontSize: 12, color: "var(--c-text-muted)", margin: "0 0 6px" }}>{weekdayLabel(date)} &mdash; {meal.data.cuisine}</p>
           {(meal.data.prepMinutes != null || meal.data.cookMinutes != null) && (
             <p style={{ fontSize: 12, margin: "0 0 8px" }}>
               {meal.data.prepMinutes != null ? `Prep: ${meal.data.prepMinutes} min` : ""}
@@ -666,7 +666,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             </p>
           )}
           {meal.kcalInfo && (
-            <p style={{ fontSize: 12, margin: "0 0 8px", color: "#52614f" }}>
+            <p style={{ fontSize: 12, margin: "0 0 8px", color: "var(--c-text-muted)" }}>
               {meal.kcalInfo.kcalPerServing !== null
                 ? `${meal.kcalInfo.tier === "estimate" ? "~" : ""}${meal.kcalInfo.kcalPerServing} kcal/serving`
                 : "— kcal/serving"}
@@ -680,7 +680,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
               <strong>{["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"][meal.data.difficulty]}</strong>
             </p>
           )}
-          {meal.data.reuseNote && <p style={{ fontSize: 12, fontStyle: "italic", color: "#7a6030", margin: "0 0 8px" }}>Note: {meal.data.reuseNote}</p>}
+          {meal.data.reuseNote && <p style={{ fontSize: 12, fontStyle: "italic", color: "var(--c-warning)", margin: "0 0 8px" }}>Note: {meal.data.reuseNote}</p>}
           <h3 style={{ fontSize: 13, margin: "0 0 4px" }}>Ingredients</h3>
           <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13 }}>
             {meal.data.ingredients.map((ing: any, ii: number) => {
@@ -730,8 +730,8 @@ function SignInView() {
   if (sent) {
     return (
       <div style={{ ...s.card, maxWidth: 340, margin: "48px auto", textAlign: "center" as const }}>
-        <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: "#2c3a2e" }}>Check your email</h2>
-        <p style={{ fontSize: 13.5, color: "#5b6b5e", margin: 0, lineHeight: 1.55 }}>
+        <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: "var(--c-text)" }}>Check your email</h2>
+        <p style={{ fontSize: 13.5, color: "var(--c-text-muted)", margin: 0, lineHeight: 1.55 }}>
           A sign-in link was sent to <strong>{email.trim()}</strong>. Click it to continue.
         </p>
       </div>
@@ -740,10 +740,10 @@ function SignInView() {
 
   return (
     <div style={{ ...s.card, maxWidth: 340, margin: "48px auto" }}>
-      <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 4px", color: "#2c3a2e" }}>Sign in</h2>
+      <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 4px", color: "var(--c-text)" }}>Sign in</h2>
       <p style={s.cardSub}>Invite-only · magic link sent to your email</p>
       {error && (
-        <p style={{ color: "#a23b3b", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
+        <p style={{ color: "var(--c-danger)", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
           <AlertCircle size={14} /> {error}
         </p>
       )}
@@ -794,8 +794,8 @@ function SetupView(p: any) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
-          <MapPin size={14} color="#7a8a7c" />
-          <span style={{ fontSize: 13, color: "#5b6b5e" }}>{location.name}</span>
+          <MapPin size={14} color="var(--c-text-muted)" />
+          <span style={{ fontSize: 13, color: "var(--c-text-muted)" }}>{location.name}</span>
           <input value={locInput} onChange={(e) => setLocInput(e.target.value)} placeholder="change location" style={{ ...s.input, flex: 1, fontSize: 12.5, padding: "6px 9px" }}
             onKeyDown={(e) => { if (e.key === "Enter" && locInput.trim()) { geocode(locInput.trim()); setLocInput(""); } }} />
           <span style={s.miniLabel}>{fxStatus === "loading" ? "loading wx..." : fxStatus === "error" ? "wx unavailable" : ""}</span>
@@ -851,7 +851,7 @@ function SetupView(p: any) {
                 <input value={st.name} onChange={(e) => setStaples((q: any[]) => q.map((x) => x.id === st.id ? { ...x, name: e.target.value } : x))} style={{ ...s.input, flex: 2 }} />
                 <input type="number" value={st.qty} onChange={(e) => setStaples((q: any[]) => q.map((x) => x.id === st.id ? { ...x, qty: Number(e.target.value) } : x))} style={{ ...s.input, width: 48 }} />
                 <input value={st.unit} onChange={(e) => setStaples((q: any[]) => q.map((x) => x.id === st.id ? { ...x, unit: e.target.value } : x))} style={{ ...s.input, width: 66 }} />
-                <button onClick={() => setStaples((q: any[]) => q.filter((x) => x.id !== st.id))} style={s.iconBtn}><X size={14} color="#a23b3b" /></button>
+                <button onClick={() => setStaples((q: any[]) => q.filter((x) => x.id !== st.id))} style={s.iconBtn}><X size={14} color="var(--c-danger)" /></button>
               </div>
             ))}
             <button onClick={() => setStaples((q: any[]) => [...q, { id: uid(), name: "", qty: 1, unit: "", category: "Pantry", enabled: true }])} style={{ ...s.addBtn, marginTop: 4 }}><Plus size={15} /> Add staple</button>
@@ -893,7 +893,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
             {m?.status === "loading" && <p style={{ ...s.empty, display: "flex", gap: 8, alignItems: "center" }}><RefreshCw size={15} className="spin" /> Thinking up a dish...</p>}
             {m?.status === "error" && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: "#a23b3b", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><AlertCircle size={15} /> {m.error}</span>
+                <span style={{ color: "var(--c-danger)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><AlertCircle size={15} /> {m.error}</span>
                 <button onClick={() => onReject(day, i)} style={s.ghostBtn}><RefreshCw size={14} /> Retry</button>
               </div>
             )}
@@ -925,7 +925,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                     return (
                       <span key={idx} style={s.tag}>
                         {ing.name}{rStr ? ` — ${rStr}` : ""}
-                        {showBuyNote && <span style={{ fontSize: 10, color: "#9aa89c", marginLeft: 3 }}>· buy: {pStr}</span>}
+                        {showBuyNote && <span style={{ fontSize: 10, color: "var(--c-text-muted)", marginLeft: 3 }}>· buy: {pStr}</span>}
                       </span>
                     );
                   })}
@@ -941,8 +941,8 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                   {m.status !== "accepted" && <button onClick={() => onAccept(day.id)} style={s.acceptBtn}><Check size={15} /> Accept</button>}
                   <button onClick={() => onReject(day, i)} style={s.rejectBtn}><RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}</button>
                   <div style={{ flex: 1 }} />
-                  <button onClick={() => onThumbUp(day)} style={{ ...s.thumb, color: isLiked ? "#3d5141" : "#9aa89c", borderColor: isLiked ? "#3d5141" : "#d8ddd4" }} title="Like"><ThumbsUp size={15} /></button>
-                  <button onClick={() => onThumbDown(day, i)} style={{ ...s.thumb, color: "#a23b3b", borderColor: "#e6cccc" }} title="Dislike (avoid + swap)"><ThumbsDown size={15} /></button>
+                  <button onClick={() => onThumbUp(day)} style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }} title="Like"><ThumbsUp size={15} /></button>
+                  <button onClick={() => onThumbDown(day, i)} style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }} title="Dislike (avoid + swap)"><ThumbsDown size={15} /></button>
                   <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to rotation"><Star size={14} /> Rotation</button>
                 </div>
               </>
@@ -1040,23 +1040,23 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
           </button>
         </div>
       </div>
-      {orderError && <p style={{ color: "#a23b3b", fontSize: 12, margin: "4px 0 8px" }}>Could not archive: {orderError}</p>}
+      {orderError && <p style={{ color: "var(--c-danger)", fontSize: 12, margin: "4px 0 8px" }}>Could not archive: {orderError}</p>}
 
       {/* Always Have management panel */}
-      <div style={{ ...s.card, marginBottom: 14, background: "#faf8f2", border: "1px solid #ece7d9" }}>
+      <div style={{ ...s.card, marginBottom: 14, background: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: alwaysHave.length > 0 ? 10 : 0 }}>
           <div>
-            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14.5, fontWeight: 600, color: "#3d5141" }}>★ Always have</span>
-            <span style={{ fontSize: 12, color: "#7a8a7c", marginLeft: 7 }}>auto-excluded every week</span>
+            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14.5, fontWeight: 600, color: "var(--c-primary)" }}>★ Always have</span>
+            <span style={{ fontSize: 12, color: "var(--c-text-muted)", marginLeft: 7 }}>auto-excluded every week</span>
           </div>
-          {alwaysHave.length > 0 && <span style={{ fontSize: 11.5, color: "#8a6d3b", fontWeight: 700 }}>{alwaysHave.length} item{alwaysHave.length !== 1 ? "s" : ""}</span>}
+          {alwaysHave.length > 0 && <span style={{ fontSize: 11.5, color: "var(--c-warning)", fontWeight: 700 }}>{alwaysHave.length} item{alwaysHave.length !== 1 ? "s" : ""}</span>}
         </div>
         {alwaysHave.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6, marginBottom: 10 }}>
             {alwaysHave.map((k: string) => (
-              <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#3d5141", color: "#fff", fontSize: 12, fontWeight: 600, padding: "3px 9px 3px 10px", borderRadius: 20 }}>
+              <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-primary)", color: "var(--c-on-primary)", fontSize: 12, fontWeight: 600, padding: "3px 9px 3px 10px", borderRadius: 20 }}>
                 {k}
-                <button onClick={() => setAlwaysHave((p: string[]) => p.filter((x) => x !== k))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", color: "#b6d4ba", lineHeight: 1 }}><X size={12} /></button>
+                <button onClick={() => setAlwaysHave((p: string[]) => p.filter((x) => x !== k))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", color: "rgba(255,255,255,0.65)", lineHeight: 1 }}><X size={12} /></button>
               </span>
             ))}
           </div>
@@ -1086,12 +1086,12 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
                     const itemPrice = catalogPriceMap.get(normalizeIngName(it.name));
                     return (
                       <div key={key} style={s.listItem}>
-                        <button onClick={() => toggleCheck(key)} style={{ ...s.check, background: checked ? "#3d5141" : "transparent" }}>{checked && <Check size={13} color="#fff" />}</button>
-                        <span style={{ flex: 1, textDecoration: checked ? "line-through" : "none", color: checked ? "#9aa89c" : "#2c3a2e" }}>
-                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{it.isPurchaseStyle && itemPrice != null && <span style={{ fontSize: 11, color: "#9aa89c", marginLeft: 5 }}>${(itemPrice / 100).toFixed(2)} ea</span>}{it.staple && <span style={s.stapleDot}>staple</span>}
+                        <button onClick={() => toggleCheck(key)} style={{ ...s.check, background: checked ? "var(--c-primary)" : "transparent" }}>{checked && <Check size={13} color="var(--c-on-primary)" />}</button>
+                        <span style={{ flex: 1, textDecoration: checked ? "line-through" : "none", color: checked ? "var(--c-text-muted)" : "var(--c-text)" }}>
+                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{it.isPurchaseStyle && itemPrice != null && <span style={{ fontSize: 11, color: "var(--c-text-muted)", marginLeft: 5 }}>${(itemPrice / 100).toFixed(2)} ea</span>}{it.staple && <span style={s.stapleDot}>staple</span>}
                         </span>
-                        <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP || isAH ? "#fff" : "#b6c0b7", background: isAH ? "#3d5141" : isP ? "#3d5141" : "transparent", borderColor: isP || isAH ? "#3d5141" : "#d8ddd4" }}>have it</button>
-                        <button onClick={() => toggleAlwaysHave(it.name)} style={{ ...s.starBtn, color: isAH ? "#8a6d3b" : "#c8d1c4" }} title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}>★</button>
+                        <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP || isAH ? "var(--c-on-primary)" : "var(--c-text-muted)", background: isAH ? "var(--c-primary)" : isP ? "var(--c-primary)" : "transparent", borderColor: isP || isAH ? "var(--c-primary)" : "var(--c-border)" }}>have it</button>
+                        <button onClick={() => toggleAlwaysHave(it.name)} style={{ ...s.starBtn, color: isAH ? "var(--c-warning)" : "var(--c-border)" }} title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}>★</button>
                       </div>
                     );
                   })}
@@ -1102,9 +1102,9 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
         </div>
       )}
       {session && priceEstimate.pricedCount > 0 && (
-        <div style={{ marginTop: 14, padding: "10px 14px", background: "#f5f9f4", border: "1px solid #d3ddc9", borderRadius: 10, fontSize: 12.5, color: "#52614f" }}>
+        <div style={{ marginTop: 14, padding: "10px 14px", background: "var(--c-success-bg)", border: "1px solid var(--c-border)", borderRadius: 10, fontSize: 12.5, color: "var(--c-success-text)" }}>
           <strong>Est. ${(priceEstimate.sumCents / 100).toFixed(2)}</strong>
-          <span style={{ color: "#7a8a7c" }}> — based on {priceEstimate.pricedCount} of {totalItems} items priced · most-recent ALDI prices, not a quote</span>
+          <span style={{ color: "var(--c-text-muted)" }}> — based on {priceEstimate.pricedCount} of {totalItems} items priced · most-recent ALDI prices, not a quote</span>
         </div>
       )}
       <div style={s.howto}>
@@ -1130,7 +1130,7 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid 
             {rotation.map((r: any, i: number) => (
               <div key={i} style={s.rotItem}>
                 <div><div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div><div style={s.cardSub}>{r.cuisine} - {r.ingredients.length} ingredients</div></div>
-                <button onClick={() => setRotation((p: any[]) => p.filter((_, idx) => idx !== i))} style={s.iconBtn}><Trash2 size={15} color="#a23b3b" /></button>
+                <button onClick={() => setRotation((p: any[]) => p.filter((_, idx) => idx !== i))} style={s.iconBtn}><Trash2 size={15} color="var(--c-danger)" /></button>
               </div>
             ))}
           </div>
@@ -1146,7 +1146,7 @@ function ChipManager({ items, onRemove, empty, tone }: any) {
   return (
     <div style={{ ...s.tagWrap, marginTop: 10 }}>
       {items.map((x: string, i: number) => (
-        <span key={i} style={{ ...s.tag, ...(tone === "red" ? { background: "#fbeaea", color: "#a23b3b" } : {}), display: "inline-flex", gap: 5, alignItems: "center" }}>
+        <span key={i} style={{ ...s.tag, ...(tone === "red" ? { background: "var(--c-danger-bg)", color: "var(--c-danger)" } : {}), display: "inline-flex", gap: 5, alignItems: "center" }}>
           {x}<button onClick={() => onRemove(x)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid" }}><X size={12} /></button>
         </span>
       ))}
@@ -1301,7 +1301,7 @@ function IngestView({ session }: { session: any }) {
     return (
       <div style={s.card}>
         <h3 style={s.cardTitle}>Logged to catalog</h3>
-        <p style={{ fontSize: 14, color: "#52614f", marginTop: 8 }}>
+        <p style={{ fontSize: 14, color: "var(--c-text-muted)", marginTop: 8 }}>
           {result.ingested} item{result.ingested !== 1 ? "s" : ""} added to the shared ALDI catalog
           and your purchase history.
           {result.failed > 0 && ` (${result.failed} failed — check console for details.)`}
@@ -1326,7 +1326,7 @@ function IngestView({ session }: { session: any }) {
           </div>
           <p style={s.cardSub}>Uncheck refunds or mis-parses. Edit names if needed.</p>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-            <label style={{ fontSize: 13, color: "#52614f", fontWeight: 600, whiteSpace: "nowrap" as const }}>Order date:</label>
+            <label style={{ fontSize: 13, color: "var(--c-text-muted)", fontWeight: 600, whiteSpace: "nowrap" as const }}>Order date:</label>
             <input
               type="date"
               value={orderDate}
@@ -1347,7 +1347,7 @@ function IngestView({ session }: { session: any }) {
                   <div style={{ flex: 1, display: "grid", gap: 5 }}>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, alignItems: "center" }}>
                       {row.isRefund && (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#a23b3b", background: "#fbeaea", padding: "1px 7px", borderRadius: 10 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--c-danger)", background: "var(--c-danger-bg)", padding: "1px 7px", borderRadius: 10 }}>
                           REFUND
                         </span>
                       )}
@@ -1371,12 +1371,12 @@ function IngestView({ session }: { session: any }) {
                         style={{ ...s.input, width: 44, textAlign: "center", fontSize: 12 }}
                       />
                       {row.unitPriceCents != null && (
-                        <span style={{ fontSize: 11, color: "#9aa89c", whiteSpace: "nowrap" as const }}>
+                        <span style={{ fontSize: 11, color: "var(--c-text-muted)", whiteSpace: "nowrap" as const }}>
                           ${(row.unitPriceCents / 100).toFixed(2)}
                         </span>
                       )}
                     </div>
-                    <span style={{ fontSize: 11.5, color: "#7a8a7c" }}>{row.productName}</span>
+                    <span style={{ fontSize: 11.5, color: "var(--c-text-muted)" }}>{row.productName}</span>
                   </div>
                 </div>
               </div>
@@ -1384,7 +1384,7 @@ function IngestView({ session }: { session: any }) {
           </div>
         </div>
         {err && (
-          <p style={{ color: "#a23b3b", fontSize: 13, display: "flex", gap: 5, alignItems: "center" }}>
+          <p style={{ color: "var(--c-danger)", fontSize: 13, display: "flex", gap: 5, alignItems: "center" }}>
             <AlertCircle size={14} /> {err}
           </p>
         )}
@@ -1430,7 +1430,7 @@ function IngestView({ session }: { session: any }) {
           } as any}
         />
         {err && (
-          <p style={{ color: "#a23b3b", fontSize: 13, marginTop: 8, display: "flex", gap: 5, alignItems: "center" }}>
+          <p style={{ color: "var(--c-danger)", fontSize: 13, marginTop: 8, display: "flex", gap: 5, alignItems: "center" }}>
             <AlertCircle size={14} /> {err}
           </p>
         )}
@@ -1444,7 +1444,7 @@ function IngestView({ session }: { session: any }) {
           ? <><RefreshCw size={16} className="spin" /> Parsing receipt…</>
           : <><Sparkles size={16} /> Parse receipt</>}
       </button>
-      <div style={{ background: "#eef2e9", border: "1px solid #d3ddc9", borderRadius: 12, padding: "12px 16px", fontSize: 12.5, color: "#52614f", lineHeight: 1.6 }}>
+      <div style={{ background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: 12, padding: "12px 16px", fontSize: 12.5, color: "var(--c-text-muted)", lineHeight: 1.6 }}>
         <strong>What gets logged:</strong> delivered items upsert the shared ALDI catalog (product name, size, price) and log to your purchase history. Re-submitting the same receipt will re-increment counts.
       </div>
     </div>
@@ -1598,26 +1598,26 @@ function CatalogView({ session }: { session: any }) {
             <button onClick={() => handleExpand(item.id, item)} style={{ ...s.collapseBtn, padding: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, minWidth: 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13.5, color: "#2c3a2e" }}>{displayName}</span>
-                  {item.package_size && <span style={{ fontSize: 12, color: "#9aa89c", marginLeft: 6 }}>{item.package_size}</span>}
+                  <span style={{ fontWeight: 600, fontSize: 13.5, color: "var(--c-text)" }}>{displayName}</span>
+                  {item.package_size && <span style={{ fontSize: 12, color: "var(--c-text-muted)", marginLeft: 6 }}>{item.package_size}</span>}
                 </div>
                 <div style={{ display: "flex", gap: 5, alignItems: "center", flexShrink: 0 }}>
-                  {item.upc && <span style={{ fontSize: 10, color: "#b6c0b7" }}>UPC</span>}
+                  {item.upc && <span style={{ fontSize: 10, color: "var(--c-text-muted)" }}>UPC</span>}
                   {hasNutrition && srcLabel && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#3d5141", background: "#eef2e9", padding: "1px 6px", borderRadius: 10 }}>{srcLabel}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "var(--c-primary)", background: "var(--c-surface-2)", padding: "1px 6px", borderRadius: 10 }}>{srcLabel}</span>
                   )}
                   {hasNutrition && (
-                    <span style={{ fontSize: 11.5, color: "#52614f", fontWeight: 600 }}>{Math.round(item.kcal_per_100g!)} kcal</span>
+                    <span style={{ fontSize: 11.5, color: "var(--c-text-muted)", fontWeight: 600 }}>{Math.round(item.kcal_per_100g!)} kcal</span>
                   )}
                 </div>
               </div>
-              <span style={{ marginLeft: 10, color: "#9aa89c", fontSize: 11 }}>{expanded ? "▲" : "▼"}</span>
+              <span style={{ marginLeft: 10, color: "var(--c-text-muted)", fontSize: 11 }}>{expanded ? "▲" : "▼"}</span>
             </button>
 
             {expanded && (
-              <div style={{ marginTop: 12, borderTop: "1px solid #ece7d9", paddingTop: 12, display: "grid", gap: 12 }}>
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--c-border)", paddingTop: 12, display: "grid", gap: 12 }}>
                 {hasNutrition && (
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" as const, fontSize: 12.5, color: "#52614f", alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" as const, fontSize: 12.5, color: "var(--c-text-muted)", alignItems: "center" }}>
                     <span><strong>{Math.round(item.kcal_per_100g!)} kcal</strong>/100g</span>
                     {item.serving_g != null && <span>Serving: {item.serving_g}g</span>}
                     {item.macros && (
@@ -1628,7 +1628,7 @@ function CatalogView({ session }: { session: any }) {
                       </>
                     )}
                     {item.nutrition_retrieved_at && (
-                      <span style={{ color: "#9aa89c" }}>{new Date(item.nutrition_retrieved_at).toLocaleDateString()}</span>
+                      <span style={{ color: "var(--c-text-muted)" }}>{new Date(item.nutrition_retrieved_at).toLocaleDateString()}</span>
                     )}
                   </div>
                 )}
@@ -1644,12 +1644,12 @@ function CatalogView({ session }: { session: any }) {
                         ? <><RefreshCw size={13} className="spin" /> Fetching…</>
                         : <><Sparkles size={13} /> Fetch nutrition by UPC</>}
                     </button>
-                    <span style={{ fontSize: 11, color: "#9aa89c", fontFamily: "monospace" }}>{item.upc}</span>
+                    <span style={{ fontSize: 11, color: "var(--c-text-muted)", fontFamily: "monospace" }}>{item.upc}</span>
                   </div>
                 )}
 
                 {msg && (
-                  <p style={{ fontSize: 12.5, color: msg.ok ? "#3d5141" : "#a23b3b", margin: 0, display: "flex", gap: 5, alignItems: "center" }}>
+                  <p style={{ fontSize: 12.5, color: msg.ok ? "var(--c-primary)" : "var(--c-danger)", margin: 0, display: "flex", gap: 5, alignItems: "center" }}>
                     {msg.ok ? <Check size={13} /> : <AlertCircle size={13} />} {msg.msg}
                   </p>
                 )}
@@ -1665,7 +1665,7 @@ function CatalogView({ session }: { session: any }) {
                       { label: "carbs g", key: "carbs" as const, w: 68 },
                     ].map(({ label, key, w }) => (
                       <div key={key}>
-                        <label style={{ fontSize: 11, color: "#7a8a7c", display: "block", marginBottom: 2 }}>{label}</label>
+                        <label style={{ fontSize: 11, color: "var(--c-text-muted)", display: "block", marginBottom: 2 }}>{label}</label>
                         <input
                           type="number"
                           value={manualVals[key]}
@@ -1700,19 +1700,19 @@ function KcalBadge({ kcalPerServing, tier }: { kcalPerServing: number | null; ti
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, flexWrap: "wrap" as const }}>
       {kcalPerServing !== null ? (
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: "#2c3a2e" }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--c-text)" }}>
           {isEst ? "~" : ""}{kcalPerServing} kcal/serving
         </span>
       ) : (
-        <span style={{ fontSize: 13, color: "#8a6d3b" }}>— kcal/serving</span>
+        <span style={{ fontSize: 13, color: "var(--c-warning)" }}>— kcal/serving</span>
       )}
       <span style={{
         fontSize: 10, fontWeight: 700,
-        color: isEst ? "#8a6d3b" : "#3d5141",
-        background: isEst ? "#fdf3e3" : "#eef2e9",
+        color: isEst ? "var(--c-warning)" : "var(--c-primary)",
+        background: isEst ? "var(--c-warning-bg)" : "var(--c-surface-2)",
         padding: "1px 7px", borderRadius: 10,
       }}>{label}</span>
-      {isUSDA && <span style={{ fontSize: 10, color: "#9aa89c" }}>{USDA_ATTRIBUTION}</span>}
+      {isUSDA && <span style={{ fontSize: 10, color: "var(--c-text-muted)" }}>{USDA_ATTRIBUTION}</span>}
     </div>
   );
 }
@@ -1724,10 +1724,10 @@ function DifficultyBadge({ difficulty }: { difficulty: number }) {
   const label = DIFFICULTY_LABELS[difficulty] ?? "";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, flexWrap: "wrap" as const }}>
-      <span style={{ fontSize: 13, color: "#2c3a2e" }}>
+      <span style={{ fontSize: 13, color: "var(--c-text)" }}>
         Effort: <span style={{ letterSpacing: 2 }}>{pips}</span> ({difficulty}/5)
       </span>
-      <span style={{ fontSize: 10, fontWeight: 700, color: "#3d5141", background: "#eef2e9", padding: "1px 7px", borderRadius: 10 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: "var(--c-pill-text)", background: "var(--c-accent)", padding: "1px 7px", borderRadius: 10 }}>
         {label}
       </span>
     </div>
@@ -1746,63 +1746,63 @@ const serif = "'Fraunces', Georgia, serif";
 const sans = "'Nunito Sans', -apple-system, sans-serif";
 
 const s: Record<string, any> = {
-  shell: { fontFamily: sans, background: "#f4f1e9", minHeight: "100%", color: "#2c3a2e", padding: 20, maxWidth: 780, margin: "0 auto" },
+  shell: { fontFamily: sans, background: "var(--c-bg)", minHeight: "100%", color: "var(--c-text)", padding: 20, maxWidth: 780, margin: "0 auto" },
   header: { marginBottom: 18 }, logoRow: { display: "flex", alignItems: "center", gap: 12 },
-  logoMark: { width: 40, height: 40, borderRadius: 11, background: "#3d5141", display: "grid", placeItems: "center", boxShadow: "0 2px 6px rgba(61,81,65,.3)" },
+  logoMark: { width: 40, height: 40, borderRadius: 11, background: "var(--c-primary)", display: "grid", placeItems: "center", boxShadow: "0 2px 6px rgba(43,140,126,.3)" },
   h1: { fontFamily: serif, fontSize: 23, fontWeight: 600, margin: 0, letterSpacing: "-.01em" },
-  sub: { margin: "2px 0 0", fontSize: 12.5, color: "#7a8a7c" },
-  tabs: { display: "flex", gap: 5, marginBottom: 18, background: "#e8e3d6", padding: 5, borderRadius: 12 },
-  tab: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px 4px", border: "none", borderRadius: 9, background: "transparent", color: "#6b7a6d", fontFamily: sans, fontWeight: 600, fontSize: 12, cursor: "pointer" },
-  tabActive: { background: "#fff", color: "#2c3a2e", boxShadow: "0 1px 3px rgba(0,0,0,.08)" },
+  sub: { margin: "2px 0 0", fontSize: 12.5, color: "var(--c-text-muted)" },
+  tabs: { display: "flex", gap: 5, marginBottom: 18, background: "var(--c-surface-2)", padding: 5, borderRadius: 12 },
+  tab: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px 4px", border: "none", borderRadius: 9, background: "transparent", color: "var(--c-text-muted)", fontFamily: sans, fontWeight: 600, fontSize: 12, cursor: "pointer" },
+  tabActive: { background: "var(--c-surface)", color: "var(--c-text)", boxShadow: "0 1px 3px rgba(0,0,0,.08)" },
   main: { paddingBottom: 40 },
-  card: { background: "#fff", borderRadius: 13, padding: 16, border: "1px solid #e6e2d6" },
+  card: { background: "var(--c-surface)", borderRadius: 13, padding: 16, border: "1px solid var(--c-border)" },
   cardTitle: { fontFamily: serif, fontSize: 16.5, fontWeight: 600, margin: 0 },
-  cardSub: { fontSize: 12.5, color: "#7a8a7c", margin: "2px 0 0", fontWeight: 400 },
-  miniLabel: { fontSize: 11, color: "#7a8a7c" },
-  fieldLabel: { fontSize: 11, fontWeight: 700, color: "#6b7a6d", textTransform: "uppercase", letterSpacing: ".04em", display: "block", marginBottom: 5 },
+  cardSub: { fontSize: 12.5, color: "var(--c-text-muted)", margin: "2px 0 0", fontWeight: 400 },
+  miniLabel: { fontSize: 11, color: "var(--c-text-muted)" },
+  fieldLabel: { fontSize: 11, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase", letterSpacing: ".04em", display: "block", marginBottom: 5 },
   slotRow: { display: "flex", gap: 6, alignItems: "center" },
-  dayBlock: { background: "#faf8f2", border: "1px solid #ece7d9", borderRadius: 10, padding: 11 },
+  dayBlock: { background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 11 },
   dayHeadRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  dayDate: { fontFamily: serif, fontSize: 14.5, fontWeight: 600, color: "#2c3a2e" },
-  fxChip: { fontSize: 11.5, fontWeight: 600, color: "#52614f", background: "#eef2e9", borderRadius: 14, padding: "3px 10px" },
-  fxChipMuted: { fontSize: 11.5, color: "#b6c0b7", fontStyle: "italic" },
-  toggleRow: { display: "flex", gap: 10, alignItems: "flex-start", background: "#eef2e9", border: "1px solid #d3ddc9", borderRadius: 12, padding: 13, fontSize: 13.5, cursor: "pointer", lineHeight: 1.45 },
-  collapseBtn: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, color: "#2c3a2e", fontFamily: sans },
-  input: { padding: "9px 10px", border: "1px solid #d8ddd4", borderRadius: 8, fontFamily: sans, fontSize: 13, color: "#2c3a2e", boxSizing: "border-box", background: "#fff" },
-  addBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "#eef2e9", color: "#3d5141", border: "1px solid #d3ddc9", borderRadius: 8, padding: "7px 12px", fontFamily: sans, fontWeight: 700, fontSize: 12.5, cursor: "pointer" },
-  primaryBtn: { display: "inline-flex", alignItems: "center", gap: 7, background: "#3d5141", color: "#fff", border: "none", borderRadius: 9, padding: "10px 16px", fontFamily: sans, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 2px 5px rgba(61,81,65,.25)" },
-  ghostBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "transparent", color: "#6b7a6d", border: "1px solid #d8ddd4", borderRadius: 9, padding: "8px 13px", fontFamily: sans, fontWeight: 600, fontSize: 13, cursor: "pointer" },
+  dayDate: { fontFamily: serif, fontSize: 14.5, fontWeight: 600, color: "var(--c-text)" },
+  fxChip: { fontSize: 11.5, fontWeight: 600, color: "var(--c-text-muted)", background: "var(--c-surface-2)", borderRadius: 14, padding: "3px 10px" },
+  fxChipMuted: { fontSize: 11.5, color: "var(--c-text-muted)", fontStyle: "italic" },
+  toggleRow: { display: "flex", gap: 10, alignItems: "flex-start", background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: 12, padding: 13, fontSize: 13.5, cursor: "pointer", lineHeight: 1.45 },
+  collapseBtn: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, color: "var(--c-text)", fontFamily: sans },
+  input: { padding: "9px 10px", border: "1px solid var(--c-border)", borderRadius: 8, fontFamily: sans, fontSize: 13, color: "var(--c-text)", boxSizing: "border-box", background: "var(--c-surface)" },
+  addBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", color: "var(--c-primary)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "7px 12px", fontFamily: sans, fontWeight: 700, fontSize: 12.5, cursor: "pointer" },
+  primaryBtn: { display: "inline-flex", alignItems: "center", gap: 7, background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none", borderRadius: 9, padding: "10px 16px", fontFamily: sans, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 2px 5px rgba(43,140,126,.25)" },
+  ghostBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "transparent", color: "var(--c-text-muted)", border: "1px solid var(--c-border)", borderRadius: 9, padding: "8px 13px", fontFamily: sans, fontWeight: 600, fontSize: 13, cursor: "pointer" },
   iconBtn: { background: "transparent", border: "none", cursor: "pointer", padding: 5, borderRadius: 6, display: "grid", placeItems: "center" },
-  signOutBtn: { background: "transparent", border: "1px solid #d8ddd4", borderRadius: 8, padding: 7, cursor: "pointer", color: "#9aa89c", display: "grid", placeItems: "center", flexShrink: 0 },
-  mealCard: { background: "#fff", borderRadius: 13, padding: 16, border: "1px solid #e6e2d6" },
+  signOutBtn: { background: "transparent", border: "1px solid var(--c-border)", borderRadius: 8, padding: 7, cursor: "pointer", color: "var(--c-text-muted)", display: "grid", placeItems: "center", flexShrink: 0 },
+  mealCard: { background: "var(--c-surface)", borderRadius: 13, padding: 16, border: "1px solid var(--c-border)" },
   mealTop: { marginBottom: 8 },
-  slotTag: { fontSize: 11.5, fontWeight: 700, color: "#7a8a7c", textTransform: "uppercase", letterSpacing: ".04em" },
-  mealName: { fontFamily: serif, fontSize: 18, fontWeight: 600, margin: 0, color: "#2c3a2e" },
-  mealDesc: { fontSize: 13.5, color: "#5b6b5e", margin: "4px 0 0", lineHeight: 1.45 },
-  cuisineTag: { display: "inline-block", fontSize: 10.5, fontWeight: 700, color: "#3d5141", background: "#eef2e9", padding: "1px 7px", borderRadius: 10, marginRight: 4, textTransform: "uppercase", letterSpacing: ".03em" },
-  acceptedPill: { display: "inline-flex", alignItems: "center", gap: 4, background: "#3d5141", color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "4px 9px", borderRadius: 20, whiteSpace: "nowrap" },
-  reuseNote: { display: "flex", alignItems: "center", gap: 6, background: "#fdf3e3", border: "1px solid #f0dcb8", color: "#8a6d3b", fontSize: 12.5, padding: "7px 11px", borderRadius: 8, marginTop: 10 },
+  slotTag: { fontSize: 11.5, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase", letterSpacing: ".04em" },
+  mealName: { fontFamily: serif, fontSize: 18, fontWeight: 600, margin: 0, color: "var(--c-text)" },
+  mealDesc: { fontSize: 13.5, color: "var(--c-text-muted)", margin: "4px 0 0", lineHeight: 1.45 },
+  cuisineTag: { display: "inline-block", fontSize: 10.5, fontWeight: 700, color: "var(--c-pill-text)", background: "var(--c-accent)", padding: "1px 7px", borderRadius: 10, marginRight: 4, textTransform: "uppercase", letterSpacing: ".03em" },
+  acceptedPill: { display: "inline-flex", alignItems: "center", gap: 4, background: "var(--c-primary)", color: "var(--c-on-primary)", fontSize: 11.5, fontWeight: 700, padding: "4px 9px", borderRadius: 20, whiteSpace: "nowrap" },
+  reuseNote: { display: "flex", alignItems: "center", gap: 6, background: "var(--c-warning-bg)", border: "1px solid var(--c-warning-bg)", color: "var(--c-warning)", fontSize: 12.5, padding: "7px 11px", borderRadius: 8, marginTop: 10 },
   tagWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 11 },
-  tag: { background: "#eef2e9", color: "#52614f", fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20 },
-  acceptBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "#3d5141", color: "#fff", border: "none", borderRadius: 8, padding: "8px 15px", fontFamily: sans, fontWeight: 700, fontSize: 13, cursor: "pointer" },
-  rejectBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "#fff", color: "#a23b3b", border: "1px solid #e6cccc", borderRadius: 8, padding: "8px 14px", fontFamily: sans, fontWeight: 700, fontSize: 13, cursor: "pointer" },
-  thumb: { display: "grid", placeItems: "center", width: 34, height: 34, background: "#fff", border: "1px solid", borderRadius: 8, cursor: "pointer" },
-  rotateBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "#fdf6e8", color: "#8a6d3b", border: "1px solid #f0dcb8", borderRadius: 8, padding: "7px 11px", fontFamily: sans, fontWeight: 700, fontSize: 12.5, cursor: "pointer" },
-  empty: { color: "#9aa89c", fontSize: 13.5, fontStyle: "italic", margin: 0 },
+  tag: { background: "var(--c-surface-2)", color: "var(--c-text-muted)", fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20 },
+  acceptBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none", borderRadius: 8, padding: "8px 15px", fontFamily: sans, fontWeight: 700, fontSize: 13, cursor: "pointer" },
+  rejectBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--c-surface)", color: "var(--c-danger)", border: "1px solid var(--c-danger-bg)", borderRadius: 8, padding: "8px 14px", fontFamily: sans, fontWeight: 700, fontSize: 13, cursor: "pointer" },
+  thumb: { display: "grid", placeItems: "center", width: 34, height: 34, background: "var(--c-surface)", border: "1px solid", borderRadius: 8, cursor: "pointer" },
+  rotateBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-warning-bg)", color: "var(--c-warning)", border: "1px solid var(--c-warning-bg)", borderRadius: 8, padding: "7px 11px", fontFamily: sans, fontWeight: 700, fontSize: 12.5, cursor: "pointer" },
+  empty: { color: "var(--c-text-muted)", fontSize: 13.5, fontStyle: "italic", margin: 0 },
   listToolbar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 10 },
-  catTitle: { fontFamily: serif, fontSize: 15, fontWeight: 600, margin: "0 0 8px", color: "#3d5141", borderBottom: "1px solid #eee7d8", paddingBottom: 6 },
+  catTitle: { fontFamily: serif, fontSize: 15, fontWeight: 600, margin: "0 0 8px", color: "var(--c-primary)", borderBottom: "1px solid var(--c-border)", paddingBottom: 6 },
   listItem: { display: "flex", alignItems: "center", gap: 10, padding: "5px 0", fontSize: 14 },
-  check: { width: 20, height: 20, borderRadius: 6, border: "1.5px solid #b6c0b7", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 },
-  qtyText: { color: "#9aa89c", fontSize: 12.5 },
-  stapleDot: { marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#8a6d3b", background: "#fdf3e3", padding: "1px 6px", borderRadius: 10 },
+  check: { width: 20, height: 20, borderRadius: 6, border: "1.5px solid var(--c-border)", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0 },
+  qtyText: { color: "var(--c-text-muted)", fontSize: 12.5 },
+  stapleDot: { marginLeft: 6, fontSize: 10, fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "1px 6px", borderRadius: 10 },
   pantryBtn: { fontSize: 11, fontWeight: 700, border: "1px solid", borderRadius: 14, padding: "2px 9px", cursor: "pointer" },
   starBtn: { background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px", flexShrink: 0 },
-  rotItem: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "#faf8f2", border: "1px solid #ece7d9", borderRadius: 9, padding: "10px 12px" },
-  howto: { marginTop: 22, background: "#eef2e9", borderRadius: 13, padding: "14px 18px", border: "1px solid #d3ddc9" },
-  howtoTitle: { fontFamily: serif, fontSize: 15, fontWeight: 600, margin: "0 0 6px", color: "#3d5141" },
-  howtoList: { margin: 0, paddingLeft: 18, fontSize: 13, color: "#52614f", lineHeight: 1.7 },
-  timeLine: { fontSize: 12, color: "#7a8a7c", margin: "8px 0 0" },
+  rotItem: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: 9, padding: "10px 12px" },
+  howto: { marginTop: 22, background: "var(--c-surface-2)", borderRadius: 13, padding: "14px 18px", border: "1px solid var(--c-border)" },
+  howtoTitle: { fontFamily: serif, fontSize: 15, fontWeight: 600, margin: "0 0 6px", color: "var(--c-primary)" },
+  howtoList: { margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--c-text-muted)", lineHeight: 1.7 },
+  timeLine: { fontSize: 12, color: "var(--c-text-muted)", margin: "8px 0 0" },
   stepsList: { margin: "10px 0 0", paddingLeft: 20, display: "grid", gap: 4 },
-  stepItem: { fontSize: 13, color: "#3a4a3c", lineHeight: 1.5 },
-  printBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "#fff", color: "#3d5141", border: "1px solid #b8ccba", borderRadius: 8, padding: "8px 14px", fontFamily: "'Nunito Sans', -apple-system, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer" },
+  stepItem: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.5 },
+  printBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--c-surface)", color: "var(--c-primary)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px 14px", fontFamily: "'Nunito Sans', -apple-system, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer" },
 };
