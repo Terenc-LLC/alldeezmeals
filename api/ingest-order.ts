@@ -1,5 +1,7 @@
 // TER-186: Server-side order/receipt ingestion.
 // TER-202: Dedup key changed to normalized_product; added orderDate for purchase timestamps.
+// TER-237: Catalog writes now gated behind admin approval. Submit → receipt_submissions queue
+//          + immediate item_usage update. Catalog upsert moved to api/admin/approve-submission.ts.
 // user_id is derived from the validated JWT — never from client-supplied input.
 
 import { createClient } from "@supabase/supabase-js";
@@ -106,57 +108,46 @@ export default async function handler(req: any, res: any) {
     seenProducts.set(key, row);
   }
 
-  // Service role client: bypasses RLS so we can write to the shared catalog.
+  // Service role client: bypasses RLS so we can write to per-user item_usage.
   const svc = createClient(supabaseUrl, serviceRoleKey);
 
-  const ok: string[] = [];
+  // Build the submission rows payload (normalized, validated).
+  const submitterEmail = (userData.user.email ?? "").toLowerCase();
+  const submissionRows = Array.from(seenProducts.entries()).map(([normalizedProduct, row]) => ({
+    normalizedProduct,
+    normalizedName: normalizeIngName(row.normalizedName),
+    productName: row.productName?.trim() || null,
+    brand: row.brand?.trim() || null,
+    category: VALID_CATEGORIES.includes(row.category ?? "") ? row.category : null,
+    packageSize: row.packageSize?.trim() || null,
+    upc: row.upc?.trim() || null,
+    unitPriceCents: typeof row.unitPriceCents === "number" ? Math.round(row.unitPriceCents) : null,
+    qty: Math.max(1, Math.round(Number(row.qty) || 1)),
+  }));
+
+  // Insert into receipt_submissions queue. Catalog is NOT touched until an admin approves.
+  const { data: subRow, error: subErr } = await svc
+    .from("receipt_submissions")
+    .insert({
+      submitter_user_id: userId,
+      submitter_email: submitterEmail,
+      order_date: rawOrderDate ? rawOrderDate.slice(0, 10) : null,
+      rows: submissionRows,
+    })
+    .select("id")
+    .single();
+  if (subErr) {
+    console.error("receipt_submissions insert failed:", subErr.message);
+    res.status(500).json({ error: "Failed to queue submission" });
+    return;
+  }
+
+  // Update item_usage immediately (per-user purchase history — not gated by admin approval).
+  // catalog_id is left null for now; approve-submission.ts backfills it after catalog upsert.
   const failed: string[] = [];
-
-  for (const [normalizedProduct, row] of seenProducts.entries()) {
-    const normalizedName = normalizeIngName(row.normalizedName);
-    const category = VALID_CATEGORIES.includes(row.category ?? "")
-      ? (row.category as string)
-      : null;
-    const purchaseQty = Math.max(1, Math.round(Number(row.qty) || 1));
-
+  for (const row of submissionRows) {
+    const { normalizedProduct, qty } = row;
     try {
-      // Upsert catalog keyed on normalized_product.
-      // normalized_name stores the latest generic name seen for this product (lossy, v1).
-      // Nutrition columns are omitted here so they survive re-ingests untouched.
-      const { data: catalogRow, error: catalogErr } = await svc
-        .from("catalog")
-        .upsert(
-          {
-            normalized_product: normalizedProduct,
-            normalized_name: normalizedName,
-            product_name: row.productName?.trim() || null,
-            brand: row.brand?.trim() || null,
-            category,
-            package_size: row.packageSize?.trim() || null,
-            upc: row.upc?.trim() || null,
-            last_price_cents:
-              typeof row.unitPriceCents === "number"
-                ? Math.round(row.unitPriceCents)
-                : null,
-            last_seen_at: purchaseDate,
-            source: "receipt",
-            updated_at: now,
-          },
-          { onConflict: "normalized_product" },
-        )
-        .select("id")
-        .single();
-
-      if (catalogErr) {
-        console.error("catalog upsert failed:", normalizedProduct, catalogErr.message);
-        failed.push(normalizedProduct);
-        continue;
-      }
-
-      const catalogId: string | null = catalogRow?.id ?? null;
-
-      // Upsert item_usage keyed on (user_id, item_name=normalizedProduct):
-      // increment purchase_count on conflict rather than overwriting.
       const { data: existing } = await svc
         .from("item_usage")
         .select("id, purchase_count")
@@ -168,43 +159,39 @@ export default async function handler(req: any, res: any) {
         const { error: updateErr } = await svc
           .from("item_usage")
           .update({
-            purchase_count: existing.purchase_count + purchaseQty,
+            purchase_count: existing.purchase_count + qty,
             last_purchased_at: purchaseDate,
-            ...(catalogId ? { catalog_id: catalogId } : {}),
           })
           .eq("id", existing.id);
 
         if (updateErr) {
           console.error("item_usage update failed:", normalizedProduct, updateErr.message);
           failed.push(normalizedProduct);
-          continue;
         }
       } else {
         const { error: insertErr } = await svc.from("item_usage").insert({
           user_id: userId,
-          catalog_id: catalogId,
+          catalog_id: null,
           item_name: normalizedProduct,
-          purchase_count: purchaseQty,
+          purchase_count: qty,
           last_purchased_at: purchaseDate,
         });
 
         if (insertErr) {
           console.error("item_usage insert failed:", normalizedProduct, insertErr.message);
           failed.push(normalizedProduct);
-          continue;
         }
       }
-
-      ok.push(normalizedProduct);
     } catch (e: any) {
-      console.error("ingest row error:", normalizedProduct, e?.message);
+      console.error("item_usage row error:", normalizedProduct, e?.message);
       failed.push(normalizedProduct);
     }
   }
 
   res.status(200).json({
-    ingested: ok.length,
-    failed: failed.length,
-    ...(failed.length > 0 ? { failedItems: failed } : {}),
+    submissionId: subRow.id,
+    status: "pending",
+    itemsCount: submissionRows.length,
+    ...(failed.length > 0 ? { usageFailures: failed.length } : {}),
   });
 }
