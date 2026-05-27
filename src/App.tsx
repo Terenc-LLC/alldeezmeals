@@ -741,6 +741,11 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         {tab === "receipt" && <IngestView session={session} />}
         {tab === "catalog" && isAdmin && <CatalogView session={session} />}
       </main>
+      <footer className="no-print" style={{ marginTop: 24, padding: "16px 4px 8px", borderTop: "1px solid var(--c-border)", fontSize: 12, color: "var(--c-text-muted)", textAlign: "center" as const }}>
+        <a href="/terms.html" style={{ color: "var(--c-text-muted)" }}>Terms</a>
+        {" · "}
+        <a href="/privacy.html" style={{ color: "var(--c-text-muted)" }}>Privacy</a>
+      </footer>
     </div>
     <div className="print-only">
       <h1 style={{ fontFamily: serif, fontSize: 22, marginBottom: 4 }}>ALLDEEZMeals — Weekly Recipes</h1>
@@ -855,6 +860,12 @@ function SignInView() {
       >
         {loading ? <><RefreshCw size={16} className="spin" /> Sending...</> : "Send magic link"}
       </button>
+      <p style={{ fontSize: 11.5, color: "var(--c-text-muted)", margin: "12px 0 0", textAlign: "center" as const, lineHeight: 1.5 }}>
+        By signing in you agree to our{" "}
+        <a href="/terms.html" style={{ color: "var(--c-primary)" }}>Terms</a>
+        {" · "}
+        <a href="/privacy.html" style={{ color: "var(--c-primary)" }}>Privacy Policy</a>.
+      </p>
     </div>
   );
 }
