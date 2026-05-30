@@ -264,15 +264,39 @@ session (status, decisions, next steps).
   the line-item field model, supported units, and normalization rules.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-251 — May 2026)
+- Design refresh PR3 — standalone meal/recipe card.
+- **New `RecipeCard` component** in `src/App.tsx`: standalone presentational card (no
+  Accept/Reject/thumbs). Anatomy per spec: striped no-photo image slot (190 mobile / 240
+  desktop), cuisine pill, h2 meal name + body-sm description, meta row (time/serves/kcal with
+  Lucide Clock/Users/Flame at 15px primary color), kcal-source + effort-pip badges, divider,
+  ingredients list (name vs right-aligned qty, dashed row separators, staple pills), numbered
+  instructions with 26px step markers (`--c-primary-tint` bg / `--c-primary-hover` text),
+  footer with `btn-secondary` "Save to rotation" + `btn-ghost` Print.
+- **Desktop layout**: ingredients + instructions in a 2-col grid `1fr 1.2fr`; card centered
+  at `max-width:680`. Mobile: single column.
+- **`s` object**: added `rcCard`, `rcImgSlot`, `rcImgHint`, `rcCuisinePill`, `rcMetaItem`,
+  `rcKcalBadge`, `rcKcalBadgeEst`, `rcEffortBadge`, `rcDivider`, `rcIngRow`, `rcStaplePill`,
+  `rcStepRow`, `rcStepMarker` entries consuming PR1 tokens.
+- **`RotationView`** updated: each saved recipe is now a button that opens the `RecipeCard`
+  detail view inline (replaces the rotation list in the tab). A "← Back" ghost button returns
+  to the list. The planner's action-bearing card (Accept/Reject/thumbs, inline in `PlanView`)
+  is untouched.
+- **Lucide imports** added: `Clock`, `Users`, `Flame`, `Printer`.
+- No new `:root` tokens needed — all tokens from PR1 (`--c-primary-tint`, etc.) consumed.
+
 ## Status (TER-250 — May 2026)
 - Design refresh PR2 — button system.
 - **`src/index.css`**: added `.btn-primary`, `.btn-secondary`, `.btn-ghost` CSS classes with full
   spec: 44px min-height, `var(--radius-md)`, PR1 tokens for colors/shadow, hover/focus-visible/
   active (`translateY(1px)`)/disabled states. `.btn--sm` modifier (36px) and `.btn--block`
   modifier. All consuming PR1 tokens; no existing `--c-*` colors changed.
-- **`src/App.tsx` `s` object**: updated `primaryBtn`, `ghostBtn`, `printBtn` to PR1 token values;
-  added canonical `btnPrimary`, `btnSecondary`, `btnGhost`, `btnSm`, `btnBlock` entries for
-  PR3–PR5 inline-style use.
+- **`src/App.tsx` `s` object**: `primaryBtn` and `ghostBtn` updated to PR1 token values.
+  The `btnPrimary`, `btnSecondary`, `btnGhost`, `btnSm`, `btnBlock` s-object entries were
+  **NOT kept** — they were added in the initial PR2 commit and then removed by the cleanup
+  commit (`9531cf2`). Buttons use `.btn-primary` / `.btn-secondary` / `.btn-ghost` CSS classes
+  (+ `.btn--sm` / `.btn--block` modifiers) as the sole source of truth. Do NOT create inline
+  button style objects for new buttons; use `className="btn-..."` instead.
 - Applied CSS classes to in-scope screen buttons: SetupView generate (btn-primary btn--block),
   start over (btn-ghost btn--block btn--sm); PlanView print (btn-secondary btn--sm); ListView
   Copy list (btn-primary), Instacart AI (btn-secondary — upgraded from ghost per spec), Mark
