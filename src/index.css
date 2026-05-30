@@ -27,6 +27,7 @@
   /* ---- Colors (new) ---- */
   --c-primary-tint: #E4F0EC;
   --c-shadow: 26 58 52;
+  --c-print-mat: #d9d4ca;
 
   /* ---- Typography ---- */
   --font-serif: 'Fraunces', Georgia, serif;

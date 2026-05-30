@@ -774,55 +774,69 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <a href="/privacy.html" style={{ color: "var(--c-text-muted)" }}>Privacy</a>
       </footer>
     </div>
-    <div className="print-only">
-      <h1 style={{ fontFamily: serif, fontSize: 22, marginBottom: 4 }}>ALLDEEZMeals — Weekly Recipes</h1>
-      <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginBottom: 24 }}>Printed {new Date().toLocaleDateString()}</p>
+    {acceptedMealsForPrint.length > 0 && (
+    <div className="print-only" style={{ background: isMobile ? "var(--c-bg)" : "var(--c-print-mat)", padding: isMobile ? "var(--space-5)" : "var(--space-7)" }}>
       {acceptedMealsForPrint.map(({ day, date, meal }, pi) => (
-        <div key={pi} className="recipe-page" style={{ marginBottom: 32 }}>
-          <h2 style={{ fontFamily: serif, fontSize: 18, margin: "0 0 4px" }}>{meal.data.name}</h2>
-          <p style={{ fontSize: 12, color: "var(--c-text-muted)", margin: "0 0 6px" }}>{weekdayLabel(date)} &mdash; {meal.data.cuisine}</p>
-          {(meal.data.prepMinutes != null || meal.data.cookMinutes != null) && (
-            <p style={{ fontSize: 12, margin: "0 0 8px" }}>
-              {meal.data.prepMinutes != null ? `Prep: ${meal.data.prepMinutes} min` : ""}
-              {meal.data.prepMinutes != null && meal.data.cookMinutes != null ? " | " : ""}
-              {meal.data.cookMinutes != null ? `Cook: ${meal.data.cookMinutes} min` : ""}
-              {" | "}Serves: {meal.data.servings}
-            </p>
-          )}
-          {meal.kcalInfo && (
-            <p style={{ fontSize: 12, margin: "0 0 8px", color: "var(--c-text-muted)" }}>
-              {meal.kcalInfo.kcalPerServing !== null
-                ? `${meal.kcalInfo.tier === "estimate" ? "~" : ""}${meal.kcalInfo.kcalPerServing} kcal/serving`
-                : "— kcal/serving"}
-              {" · "}<strong>{meal.kcalInfo.tier === "catalog" ? "ALDI catalog" : meal.kcalInfo.tier === "usda" ? "USDA" : "Estimated"}</strong>
-              {meal.kcalInfo.tier === "usda" && ` · ${USDA_ATTRIBUTION}`}
-            </p>
-          )}
-          {meal.data.difficulty != null && (
-            <p style={{ fontSize: 12, margin: "0 0 8px" }}>
-              {`Effort: ${Array.from({ length: 5 }, (_, i) => i < meal.data.difficulty ? "●" : "○").join("")} (${meal.data.difficulty}/5) · `}
-              <strong>{["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"][meal.data.difficulty]}</strong>
-            </p>
-          )}
-          {meal.data.reuseNote && <p style={{ fontSize: 12, fontStyle: "italic", color: "var(--c-warning)", margin: "0 0 8px" }}>Note: {meal.data.reuseNote}</p>}
-          <h3 style={{ fontSize: 13, margin: "0 0 4px" }}>Ingredients</h3>
-          <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13 }}>
-            {meal.data.ingredients.map((ing: any, ii: number) => {
-              const rStr = fmtRecipeQty(ing);
-              return <li key={ii}>{ing.name}{rStr ? ` — ${rStr}` : ""}</li>;
-            })}
-          </ul>
-          {meal.data.steps?.length > 0 && (
-            <>
-              <h3 style={{ fontSize: 13, margin: "0 0 4px" }}>Instructions</h3>
-              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
-                {meal.data.steps.map((step: string, si: number) => <li key={si} style={{ marginBottom: 4 }}>{step}</li>)}
-              </ol>
-            </>
-          )}
+        <div key={pi} className="recipe-page" style={{ marginBottom: pi < acceptedMealsForPrint.length - 1 ? "var(--space-7)" : 0 }}>
+          <div className="print-sheet" style={{ background: "#fff", maxWidth: 640, margin: "0 auto", padding: isMobile ? "var(--space-6)" : "56px 64px", boxShadow: isMobile ? "none" : "0 8px 30px rgba(26,58,52,.18)", border: isMobile ? "1px solid var(--c-border)" : "none", borderRadius: isMobile ? "var(--radius-md)" : 4, color: "#1A3A34", boxSizing: "border-box" as const }}>
+            {/* masthead */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: "2px solid #1A3A34", paddingBottom: "var(--space-2)" }}>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-primary)" }}>ALLDEEZMeals</span>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>{weekdayLabel(date)} · {meal.data.cuisine}</span>
+            </div>
+            {/* title */}
+            <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 26, lineHeight: "30px", fontWeight: 600, letterSpacing: "-.01em", margin: "var(--space-4) 0 0", color: "#1A3A34" }}>{meal.data.name}</h1>
+            {/* meta strip */}
+            <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--space-5)", marginTop: "var(--space-3)", paddingBottom: "var(--space-4)", borderBottom: "1px solid var(--c-border)" }}>
+              {([
+                ["Prep", meal.data.prepMinutes != null ? `${meal.data.prepMinutes} min` : "—"],
+                ["Cook", meal.data.cookMinutes != null ? `${meal.data.cookMinutes} min` : "—"],
+                ["Serves", String(meal.data.servings ?? "—")],
+                ["Per serving", meal.kcalInfo?.kcalPerServing != null ? `~${meal.kcalInfo.kcalPerServing} kcal` : "—"],
+                ["Effort", meal.data.difficulty != null ? `${(["Premade","Minimal","Simple","Moderate","Involved","Intricate"] as const)[meal.data.difficulty]} (${meal.data.difficulty}/5)` : "—"],
+              ] as [string, string][]).map(([k, v]) => (
+                <div key={k}>
+                  <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)", textTransform: "uppercase" as const, letterSpacing: ".05em" }}>{k}</div>
+                  <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", fontWeight: 700, color: "#1A3A34" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            {/* body: ingredients + instructions */}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1.4fr", gap: isMobile ? "var(--space-5)" : "var(--space-7)", marginTop: "var(--space-5)" }}>
+              <div>
+                <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "var(--t-h3-size)", lineHeight: "var(--t-h3-lh)", fontWeight: 600, margin: "0 0 var(--space-3)", color: "#1A3A34" }}>Ingredients</h2>
+                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                  {meal.data.ingredients.map((ing: any, ii: number) => {
+                    const rStr = fmtRecipeQty(ing);
+                    return (
+                      <li key={ii} style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", color: "#1A3A34" }}>
+                        {ing.name}{rStr ? <span style={{ color: "var(--c-text-muted)" }}>{" — "}{rStr}</span> : ""}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div>
+                <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "var(--t-h3-size)", lineHeight: "var(--t-h3-lh)", fontWeight: 600, margin: "0 0 var(--space-3)", color: "#1A3A34" }}>Instructions</h2>
+                {meal.data.steps?.length > 0 && (
+                  <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: "var(--space-2)" }}>
+                    {meal.data.steps.map((step: string, si: number) => (
+                      <li key={si} style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", paddingLeft: 4, color: "#1A3A34" }}>{step}</li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
+            {/* footer */}
+            <div style={{ marginTop: "var(--space-7)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--c-border)", display: "flex", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-2)" }}>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>Printed from ALLDEEZMeals · {new Date().toLocaleDateString()}</span>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>kcal source: USDA FoodData Central</span>
+            </div>
+          </div>
         </div>
       ))}
     </div>
+    )}
     </>
   );
 }
@@ -2687,12 +2701,13 @@ function TabBtn({ active, onClick, icon, label }: any) {
 
 const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
 .spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
-.print-only{display:none}
+.print-only{display:block}
 @media print{
   html,body,#root{height:auto!important;overflow:visible!important;}
   .no-print{display:none!important}
-  .print-only{display:block!important}
-  .recipe-page{break-after:page;page-break-after:always;}
+  .print-only{background:none!important;padding:0!important;}
+  .print-sheet{box-shadow:none!important;border:none!important;border-radius:0!important;padding:32px 40px!important;}
+  .recipe-page{break-after:page;page-break-after:always;margin-bottom:0!important;}
   .recipe-page:last-child{break-after:auto;page-break-after:auto;}
 }`;
 const serif = "'Fraunces', Georgia, serif";
@@ -2751,9 +2766,6 @@ const s: Record<string, any> = {
   pantryBtn: { fontSize: 11, fontWeight: 700, border: "1px solid", borderRadius: 14, padding: "2px 9px", cursor: "pointer" },
   starBtn: { background: "transparent", border: "none", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 2px", flexShrink: 0 },
   rotItem: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: 9, padding: "10px 12px" },
-  howto: { marginTop: 22, background: "var(--c-surface-2)", borderRadius: 13, padding: "14px 18px", border: "1px solid var(--c-border)" },
-  howtoTitle: { fontFamily: serif, fontSize: 15, fontWeight: 600, margin: "0 0 6px", color: "var(--c-primary)" },
-  howtoList: { margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--c-text-muted)", lineHeight: 1.7 },
   timeLine: { fontSize: 12, color: "var(--c-text-muted)", margin: "8px 0 0" },
   stepsList: { margin: "10px 0 0", paddingLeft: 20, display: "grid", gap: 4 },
   stepItem: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.5 },
