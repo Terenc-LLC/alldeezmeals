@@ -3,7 +3,7 @@ import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
-  ReceiptText, HelpCircle, Clock, Users, Flame, Printer,
+  ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
@@ -1242,6 +1242,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 
 /* ============================ List ============================ */
 function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave, session }: any) {
+  const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
   const [ordering, setOrdering] = useState(false);
@@ -1315,91 +1316,140 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
 
   return (
     <div>
-      <div style={s.listToolbar}>
-        <p style={s.cardSub}>{totalItems} items - {acceptedCount}/{slotCount} dinners + staples</p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-          <button onClick={copy} className="btn-primary">{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copied!" : "Copy list"}</button>
-          <button onClick={copyForInstacartAI} className="btn-secondary">{copiedCart ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copiedCart ? "Copied!" : "Copy for Instacart (AI)"}</button>
-          <button onClick={markOrdered} disabled={acceptedCount === 0 || ordering} className="btn-ghost">
-            {ordering ? <RefreshCw size={16} className="spin" /> : <Archive size={16} />}
-            {ordering ? "Archiving..." : "Mark ordered & start next week"}
+      <div style={{ maxWidth: 680, margin: "0 auto" }}>
+        {/* Header */}
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <h1 style={{ ...s.typeH1, margin: 0 }}>Grocery list</h1>
+          <p style={{ ...s.typeBodySm, color: "var(--c-text-muted)", margin: "2px 0 0" }}>
+            {totalItems} items · {acceptedCount}/{slotCount} dinners + staples
+          </p>
+        </div>
+
+        {/* Toolbar */}
+        <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
+          <button onClick={copy} className="btn-primary" style={{ flex: isMobile ? "1 1 auto" : "0 0 auto" }}>
+            {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+            {copied ? "Copied!" : "Copy list"}
+          </button>
+          <button onClick={copyForInstacartAI} className="btn-secondary" style={{ flex: isMobile ? "1 1 auto" : "0 0 auto" }}>
+            {copiedCart ? <CheckCircle2 size={16} /> : <ShoppingCart size={16} />}
+            {copiedCart ? "Copied!" : "Instacart (AI)"}
           </button>
         </div>
-      </div>
-      {orderError && <p style={{ color: "var(--c-danger)", fontSize: 12, margin: "4px 0 8px" }}>Could not archive: {orderError}</p>}
 
-      {/* Always Have management panel */}
-      <div style={{ ...s.card, marginBottom: 14, background: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: alwaysHave.length > 0 ? 10 : 0 }}>
-          <div>
-            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 14.5, fontWeight: 600, color: "var(--c-primary)" }}>★ Always have</span>
-            <span style={{ fontSize: 12, color: "var(--c-text-muted)", marginLeft: 7 }}>auto-excluded every week</span>
+        {/* Always Have sunken panel */}
+        <div style={s.lvSunken}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-2)" }}>
+            <span style={{ ...s.typeH3, fontSize: 15, color: "var(--c-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Star size={15} color="var(--c-warning)" fill="var(--c-warning)" />
+              Always have
+            </span>
+            <span style={{ ...s.typeCaption, color: "var(--c-text-muted)" }}>auto-excluded weekly</span>
           </div>
-          {alwaysHave.length > 0 && <span style={{ fontSize: 11.5, color: "var(--c-warning)", fontWeight: 700 }}>{alwaysHave.length} item{alwaysHave.length !== 1 ? "s" : ""}</span>}
+          {alwaysHave.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
+              {alwaysHave.map((k: string) => (
+                <span key={k} style={s.lvAhChip}>
+                  {k}
+                  <button onClick={() => setAlwaysHave((p: string[]) => p.filter((x) => x !== k))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", color: "rgba(255,255,255,0.65)", lineHeight: 1 }}><X size={12} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              value={newAlwaysHave}
+              onChange={(e) => setNewAlwaysHave(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addAlwaysHave()}
+              placeholder="Add item (e.g. olive oil)…"
+              style={{ ...s.input, flex: 1, fontSize: 12.5, padding: "6px 9px" }}
+            />
+            <button onClick={addAlwaysHave} disabled={!newAlwaysHave.trim()} style={{ ...s.addBtn, opacity: newAlwaysHave.trim() ? 1 : 0.45 }}><Plus size={14} /> Add</button>
+          </div>
         </div>
-        {alwaysHave.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6, marginBottom: 10 }}>
-            {alwaysHave.map((k: string) => (
-              <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-primary)", color: "var(--c-on-primary)", fontSize: 12, fontWeight: 600, padding: "3px 9px 3px 10px", borderRadius: 20 }}>
-                {k}
-                <button onClick={() => setAlwaysHave((p: string[]) => p.filter((x) => x !== k))} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", color: "rgba(255,255,255,0.65)", lineHeight: 1 }}><X size={12} /></button>
-              </span>
-            ))}
+
+        {/* Category cards */}
+        {totalItems === 0 ? (
+          <div style={s.card}><p style={s.empty}>Accept dinners to build the list (staples always included).</p></div>
+        ) : (
+          <div style={{ display: "grid", gap: "var(--space-4)" }}>
+            {CATEGORIES.map((cat) => {
+              const items = groceryList[cat]; if (!items?.length) return null;
+              return (
+                <div key={cat} style={s.lvCatCard}>
+                  <h3 style={s.lvCatTitle}>{cat}</h3>
+                  <div>
+                    {items.map((it: any) => {
+                      const key = `${it.name}|${it.unit}`;
+                      const checked = !!checkedItems[key];
+                      const isP = pantry.includes(it.name.toLowerCase());
+                      const isAH = alwaysHave.includes(normalizeIngName(it.name));
+                      const itemPrice = catalogPriceMap.get(normalizeIngName(it.name));
+                      return (
+                        <div key={key} style={s.lvRow}>
+                          <button
+                            onClick={() => toggleCheck(key)}
+                            aria-label={checked ? "Uncheck item" : "Check item"}
+                            style={{ ...s.lvCheck, background: checked ? "var(--c-primary)" : "var(--c-surface)", borderColor: checked ? "var(--c-primary)" : "var(--c-border)" }}
+                          >
+                            {checked && <Check size={14} color="var(--c-on-primary)" strokeWidth={2.6} />}
+                          </button>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ ...s.typeBody, color: checked ? "var(--c-text-muted)" : "var(--c-text)", textDecoration: checked ? "line-through" : "none" }}>
+                              {it.name}
+                            </span>
+                            <span style={{ ...s.typeBodySm, color: "var(--c-text-muted)" }}>
+                              {" · "}{fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}
+                            </span>
+                            {it.isPurchaseStyle && itemPrice != null && (
+                              <span style={{ ...s.typeCaption, color: "var(--c-text-muted)", marginLeft: 4 }}>${(itemPrice / 100).toFixed(2)} ea</span>
+                            )}
+                            {it.staple && <span style={s.lvStaple}>staple</span>}
+                          </span>
+                          <button
+                            onClick={() => togglePantry(it.name)}
+                            style={{ ...s.lvHaveIt, color: isP || isAH ? "var(--c-on-primary)" : "var(--c-text-muted)", background: isP || isAH ? "var(--c-primary)" : "transparent", borderColor: isP || isAH ? "var(--c-primary)" : "var(--c-border)" }}
+                          >have it</button>
+                          <button
+                            onClick={() => toggleAlwaysHave(it.name)}
+                            style={{ ...s.lvStar, color: isAH ? "var(--c-warning)" : "var(--c-border)" }}
+                            title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}
+                          >
+                            <Star size={17} fill={isAH ? "var(--c-warning)" : "none"} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-        <div style={{ display: "flex", gap: 6 }}>
-          <input
-            value={newAlwaysHave}
-            onChange={(e) => setNewAlwaysHave(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addAlwaysHave()}
-            placeholder="Add item (e.g. olive oil)…"
-            style={{ ...s.input, flex: 1, fontSize: 12.5, padding: "6px 9px" }}
-          />
-          <button onClick={addAlwaysHave} disabled={!newAlwaysHave.trim()} style={{ ...s.addBtn, opacity: newAlwaysHave.trim() ? 1 : 0.45 }}><Plus size={14} /> Add</button>
-        </div>
-      </div>
 
-      {totalItems === 0 ? <div style={s.card}><p style={s.empty}>Accept dinners to build the list (staples always included).</p></div> : (
-        <div style={{ display: "grid", gap: 14 }}>
-          {CATEGORIES.map((cat) => {
-            const items = groceryList[cat]; if (!items?.length) return null;
-            return (
-              <div key={cat} style={s.card}>
-                <h3 style={s.catTitle}>{cat}</h3>
-                <div style={{ display: "grid", gap: 4 }}>
-                  {items.map((it: any) => {
-                    const key = `${it.name}|${it.unit}`; const checked = !!checkedItems[key]; const isP = pantry.includes(it.name.toLowerCase()); const isAH = alwaysHave.includes(normalizeIngName(it.name));
-                    const itemPrice = catalogPriceMap.get(normalizeIngName(it.name));
-                    return (
-                      <div key={key} style={s.listItem}>
-                        <button onClick={() => toggleCheck(key)} style={{ ...s.check, background: checked ? "var(--c-primary)" : "transparent" }}>{checked && <Check size={13} color="var(--c-on-primary)" />}</button>
-                        <span style={{ flex: 1, textDecoration: checked ? "line-through" : "none", color: checked ? "var(--c-text-muted)" : "var(--c-text)" }}>
-                          {it.name} <span style={s.qtyText}>- {fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}</span>{it.isPurchaseStyle && itemPrice != null && <span style={{ fontSize: 11, color: "var(--c-text-muted)", marginLeft: 5 }}>${(itemPrice / 100).toFixed(2)} ea</span>}{it.staple && <span style={s.stapleDot}>staple</span>}
-                        </span>
-                        <button onClick={() => togglePantry(it.name)} style={{ ...s.pantryBtn, color: isP || isAH ? "var(--c-on-primary)" : "var(--c-text-muted)", background: isAH ? "var(--c-primary)" : isP ? "var(--c-primary)" : "transparent", borderColor: isP || isAH ? "var(--c-primary)" : "var(--c-border)" }}>have it</button>
-                        <button onClick={() => toggleAlwaysHave(it.name)} style={{ ...s.starBtn, color: isAH ? "var(--c-warning)" : "var(--c-border)" }} title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}>★</button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {session && priceEstimate.pricedCount > 0 && (
-        <div style={{ marginTop: 14, padding: "10px 14px", background: "var(--c-success-bg)", border: "1px solid var(--c-border)", borderRadius: 10, fontSize: 12.5, color: "var(--c-success-text)" }}>
-          <strong>Est. ${(priceEstimate.sumCents / 100).toFixed(2)}</strong>
-          <span style={{ color: "var(--c-text-muted)" }}> — based on {priceEstimate.pricedCount} of {totalItems} items priced · most-recent ALDI prices, not a quote</span>
-        </div>
-      )}
-      <div style={s.howto}>
-        <h4 style={s.howtoTitle}>Order from ALDI (free)</h4>
-        <ol style={s.howtoList}>
-          <li>Tap <strong>Copy list</strong> for the plain list — paste into the ALDI app or print.</li>
-          <li>Or tap <strong>Copy for Instacart (AI)</strong> — paste into Claude or ChatGPT (with Instacart enabled) and it builds your cart.</li>
-          <li>Review the cart, pick your store, and check out.</li>
-        </ol>
+        {/* Price estimate footer */}
+        {session && priceEstimate.pricedCount > 0 && (
+          <div style={s.lvFooter}>
+            <strong style={{ ...s.typeBody, color: "var(--c-success-text)", fontWeight: 700 }}>
+              Est. ${(priceEstimate.sumCents / 100).toFixed(2)}
+            </strong>
+            <span style={{ ...s.typeBodySm, color: "var(--c-text-muted)" }}>
+              {" "}— {priceEstimate.pricedCount} of {totalItems} items priced · recent ALDI prices, not a quote
+            </span>
+          </div>
+        )}
+
+        {/* Archive action */}
+        {orderError && <p style={{ color: "var(--c-danger)", fontSize: 12, margin: "8px 0 4px" }}>Could not archive: {orderError}</p>}
+        <button
+          onClick={markOrdered}
+          disabled={acceptedCount === 0 || ordering}
+          className="btn-ghost btn--sm btn--block"
+          style={{ marginTop: "var(--space-4)" }}
+        >
+          {ordering ? <RefreshCw size={14} className="spin" /> : <Archive size={14} />}
+          {ordering ? "Archiving..." : "Mark ordered & start next week"}
+        </button>
       </div>
     </div>
   );
@@ -2731,4 +2781,15 @@ const s: Record<string, any> = {
   rcStaplePill:  { display: "inline-block", fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)", marginLeft: 6 },
   rcStepRow:     { display: "flex", gap: "var(--space-3)", alignItems: "flex-start" },
   rcStepMarker:  { flexShrink: 0, width: 26, height: 26, borderRadius: "var(--radius-pill)", background: "var(--c-primary-tint)", color: "var(--c-primary-hover)", display: "grid", placeItems: "center", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-bodysm-size)" },
+  // TER-252: ListView grocery list restyle
+  lvSunken:   { background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)", padding: "var(--space-3) var(--space-4)", marginBottom: "var(--space-4)" },
+  lvAhChip:   { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-primary)", color: "var(--c-on-primary)", fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", fontWeight: 600, padding: "3px 9px 3px 10px", borderRadius: "var(--radius-pill)" },
+  lvCatCard:  { background: "var(--c-surface)", borderRadius: "var(--radius-lg)", padding: "var(--space-4)", boxShadow: "var(--elev-1)", border: "1px solid var(--c-border)" },
+  lvCatTitle: { fontFamily: "var(--font-serif)", fontSize: 15, fontWeight: 600, margin: "0 0 var(--space-2)", color: "var(--c-primary)", borderBottom: "1px solid var(--c-border)", paddingBottom: "var(--space-2)" },
+  lvRow:      { display: "flex", alignItems: "center", gap: "var(--space-3)", minHeight: "var(--tap-min)", padding: "var(--space-1) 0" },
+  lvCheck:    { width: 24, height: 24, borderRadius: "var(--radius-sm)", border: "2px solid", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0, padding: 0, transition: "background 120ms, border-color 120ms" },
+  lvHaveIt:   { fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", fontWeight: 700, border: "1px solid", borderRadius: "var(--radius-pill)", padding: "2px 9px", cursor: "pointer", whiteSpace: "nowrap" as const, display: "inline-flex", alignItems: "center", minHeight: 28 },
+  lvStar:     { background: "transparent", border: "none", cursor: "pointer", padding: "0 2px", flexShrink: 0, display: "grid", placeItems: "center" },
+  lvStaple:   { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)" },
+  lvFooter:   { marginTop: "var(--space-4)", padding: "var(--space-3) var(--space-4)", background: "var(--c-success-bg)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)" },
 };

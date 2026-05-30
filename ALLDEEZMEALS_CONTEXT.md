@@ -264,6 +264,34 @@ session (status, decisions, next steps).
   the line-item field model, supported units, and normalization rules.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-252 — May 2026)
+- Design refresh PR4 — grocery list restyle (`ListView`).
+- **`ListView` return block** fully replaced to match Warm Market spec. No new global state.
+- **Header**: `h1` "Grocery list" (`s.typeH1` / Fraunces) + body-sm muted summary line.
+- **Toolbar**: `.btn-primary` "Copy list" (Copy icon) + `.btn-secondary` "Instacart (AI)"
+  (ShoppingCart icon — newly imported from lucide-react). Both `flex:1 1 auto` on mobile
+  (wrap), shrink to content on desktop via `isMobile` toggle. Transient "Copied!" state
+  preserved on both.
+- **Always Have panel**: sunken block (`--c-surface-2`, `radius-md`). Lucide `Star` filled
+  `--c-warning` in header. Chips use `s.lvAhChip` (primary bg, radius-pill). Existing add-
+  item input kept.
+- **Category cards** (`s.lvCatCard`): `--c-surface`, `radius-lg`, `--elev-1`, 16px padding.
+  `s.lvCatTitle`: Fraunces 15, primary, bottom border.
+- **Grocery rows** (`s.lvRow`): min-height 44px, gap 12px. Checkbox (`s.lvCheck`): 24×24,
+  `radius-sm`, 2px border, fills primary + Check strokeWidth 2.6 when checked. Name/qty label
+  uses `s.typeBody`/`s.typeBodySm`; line-through + muted when checked. "have it" pill
+  (`s.lvHaveIt`): outlined → fills primary when active. Star (`s.lvStar`): lucide Star with
+  fill toggle. Staple (`s.lvStaple`): warning-bg radius-pill label.
+- **Price estimate footer** (`s.lvFooter`): `--c-success-bg`, `radius-md`, bold success-text
+  total + "not a quote" note.
+- **Archive button**: `.btn-ghost .btn--sm .btn--block` at bottom of list.
+- **Desktop**: `maxWidth: 680, margin: "0 auto"` inner div; single centered column.
+- **`s` object**: added `lvSunken`, `lvAhChip`, `lvCatCard`, `lvCatTitle`, `lvRow`, `lvCheck`,
+  `lvHaveIt`, `lvStar`, `lvStaple`, `lvFooter`.
+- PR #40 open: https://github.com/Terenc-LLC/alldeezmeals/pull/40
+  Commit: `e99c4a4`. Awaiting Chris review/merge.
+- `tsc --noEmit && vite build` pass (472.38 kB JS / 9.28 kB CSS, 0 TS errors).
+
 ## Status (TER-251 — May 2026)
 - Design refresh PR3 — standalone meal/recipe card.
 - **New `RecipeCard` component** in `src/App.tsx`: standalone presentational card (no
