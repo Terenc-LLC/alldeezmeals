@@ -3,7 +3,7 @@ import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
-  ReceiptText, HelpCircle,
+  ReceiptText, HelpCircle, Clock, Users, Flame, Printer,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
@@ -1623,12 +1623,27 @@ function ManualRecipeForm({ rotation, onSave, onCancel }: { rotation: any[]; onS
 /* ============================ Rotation ============================ */
 function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid }: any) {
   const [showForm, setShowForm] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const handleSaveManual = (data: any) => {
     setRotation((p: any[]) => [...p, data]);
     if (data.name) setLiked((p: string[]) => p.includes(data.name) ? p : [...p, data.name]);
     setShowForm(false);
   };
+
+  if (selectedIdx !== null && rotation[selectedIdx]) {
+    return (
+      <div>
+        <button className="btn-ghost btn--sm" style={{ marginBottom: "var(--space-4)" }} onClick={() => setSelectedIdx(null)}>
+          ← Back to saved recipes
+        </button>
+        <RecipeCard
+          meal={rotation[selectedIdx]}
+          onSaveRotation={() => setSelectedIdx(null)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -1643,10 +1658,10 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid 
             <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
               {rotation.map((r: any, i: number) => (
                 <div key={i} style={s.rotItem}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div>
+                  <button onClick={() => setSelectedIdx(i)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text)" }}>{r.name}</div>
                     <div style={s.cardSub}>{r.cuisine ? `${r.cuisine} · ` : ""}{r.ingredients?.length ?? 0} ingredients</div>
-                  </div>
+                  </button>
                   <button onClick={() => setRotation((p: any[]) => p.filter((_, idx) => idx !== i))} style={s.iconBtn}><Trash2 size={15} color="var(--c-danger)" /></button>
                 </div>
               ))}
@@ -2518,6 +2533,104 @@ function DifficultyBadge({ difficulty }: { difficulty: number }) {
   );
 }
 
+/* ============================ RecipeCard (TER-251) — standalone, no planner actions ============================ */
+function RecipeCard({ meal, kcalInfo, onSaveRotation }: { meal: any; kcalInfo?: { kcalPerServing: number | null; tier: string } | null; onSaveRotation?: () => void }) {
+  const isMobile = useIsMobile();
+  const totalMin = (meal.prepMinutes ?? 0) + (meal.cookMinutes ?? 0);
+  const diffLabel = DIFFICULTY_LABELS[meal.difficulty] ?? "";
+
+  const Ingredients = () => (
+    <div>
+      <p style={{ ...s.typeLabel, color: "var(--c-text-muted)", marginBottom: "var(--space-2)" }}>Ingredients</p>
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "var(--space-2)" }}>
+        {(meal.ingredients ?? []).map((ing: any, i: number) => {
+          const qty = fmtRecipeQty(ing);
+          return (
+            <li key={i} style={s.rcIngRow}>
+              <span style={{ ...s.typeBody, color: "var(--c-text)" }}>
+                {ing.name}{ing.staple && <span style={s.rcStaplePill}>staple</span>}
+              </span>
+              <span style={{ ...s.typeBodySm, color: "var(--c-text-muted)", textAlign: "right" as const, flexShrink: 0 }}>{qty}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+
+  const Steps = () => (
+    <div>
+      <p style={{ ...s.typeLabel, color: "var(--c-text-muted)", marginBottom: "var(--space-2)" }}>Instructions</p>
+      <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "var(--space-3)" }}>
+        {(meal.steps ?? []).map((step: string, i: number) => (
+          <li key={i} style={s.rcStepRow}>
+            <span style={s.rcStepMarker}>{i + 1}</span>
+            <span style={{ ...s.typeBody, color: "var(--c-text)", paddingTop: 2 }}>{step}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+
+  return (
+    <article style={{ ...s.rcCard, maxWidth: isMobile ? "none" : 680, margin: isMobile ? 0 : "0 auto" }}>
+      {/* 1. Image slot — striped placeholder is the default state */}
+      <div style={{ ...s.rcImgSlot, height: isMobile ? 190 : 240 }}>
+        <span style={s.rcImgHint}>meal photo (optional)</span>
+      </div>
+      <div style={{ padding: "var(--space-5)" }}>
+        {/* 2. Cuisine pill */}
+        {meal.cuisine && <span style={s.rcCuisinePill}>{meal.cuisine}</span>}
+        {/* 3. Meal name + description */}
+        <h2 style={{ ...s.typeH2, color: "var(--c-text)", marginTop: meal.cuisine ? "var(--space-3)" : 0 }}>{meal.name}</h2>
+        {meal.description && <p style={{ ...s.typeBodySm, color: "var(--c-text-muted)", marginTop: "var(--space-2)" }}>{meal.description}</p>}
+        {/* 4. Meta row */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-4)", marginTop: "var(--space-3)" }}>
+          {totalMin > 0 && <span style={s.rcMetaItem}><Clock size={15} color="var(--c-primary)" />{totalMin} min</span>}
+          {meal.servings && <span style={s.rcMetaItem}><Users size={15} color="var(--c-primary)" />Serves {meal.servings}</span>}
+          {kcalInfo?.kcalPerServing != null && <span style={s.rcMetaItem}><Flame size={15} color="var(--c-primary)" />~{kcalInfo.kcalPerServing} kcal</span>}
+        </div>
+        {/* 5. Badges */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-3)", alignItems: "center" }}>
+          {kcalInfo?.kcalPerServing != null && (
+            <span style={kcalInfo.tier === "estimate" ? s.rcKcalBadgeEst : s.rcKcalBadge}>
+              {kcalInfo.tier === "usda" ? "USDA" : kcalInfo.tier === "catalog" ? "ALDI catalog" : "Estimated"} · {kcalInfo.kcalPerServing} kcal/serving
+            </span>
+          )}
+          {meal.difficulty != null && (
+            <span style={s.rcEffortBadge}>
+              <span style={{ letterSpacing: 1 }}>{"●".repeat(meal.difficulty)}{"○".repeat(5 - meal.difficulty)}</span>{" "}{diffLabel}
+            </span>
+          )}
+        </div>
+        {/* 6. Divider */}
+        <hr style={s.rcDivider} />
+        {/* 7+8. Ingredients + Instructions */}
+        {!isMobile ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--space-6)" }}>
+            <Ingredients />
+            <Steps />
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "var(--space-5)" }}>
+            <Ingredients />
+            <Steps />
+          </div>
+        )}
+        {/* 9. Footer — no Accept/Reject/thumbs */}
+        <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-5)" }}>
+          <button className="btn-secondary" style={{ flex: 1 }} onClick={onSaveRotation}>
+            <Star size={16} /> Save to rotation
+          </button>
+          <button className="btn-ghost" aria-label="Print" onClick={() => window.print()} style={{ padding: "0 var(--space-4)" }}>
+            <Printer size={16} />
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function TabBtn({ active, onClick, icon, label }: any) {
   return <button onClick={onClick} aria-label={label} style={{ ...s.tab, ...(active ? s.tabActive : {}) }}>{icon}<span className="tab-label">{label}</span></button>;
 }
@@ -2604,4 +2717,18 @@ const s: Record<string, any> = {
   typeBodySm:  { fontFamily: "var(--font-sans)",  fontSize: "var(--t-bodysm-size)",  lineHeight: "var(--t-bodysm-lh)",  fontWeight: 400,                            margin: 0 },
   typeLabel:   { fontFamily: "var(--font-sans)",  fontSize: "var(--t-label-size)",   lineHeight: "var(--t-label-lh)",   fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", margin: 0 },
   typeCaption: { fontFamily: "var(--font-sans)",  fontSize: "var(--t-caption-size)", lineHeight: "var(--t-caption-lh)", fontWeight: 600,                            margin: 0 },
+  // TER-251: standalone RecipeCard
+  rcCard:        { background: "var(--c-surface)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--elev-1)", overflow: "hidden" },
+  rcImgSlot:     { background: "var(--c-surface-2)", backgroundImage: "repeating-linear-gradient(135deg, rgba(43,140,126,.06) 0 10px, transparent 10px 20px)", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "1px solid var(--c-border)" },
+  rcImgHint:     { fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)", background: "rgba(255,255,255,.65)", padding: "3px 10px", borderRadius: "var(--radius-pill)" },
+  rcCuisinePill: { display: "inline-block", fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 700, color: "var(--c-pill-text)", background: "var(--c-accent)", padding: "5px 10px", borderRadius: "var(--radius-pill)", textTransform: "uppercase" as const, letterSpacing: "0.05em" },
+  rcMetaItem:    { display: "inline-flex", alignItems: "center", gap: 6, color: "var(--c-text)", fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", lineHeight: "var(--t-bodysm-lh)" },
+  rcKcalBadge:   { fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-primary)", background: "var(--c-surface-2)", padding: "3px 10px", borderRadius: "var(--radius-pill)" },
+  rcKcalBadgeEst:{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "3px 10px", borderRadius: "var(--radius-pill)" },
+  rcEffortBadge: { fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-pill-text)", background: "var(--c-accent)", padding: "3px 10px", borderRadius: "var(--radius-pill)" },
+  rcDivider:     { border: "none", borderTop: "1px solid var(--c-border)", margin: "var(--space-4) 0" },
+  rcIngRow:      { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "var(--space-3)", borderBottom: "1px dashed var(--c-border)", paddingBottom: "var(--space-2)" },
+  rcStaplePill:  { display: "inline-block", fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)", marginLeft: 6 },
+  rcStepRow:     { display: "flex", gap: "var(--space-3)", alignItems: "flex-start" },
+  rcStepMarker:  { flexShrink: 0, width: 26, height: 26, borderRadius: "var(--radius-pill)", background: "var(--c-primary-tint)", color: "var(--c-primary-hover)", display: "grid", placeItems: "center", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-bodysm-size)" },
 };
