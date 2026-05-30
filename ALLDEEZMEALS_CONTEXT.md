@@ -395,7 +395,7 @@ session (status, decisions, next steps).
      Added `overflowX: "hidden"` to bound the section.
 - The existing `html, body { overflow-x: hidden }` backstop in `src/index.css` is preserved.
 - `tsc --noEmit && vite build` pass (474.57 kB JS / 9.30 kB CSS, 0 TS errors).
-- PR #42 open: [link TBD — will be added after push]
+- PR #42 open: https://github.com/Terenc-LLC/alldeezmeals/pull/42
 
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
