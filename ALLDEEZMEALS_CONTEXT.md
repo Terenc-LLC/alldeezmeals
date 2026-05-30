@@ -264,7 +264,27 @@ session (status, decisions, next steps).
   the line-item field model, supported units, and normalization rules.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-249 — May 2026)
+- Design refresh PR1 — foundation tokens.
+- **`src/index.css` `:root`**: added all Phase 1 design-system tokens. Existing `--c-*`
+  colors are unchanged (source of truth). New additions:
+  - `--c-primary-tint: #E4F0EC`, `--c-shadow: 26 58 52` (RGB for tinted elevation)
+  - `--font-serif`, `--font-sans` (family vars, same values as the JS consts, now tokenised)
+  - 9 type-scale steps: `--t-display-*` → `--t-caption-*` (size / lh / weight each)
+  - `--space-1` … `--space-8` (4px base: 4/8/12/16/20/24/32/40 px)
+  - `--radius-sm/md/lg/pill` (8/12/16/999 px)
+  - `--elev-0/1/2/primary` (shadows tinted with `--c-shadow`, not pure black)
+  - `--tap-min: 44px`, `--focus-ring`
+- **`src/App.tsx` `s` object**: `shell` updated to consume `var(--font-sans)` and
+  `var(--space-5)` (no visual change — same resolved values). Nine type-step helpers
+  (`typeDisplay` … `typeCaption`) added for PR2–PR5 to spread into component styles.
+- PR #37 open: https://github.com/Terenc-LLC/alldeezmeals/pull/37
+  Targets `main`; should NOT be merged until PR2–PR5 land and are reviewed together.
+- `tsc --noEmit && vite build` pass (462 kB JS / 7.4 kB CSS, 0 TS errors).
+- **PR2–PR5 are the next steps** in the design refresh series.
+
 ## Backlog / next
+- TER-249 PR2–PR5: component-level design refresh (recipe card, grocery list, printable recipe, planner).
 - TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
 - TER-198: Seed catalog with ALDI core-range items.

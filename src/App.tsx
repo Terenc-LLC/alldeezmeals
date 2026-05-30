@@ -2536,7 +2536,7 @@ const serif = "'Fraunces', Georgia, serif";
 const sans = "'Nunito Sans', -apple-system, sans-serif";
 
 const s: Record<string, any> = {
-  shell: { fontFamily: sans, background: "var(--c-bg)", minHeight: "100%", color: "var(--c-text)", padding: 20, maxWidth: 780, margin: "0 auto" },
+  shell: { fontFamily: "var(--font-sans)", background: "var(--c-bg)", minHeight: "100%", color: "var(--c-text)", padding: "var(--space-5)", maxWidth: 780, margin: "0 auto" },
   header: { marginBottom: 18 }, logoRow: { display: "flex", alignItems: "center", gap: 12 },
   logoMark: { width: 40, height: 40, borderRadius: 11, background: "var(--c-primary)", display: "grid", placeItems: "center", boxShadow: "0 2px 6px rgba(43,140,126,.3)" },
   h1: { fontFamily: serif, fontSize: 23, fontWeight: 600, margin: 0, letterSpacing: "-.01em" },
@@ -2595,4 +2595,14 @@ const s: Record<string, any> = {
   stepsList: { margin: "10px 0 0", paddingLeft: 20, display: "grid", gap: 4 },
   stepItem: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.5 },
   printBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--c-surface)", color: "var(--c-primary)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px 14px", fontFamily: "'Nunito Sans', -apple-system, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer" },
+  // Foundation type steps — PR1 tokens; consumed by PR2–PR5
+  typeDisplay: { fontFamily: "var(--font-serif)", fontSize: "var(--t-display-size)", lineHeight: "var(--t-display-lh)", fontWeight: 600, letterSpacing: "-0.015em", margin: 0 },
+  typeH1:      { fontFamily: "var(--font-serif)", fontSize: "var(--t-h1-size)",      lineHeight: "var(--t-h1-lh)",      fontWeight: 600, letterSpacing: "-0.01em",  margin: 0 },
+  typeH2:      { fontFamily: "var(--font-serif)", fontSize: "var(--t-h2-size)",      lineHeight: "var(--t-h2-lh)",      fontWeight: 600, letterSpacing: "-0.01em",  margin: 0 },
+  typeH3:      { fontFamily: "var(--font-serif)", fontSize: "var(--t-h3-size)",      lineHeight: "var(--t-h3-lh)",      fontWeight: 600,                            margin: 0 },
+  typeBodyLg:  { fontFamily: "var(--font-sans)",  fontSize: "var(--t-bodylg-size)",  lineHeight: "var(--t-bodylg-lh)",  fontWeight: 400,                            margin: 0 },
+  typeBody:    { fontFamily: "var(--font-sans)",  fontSize: "var(--t-body-size)",    lineHeight: "var(--t-body-lh)",    fontWeight: 400,                            margin: 0 },
+  typeBodySm:  { fontFamily: "var(--font-sans)",  fontSize: "var(--t-bodysm-size)",  lineHeight: "var(--t-bodysm-lh)",  fontWeight: 400,                            margin: 0 },
+  typeLabel:   { fontFamily: "var(--font-sans)",  fontSize: "var(--t-label-size)",   lineHeight: "var(--t-label-lh)",   fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", margin: 0 },
+  typeCaption: { fontFamily: "var(--font-sans)",  fontSize: "var(--t-caption-size)", lineHeight: "var(--t-caption-lh)", fontWeight: 600,                            margin: 0 },
 };

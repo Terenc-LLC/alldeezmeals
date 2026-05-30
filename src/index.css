@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  /* ---- Colors (existing — source of truth) ---- */
   --c-primary: #2B8C7E;
   --c-primary-hover: #236F64;
   --c-accent: #F2856B;
@@ -22,6 +23,50 @@
   --c-danger-bg: #F6E7E4;
   --c-warning: #8A6D3B;
   --c-warning-bg: #F3EAD6;
+
+  /* ---- Colors (new) ---- */
+  --c-primary-tint: #E4F0EC;
+  --c-shadow: 26 58 52;
+
+  /* ---- Typography ---- */
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-sans: 'Nunito Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --t-display-size: 28px; --t-display-lh: 32px; --t-display-w: 600;
+  --t-h1-size: 22px;      --t-h1-lh: 28px;      --t-h1-w: 600;
+  --t-h2-size: 19px;      --t-h2-lh: 25px;      --t-h2-w: 600;
+  --t-h3-size: 16px;      --t-h3-lh: 22px;      --t-h3-w: 600;
+  --t-bodylg-size: 16px;  --t-bodylg-lh: 24px;  --t-bodylg-w: 400;
+  --t-body-size: 15px;    --t-body-lh: 22px;     --t-body-w: 400;
+  --t-bodysm-size: 13px;  --t-bodysm-lh: 18px;  --t-bodysm-w: 400;
+  --t-label-size: 12px;   --t-label-lh: 16px;    --t-label-w: 700; --t-label-tracking: 0.05em;
+  --t-caption-size: 11px; --t-caption-lh: 14px;  --t-caption-w: 600;
+
+  /* ---- Spacing (4px base) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* ---- Radius ---- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* ---- Elevation ---- */
+  --elev-0: none;
+  --elev-1: 0 1px 2px rgba(var(--c-shadow) / 0.06), 0 1px 3px rgba(var(--c-shadow) / 0.05);
+  --elev-2: 0 4px 14px rgba(var(--c-shadow) / 0.09), 0 2px 6px rgba(var(--c-shadow) / 0.05);
+  --elev-primary: 0 2px 8px rgba(43, 140, 126, 0.28);
+
+  /* ---- Interaction ---- */
+  --tap-min: 44px;
+  --focus-ring: 0 0 0 3px rgba(43, 140, 126, 0.30);
 }
 
 html, body, #root { height: 100%; margin: 0; }
