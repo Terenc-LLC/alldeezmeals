@@ -775,12 +775,12 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       </footer>
     </div>
     {acceptedMealsForPrint.length > 0 && (
-    <div className="print-only" style={{ background: isMobile ? "var(--c-bg)" : "var(--c-print-mat)", padding: isMobile ? "var(--space-5)" : "var(--space-7)" }}>
+    <div className="print-only" style={{ background: isMobile ? "var(--c-bg)" : "var(--c-print-mat)", padding: isMobile ? "var(--space-5)" : "var(--space-7)", overflowX: "hidden" }}>
       {acceptedMealsForPrint.map(({ day, date, meal }, pi) => (
         <div key={pi} className="recipe-page" style={{ marginBottom: pi < acceptedMealsForPrint.length - 1 ? "var(--space-7)" : 0 }}>
           <div className="print-sheet" style={{ background: "#fff", maxWidth: 640, margin: "0 auto", padding: isMobile ? "var(--space-6)" : "56px 64px", boxShadow: isMobile ? "none" : "0 8px 30px rgba(26,58,52,.18)", border: isMobile ? "1px solid var(--c-border)" : "none", borderRadius: isMobile ? "var(--radius-md)" : 4, color: "#1A3A34", boxSizing: "border-box" as const }}>
             {/* masthead */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: "2px solid #1A3A34", paddingBottom: "var(--space-2)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap" as const, justifyContent: "space-between", alignItems: "baseline", gap: "var(--space-2)", borderBottom: "2px solid #1A3A34", paddingBottom: "var(--space-2)" }}>
               <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-primary)" }}>ALLDEEZMeals</span>
               <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>{weekdayLabel(date)} · {meal.data.cuisine}</span>
             </div>
@@ -2742,7 +2742,7 @@ const s: Record<string, any> = {
   ghostBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", background: "transparent", color: "var(--c-text-muted)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)", padding: "0 var(--space-4)", minHeight: "var(--tap-min)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer" },
   iconBtn: { background: "transparent", border: "none", cursor: "pointer", padding: 5, borderRadius: 6, display: "grid", placeItems: "center" },
   signOutBtn: { background: "transparent", border: "1px solid var(--c-border)", borderRadius: 8, padding: 7, cursor: "pointer", color: "var(--c-text-muted)", display: "grid", placeItems: "center", flexShrink: 0 },
-  mealCard: { background: "var(--c-surface)", borderRadius: 13, padding: 16, border: "1px solid var(--c-border)" },
+  mealCard: { background: "var(--c-surface)", borderRadius: 13, padding: 16, border: "1px solid var(--c-border)", overflow: "hidden" },
   mealTop: { marginBottom: 8 },
   slotTag: { fontSize: 11.5, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase", letterSpacing: ".04em" },
   mealName: { fontFamily: serif, fontSize: 18, fontWeight: 600, margin: 0, color: "var(--c-text)" },
@@ -2751,7 +2751,7 @@ const s: Record<string, any> = {
   acceptedPill: { display: "inline-flex", alignItems: "center", gap: 4, background: "var(--c-primary)", color: "var(--c-on-primary)", fontSize: 11.5, fontWeight: 700, padding: "4px 9px", borderRadius: 20, whiteSpace: "nowrap" },
   reuseNote: { display: "flex", alignItems: "center", gap: 6, background: "var(--c-warning-bg)", border: "1px solid var(--c-warning-bg)", color: "var(--c-warning)", fontSize: 12.5, padding: "7px 11px", borderRadius: 8, marginTop: 10 },
   tagWrap: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 11 },
-  tag: { background: "var(--c-surface-2)", color: "var(--c-text-muted)", fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20 },
+  tag: { background: "var(--c-surface-2)", color: "var(--c-text-muted)", fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 20, overflowWrap: "break-word", maxWidth: "100%" },
   acceptBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none", borderRadius: 8, padding: "8px 15px", fontFamily: sans, fontWeight: 700, fontSize: 13, cursor: "pointer" },
   rejectBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--c-surface)", color: "var(--c-danger)", border: "1px solid var(--c-danger-bg)", borderRadius: 8, padding: "8px 14px", fontFamily: sans, fontWeight: 700, fontSize: 13, cursor: "pointer" },
   thumb: { display: "grid", placeItems: "center", width: 34, height: 34, background: "var(--c-surface)", border: "1px solid", borderRadius: 8, cursor: "pointer" },
