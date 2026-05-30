@@ -2594,7 +2594,6 @@ const s: Record<string, any> = {
   timeLine: { fontSize: 12, color: "var(--c-text-muted)", margin: "8px 0 0" },
   stepsList: { margin: "10px 0 0", paddingLeft: 20, display: "grid", gap: 4 },
   stepItem: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.5 },
-  printBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", background: "var(--c-surface)", color: "var(--c-primary)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)", padding: "0 var(--space-4)", minHeight: "var(--tap-min)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer" },
   // Foundation type steps — PR1 tokens; consumed by PR2–PR5
   typeDisplay: { fontFamily: "var(--font-serif)", fontSize: "var(--t-display-size)", lineHeight: "var(--t-display-lh)", fontWeight: 600, letterSpacing: "-0.015em", margin: 0 },
   typeH1:      { fontFamily: "var(--font-serif)", fontSize: "var(--t-h1-size)",      lineHeight: "var(--t-h1-lh)",      fontWeight: 600, letterSpacing: "-0.01em",  margin: 0 },
@@ -2605,10 +2604,4 @@ const s: Record<string, any> = {
   typeBodySm:  { fontFamily: "var(--font-sans)",  fontSize: "var(--t-bodysm-size)",  lineHeight: "var(--t-bodysm-lh)",  fontWeight: 400,                            margin: 0 },
   typeLabel:   { fontFamily: "var(--font-sans)",  fontSize: "var(--t-label-size)",   lineHeight: "var(--t-label-lh)",   fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", margin: 0 },
   typeCaption: { fontFamily: "var(--font-sans)",  fontSize: "var(--t-caption-size)", lineHeight: "var(--t-caption-lh)", fontWeight: 600,                            margin: 0 },
-  // Canonical button variants (PR2) — pair with className="btn-primary/secondary/ghost" for hover/focus/active states
-  btnPrimary:   { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", minHeight: "var(--tap-min)", padding: "0 var(--space-4)", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", background: "var(--c-primary)",  color: "var(--c-on-primary)", border: "none",                          boxShadow: "var(--elev-primary)" },
-  btnSecondary: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", minHeight: "var(--tap-min)", padding: "0 var(--space-4)", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", background: "var(--c-surface)",  color: "var(--c-primary)",    border: "1px solid var(--c-border)", boxShadow: "none" },
-  btnGhost:     { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", minHeight: "var(--tap-min)", padding: "0 var(--space-4)", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", background: "transparent",      color: "var(--c-text-muted)", border: "1px solid var(--c-border)", boxShadow: "none" },
-  btnSm:    { minHeight: "36px", padding: "0 var(--space-3)", fontSize: "var(--t-bodysm-size)", borderRadius: "var(--radius-sm)" },
-  btnBlock: { width: "100%", justifyContent: "center" },
 };
