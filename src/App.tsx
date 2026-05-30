@@ -1135,10 +1135,10 @@ function SetupView(p: any) {
         )}
       </div>
 
-      <button onClick={onGenerate} disabled={busy} style={{ ...s.primaryBtn, justifyContent: "center", padding: 14, fontSize: 15, opacity: busy ? 0.6 : 1 }}>
+      <button onClick={onGenerate} disabled={busy} className="btn-primary btn--block" style={{ opacity: busy ? 0.6 : 1 }}>
         {busy ? <><RefreshCw size={17} className="spin" /> Generating...</> : <><Sparkles size={17} /> Generate meal plan</>}
       </button>
-      <button onClick={onStartOver} disabled={busy} style={{ ...s.ghostBtn, justifyContent: "center", fontSize: 13, opacity: busy ? 0.5 : 1 }}>
+      <button onClick={onStartOver} disabled={busy} className="btn-ghost btn--block btn--sm" style={{ opacity: busy ? 0.5 : 1 }}>
         Start over
       </button>
     </div>
@@ -1154,7 +1154,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
     <div style={{ display: "grid", gap: 12 }}>
       {days.some((d: any) => meals[d.id]?.status === "accepted") && (
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button onClick={() => window.print()} style={s.printBtn}>Print recipes</button>
+          <button onClick={() => window.print()} className="btn-secondary btn--sm">Print recipes</button>
         </div>
       )}
       {days.map((day: any, i: number) => {
@@ -1318,9 +1318,9 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
       <div style={s.listToolbar}>
         <p style={s.cardSub}>{totalItems} items - {acceptedCount}/{slotCount} dinners + staples</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-          <button onClick={copy} style={s.primaryBtn}>{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copied!" : "Copy list"}</button>
-          <button onClick={copyForInstacartAI} style={s.ghostBtn}>{copiedCart ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copiedCart ? "Copied!" : "Copy for Instacart (AI)"}</button>
-          <button onClick={markOrdered} disabled={acceptedCount === 0 || ordering} style={{ ...s.ghostBtn, opacity: acceptedCount === 0 ? 0.4 : 1 }}>
+          <button onClick={copy} className="btn-primary">{copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? "Copied!" : "Copy list"}</button>
+          <button onClick={copyForInstacartAI} className="btn-secondary">{copiedCart ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copiedCart ? "Copied!" : "Copy for Instacart (AI)"}</button>
+          <button onClick={markOrdered} disabled={acceptedCount === 0 || ordering} className="btn-ghost">
             {ordering ? <RefreshCw size={16} className="spin" /> : <Archive size={16} />}
             {ordering ? "Archiving..." : "Mark ordered & start next week"}
           </button>
@@ -2560,8 +2560,8 @@ const s: Record<string, any> = {
   collapseBtn: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, color: "var(--c-text)", fontFamily: sans },
   input: { padding: "9px 10px", border: "1px solid var(--c-border)", borderRadius: 8, fontFamily: sans, fontSize: 13, color: "var(--c-text)", boxSizing: "border-box", background: "var(--c-surface)" },
   addBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", color: "var(--c-primary)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "7px 12px", fontFamily: sans, fontWeight: 700, fontSize: 12.5, cursor: "pointer" },
-  primaryBtn: { display: "inline-flex", alignItems: "center", gap: 7, background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none", borderRadius: 9, padding: "10px 16px", fontFamily: sans, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 2px 5px rgba(43,140,126,.25)" },
-  ghostBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "transparent", color: "var(--c-text-muted)", border: "1px solid var(--c-border)", borderRadius: 9, padding: "8px 13px", fontFamily: sans, fontWeight: 600, fontSize: 13, cursor: "pointer" },
+  primaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none", borderRadius: "var(--radius-md)", padding: "0 var(--space-4)", minHeight: "var(--tap-min)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", boxShadow: "var(--elev-primary)" },
+  ghostBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", background: "transparent", color: "var(--c-text-muted)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)", padding: "0 var(--space-4)", minHeight: "var(--tap-min)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer" },
   iconBtn: { background: "transparent", border: "none", cursor: "pointer", padding: 5, borderRadius: 6, display: "grid", placeItems: "center" },
   signOutBtn: { background: "transparent", border: "1px solid var(--c-border)", borderRadius: 8, padding: 7, cursor: "pointer", color: "var(--c-text-muted)", display: "grid", placeItems: "center", flexShrink: 0 },
   mealCard: { background: "var(--c-surface)", borderRadius: 13, padding: 16, border: "1px solid var(--c-border)" },
@@ -2594,7 +2594,7 @@ const s: Record<string, any> = {
   timeLine: { fontSize: 12, color: "var(--c-text-muted)", margin: "8px 0 0" },
   stepsList: { margin: "10px 0 0", paddingLeft: 20, display: "grid", gap: 4 },
   stepItem: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.5 },
-  printBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--c-surface)", color: "var(--c-primary)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px 14px", fontFamily: "'Nunito Sans', -apple-system, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer" },
+  printBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", background: "var(--c-surface)", color: "var(--c-primary)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)", padding: "0 var(--space-4)", minHeight: "var(--tap-min)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer" },
   // Foundation type steps — PR1 tokens; consumed by PR2–PR5
   typeDisplay: { fontFamily: "var(--font-serif)", fontSize: "var(--t-display-size)", lineHeight: "var(--t-display-lh)", fontWeight: 600, letterSpacing: "-0.015em", margin: 0 },
   typeH1:      { fontFamily: "var(--font-serif)", fontSize: "var(--t-h1-size)",      lineHeight: "var(--t-h1-lh)",      fontWeight: 600, letterSpacing: "-0.01em",  margin: 0 },
@@ -2605,4 +2605,10 @@ const s: Record<string, any> = {
   typeBodySm:  { fontFamily: "var(--font-sans)",  fontSize: "var(--t-bodysm-size)",  lineHeight: "var(--t-bodysm-lh)",  fontWeight: 400,                            margin: 0 },
   typeLabel:   { fontFamily: "var(--font-sans)",  fontSize: "var(--t-label-size)",   lineHeight: "var(--t-label-lh)",   fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", margin: 0 },
   typeCaption: { fontFamily: "var(--font-sans)",  fontSize: "var(--t-caption-size)", lineHeight: "var(--t-caption-lh)", fontWeight: 600,                            margin: 0 },
+  // Canonical button variants (PR2) — pair with className="btn-primary/secondary/ghost" for hover/focus/active states
+  btnPrimary:   { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", minHeight: "var(--tap-min)", padding: "0 var(--space-4)", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", background: "var(--c-primary)",  color: "var(--c-on-primary)", border: "none",                          boxShadow: "var(--elev-primary)" },
+  btnSecondary: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", minHeight: "var(--tap-min)", padding: "0 var(--space-4)", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", background: "var(--c-surface)",  color: "var(--c-primary)",    border: "1px solid var(--c-border)", boxShadow: "none" },
+  btnGhost:     { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", minHeight: "var(--tap-min)", padding: "0 var(--space-4)", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", background: "transparent",      color: "var(--c-text-muted)", border: "1px solid var(--c-border)", boxShadow: "none" },
+  btnSm:    { minHeight: "36px", padding: "0 var(--space-3)", fontSize: "var(--t-bodysm-size)", borderRadius: "var(--radius-sm)" },
+  btnBlock: { width: "100%", justifyContent: "center" },
 };

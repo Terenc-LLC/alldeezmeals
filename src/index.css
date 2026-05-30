@@ -73,6 +73,41 @@ html, body, #root { height: 100%; margin: 0; }
 html, body { overflow-x: hidden; }
 body { background: var(--c-bg); }
 
+/* === Button system (PR2) === */
+.btn-primary, .btn-secondary, .btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--space-2); min-height: var(--tap-min);
+  padding: 0 var(--space-4); border-radius: var(--radius-md);
+  font-family: var(--font-sans); font-size: var(--t-body-size); font-weight: 700;
+  cursor: pointer; text-decoration: none; white-space: nowrap; box-sizing: border-box;
+  transition: background 120ms, color 120ms, border-color 120ms, box-shadow 120ms, transform 80ms;
+}
+.btn-primary {
+  background: var(--c-primary); color: var(--c-on-primary);
+  border: 1px solid transparent; box-shadow: var(--elev-primary);
+}
+.btn-primary:hover  { background: var(--c-primary-hover); }
+.btn-primary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-secondary {
+  background: var(--c-surface); color: var(--c-primary);
+  border: 1px solid var(--c-border); box-shadow: none;
+}
+.btn-secondary:hover { background: var(--c-surface-2); border-color: var(--c-primary); }
+.btn-secondary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-ghost {
+  background: transparent; color: var(--c-text-muted);
+  border: 1px solid var(--c-border); box-shadow: none;
+}
+.btn-ghost:hover { background: var(--c-surface-2); color: var(--c-text); }
+.btn-ghost:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-primary:active, .btn-secondary:active, .btn-ghost:active { transform: translateY(1px); }
+.btn-primary:disabled, .btn-secondary:disabled, .btn-ghost:disabled,
+.btn-primary[disabled],  .btn-secondary[disabled],  .btn-ghost[disabled] {
+  opacity: .45; cursor: not-allowed; pointer-events: none; transform: none;
+}
+.btn--sm   { min-height: 36px; padding: 0 var(--space-3); font-size: var(--t-bodysm-size); border-radius: var(--radius-sm); }
+.btn--block { width: 100%; }
+
 @media (max-width: 479px) {
   .tab-label { display: none; }
 }
