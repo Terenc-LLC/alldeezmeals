@@ -353,8 +353,52 @@ session (status, decisions, next steps).
 - `tsc --noEmit && vite build` pass (462 kB JS / 7.4 kB CSS, 0 TS errors).
 - **PR2–PR5 are the next steps** in the design refresh series.
 
+## Status (TER-253 — May 2026)
+- Design refresh PR5 — printable recipe restyle (final PR in Phase 1 series).
+- **`.print-only` section** is now `display:block` (visible on-screen as a preview when accepted
+  meals exist) instead of `display:none`. Conditional render: section only mounts when
+  `acceptedMealsForPrint.length > 0`.
+- **Each `.recipe-page`** contains a `.print-sheet` paper div. On desktop: floats on `#d9d4ca`
+  mat (`--c-print-mat` token added to `src/index.css`) with `0 8px 30px rgba(26,58,52,.18)`
+  elevation. On mobile: paper on `--c-bg` with `1px --c-border` border.
+- **Paper layout** per spec:
+  - Masthead: 2px `#1A3A34` bottom rule; "ALLDEEZMeals" (label, `--c-primary`) left; "Weekday
+    · Cuisine" (caption, muted) right.
+  - h1 title (Fraunces 26px, letter-spacing −0.01em).
+  - Meta strip: Prep / Cook / Serves / Per serving / Effort; bottom `1px` rule.
+  - Body: Ingredients `ul` + Instructions `ol`; desktop 2-col `1fr 1.4fr`; mobile stacked.
+  - Footer: print date left; kcal source right.
+- **`@media print`**: mat/padding removed from `.print-only`; `.print-sheet` loses
+  shadow/border/radius; page-break after each `.recipe-page`.
+- **Dead code cleanup**: removed orphaned `s.howto`, `s.howtoTitle`, `s.howtoList` (how-to
+  block was removed in PR4; no remaining JSX references).
+- PR #41 open: https://github.com/Terenc-LLC/alldeezmeals/pull/41
+  Commit: `fb72533`. Awaiting Chris review/merge.
+- `tsc --noEmit && vite build` pass (474.45 kB JS / 9.30 kB CSS, 0 TS errors).
+
+## Status (TER-254 — May 2026)
+- Bug fix: mobile horizontal scroll on iPhone 15 Pro (390px viewport).
+- **Root causes identified and fixed** (4 targeted changes in `src/App.tsx`):
+  1. `s.mealCard` lacked `overflow: hidden` — unlike `s.rcCard` (RecipeCard), PlanView
+     meal cards had no containment, so any wide AI-generated content (long ingredient names,
+     long purchase strings) could propagate scroll to the body. Added `overflow: "hidden"`.
+  2. `s.tag` had no word-break constraint — long AI-generated ingredient + purchase-size
+     strings in PlanView ("Boneless skinless chicken breast — 2 cups · buy: 1 × 2 lb bag")
+     can exceed the card content width (332px) when the browser doesn't shrink the flex item
+     below its max-content. Added `overflowWrap: "break-word"` + `maxWidth: "100%"`.
+  3. Print-sheet masthead (`justifyContent: space-between`, no `flexWrap`) — at viewport
+     widths 481–640 px (non-mobile, but narrower than the `maxWidth: 640` sheet cap), the
+     sheet's content area drops to ~289 px, where long weekday+cuisine combos can overflow
+     the masthead row. Added `flexWrap: "wrap"` + `gap: var(--space-2)` to the masthead div.
+  4. `.print-only` outer wrapper (PR5 change) had no horizontal overflow containment — the
+     wrapper renders outside the `s.shell` (no `maxWidth: 780`) and sits at root DOM level.
+     Added `overflowX: "hidden"` to bound the section.
+- The existing `html, body { overflow-x: hidden }` backstop in `src/index.css` is preserved.
+- `tsc --noEmit && vite build` pass (474.57 kB JS / 9.30 kB CSS, 0 TS errors).
+- PR #42 open: [link TBD — will be added after push]
+
 ## Backlog / next
-- TER-249 PR3–PR5: component-level design refresh (recipe card, grocery list, printable recipe, planner).
+- TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
 - TER-198: Seed catalog with ALDI core-range items.
