@@ -264,6 +264,24 @@ session (status, decisions, next steps).
   the line-item field model, supported units, and normalization rules.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-250 — May 2026)
+- Design refresh PR2 — button system.
+- **`src/index.css`**: added `.btn-primary`, `.btn-secondary`, `.btn-ghost` CSS classes with full
+  spec: 44px min-height, `var(--radius-md)`, PR1 tokens for colors/shadow, hover/focus-visible/
+  active (`translateY(1px)`)/disabled states. `.btn--sm` modifier (36px) and `.btn--block`
+  modifier. All consuming PR1 tokens; no existing `--c-*` colors changed.
+- **`src/App.tsx` `s` object**: updated `primaryBtn`, `ghostBtn`, `printBtn` to PR1 token values;
+  added canonical `btnPrimary`, `btnSecondary`, `btnGhost`, `btnSm`, `btnBlock` entries for
+  PR3–PR5 inline-style use.
+- Applied CSS classes to in-scope screen buttons: SetupView generate (btn-primary btn--block),
+  start over (btn-ghost btn--block btn--sm); PlanView print (btn-secondary btn--sm); ListView
+  Copy list (btn-primary), Instacart AI (btn-secondary — upgraded from ghost per spec), Mark
+  ordered (btn-ghost). Planner action buttons untouched (out of Phase 1 scope).
+- PR #38 open: https://github.com/Terenc-LLC/alldeezmeals/pull/38
+  Commit: `f660dcf72c04b6c16dc247ae113a4322aa3ddc99`. Awaiting Chris review/merge.
+- `tsc --noEmit && vite build` pass (462.69 kB JS / 9.05 kB CSS, 0 TS errors).
+- **PR3–PR5 are the next steps** in the design refresh series.
+
 ## Status (TER-249 — May 2026)
 - Design refresh PR1 — foundation tokens.
 - **`src/index.css` `:root`**: added all Phase 1 design-system tokens. Existing `--c-*`
@@ -284,7 +302,7 @@ session (status, decisions, next steps).
 - **PR2–PR5 are the next steps** in the design refresh series.
 
 ## Backlog / next
-- TER-249 PR2–PR5: component-level design refresh (recipe card, grocery list, printable recipe, planner).
+- TER-249 PR3–PR5: component-level design refresh (recipe card, grocery list, printable recipe, planner).
 - TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
 - TER-198: Seed catalog with ALDI core-range items.
