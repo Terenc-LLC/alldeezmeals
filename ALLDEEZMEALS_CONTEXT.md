@@ -477,9 +477,19 @@ session (status, decisions, next steps).
 - `ThisWeekView` empty-state hint copy updated to match new button label.
 - `tsc --noEmit && vite build` pass (484.30 kB JS / 9.33 kB CSS, 0 TS errors).
 
+## Status (TER-292 — June 2026)
+- Nomenclature cleanup: user-facing "rotation/Saved" labels renamed to **"Recipe Box"** everywhere. Internal `rotation` / `setRotation` / `addToRotation` identifiers and the `rotation` persistence key in `user_state` are **unchanged** — renaming the key would orphan every user's saved recipes.
+- **Files changed**: `src/App.tsx` (tab label, RotationView heading + empty-state, PlanView action button title + label, ThisWeekView row ★ title, RecipeCard footer button, SetupView pinned-recipe tooltips, Back button); `public/help.html` (5-minute run step, Meals ★ entry, Recipe Box section heading, tidy copy, new dual-★ Tips entry); `ALLDEEZMEALS_CONTEXT.md` (this entry + terminology update below).
+- **Dual-★ convention** (documented; visual distinction unchanged):
+  - **★ on a meal/recipe** (primary green — Meals / This Week / RecipeCard) = **Save to Recipe Box** — the saved-recipes pool, pinnable to a future day (TER-228).
+  - **★ on a grocery row** (amber — ListView "Always have" panel) = **Always have** — a staple kept stocked, excluded from every weekly list (TER-182). Not renamed.
+- `tsc --noEmit && vite build` pass.
+
+## Terminology note
+The permanent favorites pool is called **Recipe Box** in the UI. Internally, code identifiers remain `rotation` / `setRotation` / `addToRotation`; the Supabase `user_state` JSON key is `rotation`. Do not rename these internal identifiers.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
-- TER-292: Nomenclature cleanup — rename rotation→Recipe Box.
 - TER-288: Order History view (surfaces archived orders from the `orders` table).
 - TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
