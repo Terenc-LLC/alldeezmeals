@@ -432,6 +432,29 @@ session (status, decisions, next steps).
   guard in Supabase load per TER-189 pattern).
 - `tsc --noEmit && vite build` pass (478.59 kB JS / 9.30 kB CSS, 0 TS errors).
 
+## Status (TER-294 — June 2026)
+- In-app feedback form → Supabase `feedback` table.
+- **Migration** `supabase/migrations/20260601_007_feedback.sql`: creates `feedback` table
+  `{ id uuid pk, user_id uuid default auth.uid() references auth.users, email text, category text,
+  message text not null, app_context text, created_at timestamptz }`. RLS: INSERT-for-self
+  (`user_id = auth.uid()`, authenticated only); restrictive `approved users only` policy added
+  explicitly (new tables must opt in — migration 006 only patched tables that existed at that time).
+  No SELECT policy for regular users; reads happen in the Supabase dashboard.
+  **Must be run manually in the Supabase SQL editor before the feature works.**
+- **Header button**: `MessageSquare` icon-button (lucide) added next to `HelpCircle` in the
+  authenticated header, styled with `s.signOutBtn`. Toggles `feedbackOpen` state.
+- **`FeedbackModal` component**: fixed-overlay modal (z-index 1000, click-outside to dismiss).
+  Backdrop-click closes; X button in header also closes. Contains: optional `category` select
+  (Bug / Idea / Other) + required `message` textarea + Submit / Cancel buttons. Submit disabled
+  and visually muted when message is empty.
+- **Submit**: `supabase.from("feedback").insert({ message, category, email, app_context: tab })`
+  via anon key + user JWT — no service-role key, no serverless endpoint. On success: "Thanks —
+  got it!" confirmation shown, modal auto-closes after 1.8 s. On error: message preserved,
+  non-blocking error shown inline; user can retry.
+- No new `:root` tokens or CSS class additions; uses existing `s` object + `.btn-primary` /
+  `.btn-ghost` classes. Verified at 390px and desktop.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-283: Meal review wizard (will call `commitCurrentWeek()` to replace the temp trigger).
