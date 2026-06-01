@@ -4,6 +4,7 @@ import {
   Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
+  MessageSquare,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
@@ -159,6 +160,7 @@ export default function App() {
 
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("setup");
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   // TER-236: safety reset — if admin flips off while Catalog is open, redirect to setup.
   useEffect(() => { if (!isAdmin && tab === "catalog") setTab("setup"); }, [isAdmin, tab]);
 
@@ -726,6 +728,9 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             <a href="/help.html" style={{ ...s.signOutBtn, textDecoration: "none", display: "inline-flex", alignItems: "center" }} title="Help" aria-label="Help">
               <HelpCircle size={15} />
             </a>
+            <button onClick={() => setFeedbackOpen(true)} style={s.signOutBtn} title="Send feedback" aria-label="Send feedback">
+              <MessageSquare size={15} />
+            </button>
             <button onClick={handleSignOut} style={s.signOutBtn} title="Sign out">
               <LogOut size={15} />
             </button>
@@ -859,7 +864,97 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       ))}
     </div>
     )}
+    {feedbackOpen && <FeedbackModal session={session} tab={tab} onClose={() => setFeedbackOpen(false)} />}
     </>
+  );
+}
+
+/* ============================ Feedback modal (TER-294) ============================ */
+function FeedbackModal({ session, tab, onClose }: { session: any; tab: string; onClose: () => void }) {
+  const [message, setMessage] = useState("");
+  const [category, setCategory] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const canSubmit = message.trim().length > 0 && !submitting;
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    const { error: err } = await supabase.from("feedback").insert({
+      message: message.trim(),
+      category: category || null,
+      email: session?.user?.email ?? null,
+      app_context: tab,
+    });
+    setSubmitting(false);
+    if (err) {
+      setError(err.message);
+    } else {
+      setDone(true);
+      setTimeout(onClose, 1800);
+    }
+  };
+
+  const sans = "'Nunito Sans', -apple-system, sans-serif";
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "var(--c-surface)", borderRadius: 14, padding: 20, width: "100%", maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,.25)", display: "flex", flexDirection: "column", gap: 14 }}>
+        {done ? (
+          <div style={{ textAlign: "center" as const, padding: "16px 0" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
+            <p style={{ fontFamily: sans, fontWeight: 700, fontSize: 15, color: "var(--c-primary)", margin: 0 }}>Thanks — got it!</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 17, fontWeight: 600, margin: 0, color: "var(--c-text)" }}>Send feedback</h2>
+              <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--c-text-muted)", padding: 4, display: "grid", placeItems: "center" }} aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              style={{ padding: "9px 10px", border: "1px solid var(--c-border)", borderRadius: 8, fontFamily: sans, fontSize: 13, color: "var(--c-text)", background: "var(--c-surface)" }}
+            >
+              <option value="">Category (optional)</option>
+              <option value="Bug">Bug</option>
+              <option value="Idea">Idea</option>
+              <option value="Other">Other</option>
+            </select>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Tell us what you think, or describe a bug…"
+              rows={4}
+              style={{ padding: "9px 10px", border: "1px solid var(--c-border)", borderRadius: 8, fontFamily: sans, fontSize: 13, color: "var(--c-text)", background: "var(--c-surface)", resize: "vertical", lineHeight: 1.5 }}
+            />
+            {error && (
+              <p style={{ color: "var(--c-danger)", fontSize: 12.5, margin: 0, display: "flex", alignItems: "center", gap: 5 }}>
+                <AlertCircle size={13} /> {error}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={submit}
+                disabled={!canSubmit}
+                className="btn-primary"
+                style={{ flex: 1, opacity: canSubmit ? 1 : 0.5 }}
+              >
+                {submitting ? <><RefreshCw size={15} className="spin" /> Sending…</> : "Submit"}
+              </button>
+              <button onClick={onClose} className="btn-ghost" style={{ flex: "0 0 auto" }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
