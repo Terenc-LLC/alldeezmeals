@@ -495,6 +495,12 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - No state shape change; no DB migration; plan generation + headcount scaling unaffected.
 - `tsc --noEmit && vite build` pass (484.50 kB JS / 9.33 kB CSS, 0 TS errors).
 
+## Status (TER-299 — June 2026)
+- Bug fix: iOS Safari zooms on input focus (sub-16px fields) → horizontal overflow when keyboard opens.
+- **Root cause**: iOS Safari auto-zooms the viewport when a focused `input`/`select`/`textarea` has `font-size < 16px`. All form fields use tokens below the 16px threshold (`--t-body-size: 15px`, `--t-bodysm-size: 13px`, `--t-label-size: 12px`). The existing `overflow-x: hidden` from TER-254 hides document overflow but cannot stop iOS focus-zoom (a visual viewport zoom — different mechanism).
+- **Fix**: one new `@media (max-width: 767px)` rule appended to `src/index.css` clamps `input, select, textarea` to `font-size: 16px` on mobile. 16px is the iOS zoom threshold; at or above it, Safari does not zoom on focus. Desktop sizing unchanged; no viewport meta change.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-288: Order History view (surfaces archived orders from the `orders` table).
