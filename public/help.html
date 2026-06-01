@@ -56,7 +56,7 @@
         <li><strong>Sign in.</strong> Enter your email; you'll get a one-time link in your inbox. Click it. (No passwords — if the link expires, ask for another.)</li>
         <li><strong>Set up the week</strong> on the <strong>Setup</strong> tab. Let it find your location (so it can weather-adjust suggestions), set the start date, how many days, and how many people per day. Tweak cuisine, temp, and effort per day if you want to steer it.</li>
         <li><strong>Generate</strong> on the <strong>Meals</strong> tab. Each day gets a dinner suggestion with ingredients, calories, and a difficulty rating.</li>
-        <li><strong>Accept / reject / swap</strong> suggestions until each day feels right. Tap ★ on a meal to save it to your rotation.</li>
+        <li><strong>Accept / reject / swap</strong> suggestions until each day feels right. Tap ★ on a meal to save it to your Recipe Box.</li>
         <li><strong>Review the list</strong> on the <strong>List</strong> tab. Add any weekly staples (bread, milk…), mark anything you already have at home so it drops off, then…</li>
         <li><strong>Send it to Instacart</strong> by tapping <strong>Copy for Instacart (AI)</strong> and pasting into Claude or ChatGPT. (Detailed walkthrough below — this is the most novel part.)</li>
       </ol>
@@ -82,7 +82,7 @@
         <li><strong>Reject</strong> — asks for a different option for that day.</li>
         <li><strong>Swap</strong> — pick a direction (e.g. "lighter," "different protein") and regenerate.</li>
         <li><strong>👍 / 👎</strong> — teaches the app your taste. Liked dishes bias future generation toward similar styles; disliked ones are avoided.</li>
-        <li><strong>★ Save to rotation</strong> — adds to your Saved tab so you can pin it to a future day.</li>
+        <li><strong>★ Save to Recipe Box</strong> — adds to your Recipe Box so you can pin it to a future day.</li>
       </ul>
       <p>A day with <strong>📌 Pinned</strong> uses a recipe you locked from the Setup tab and skips generation.</p>
 
@@ -101,12 +101,12 @@
         <li><strong>Mark as ordered</strong> — archive the current week. Your Setup, staples, preferences, and pinned recipes are kept; meals and the list reset so you can plan next week.</li>
       </ul>
 
-      <h3>Saved — your recipe rotation</h3>
+      <h3>Recipe Box — your saved recipes</h3>
       <p>The recipes you've starred, plus any you've hand-entered yourself. From here you can:</p>
       <ul>
         <li><strong>Pin a recipe to a day</strong> (do this in Setup) — that day uses the saved recipe instead of generating, scaled to the day's headcount.</li>
         <li><strong>Add a recipe manually</strong> with your own ingredients, servings, and steps.</li>
-        <li><strong>Like / dislike / remove</strong> to keep the rotation tidy.</li>
+        <li><strong>Like / dislike / remove</strong> to keep the Recipe Box tidy.</li>
       </ul>
 
       <h3>Receipt — close the price loop</h3>
@@ -172,6 +172,7 @@ the cart, give me the link so I can pick my store and check out.
 
       <h2>Tips &amp; gotchas</h2>
       <ul>
+        <li><strong>Two different ★ buttons.</strong> The app has two unrelated star actions — don't confuse them. <strong>★ on a meal</strong> (primary green, in Meals / This Week / the recipe card) = Save to Recipe Box — adds the recipe to your saved pool so you can pin it to a future day. <strong>★ on a grocery row</strong> (amber, in the List tab) = Always have — marks a staple you always keep stocked so it's excluded from every week's list. They're distinguished by color and context; the grocery ★ is never renamed.</li>
         <li><strong>The AI suggestions are estimates.</strong> Calorie counts come from public databases and are approximate. Price totals on the List tab are estimates from past receipts — useful for sizing, not for budgeting to the dollar.</li>
         <li><strong>Verify allergens yourself.</strong> AI-generated recipes can omit allergens or cross-contamination risk. Always read product labels if you or anyone you cook for has restrictions.</li>
         <li><strong>Magic-link sign-in.</strong> No password to remember. Links expire after a short window; if yours is stale, request another from the sign-in screen.</li>

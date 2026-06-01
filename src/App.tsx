@@ -743,7 +743,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <TabBtn active={tab === "plan"} onClick={() => setTab("plan")} icon={<Sparkles size={15} />} label={`Meals (${acceptedCount}/${days.length})`} />
         <TabBtn active={tab === "thisweek"} onClick={() => setTab("thisweek")} icon={<CalendarDays size={15} />} label="This Week" />
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`List (${totalItems})`} />
-        <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Saved (${rotation.length})`} />
+        <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Recipe Box (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
         {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Archive size={15} />} label="Catalog" />}
       </nav>
@@ -1222,9 +1222,9 @@ function SetupView(p: any) {
                     }}
                     style={{ ...s.input, flex: 1 }}
                     disabled={rotation.length === 0}
-                    title={rotation.length === 0 ? "Save a recipe to your rotation first" : ""}
+                    title={rotation.length === 0 ? "Save a recipe to your Recipe Box first" : ""}
                   >
-                    <option value="">{rotation.length === 0 ? "Save a recipe first to pin" : "None (generate)"}</option>
+                    <option value="">{rotation.length === 0 ? "Save a recipe to Recipe Box first" : "None (generate)"}</option>
                     {rotation.map((r: any) => <option key={r.name} value={r.name}>{r.name}</option>)}
                   </select>
                   {day.pinnedRecipe && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, whiteSpace: "nowrap" as const }}>📌 Pinned</span>}
@@ -1410,8 +1410,8 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                           style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
                           title="Dislike (avoid + swap)"
                         ><ThumbsDown size={15} /></button>
-                        <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to rotation">
-                          <Star size={14} /> Rotation
+                        <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to Recipe Box">
+                          <Star size={14} /> Recipe Box
                         </button>
                       </div>
                     )}
@@ -1906,7 +1906,7 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid 
     return (
       <div>
         <button className="btn-ghost btn--sm" style={{ marginBottom: "var(--space-4)" }} onClick={() => setSelectedIdx(null)}>
-          ← Back to saved recipes
+          ← Back to Recipe Box
         </button>
         <RecipeCard
           meal={rotation[selectedIdx]}
@@ -1920,11 +1920,11 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid 
     <div style={{ display: "grid", gap: 16 }}>
       <div style={s.card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={s.cardTitle}>Rotation <span style={s.cardSub}>- saved favorites the planner leans toward</span></h3>
+          <h3 style={s.cardTitle}>Recipe Box <span style={s.cardSub}>- saved favorites the planner leans toward</span></h3>
           <button onClick={() => setShowForm(v => !v)} style={s.addBtn}><Plus size={14} /> Add recipe</button>
         </div>
         {rotation.length === 0 && !showForm
-          ? <p style={{ ...s.empty, marginTop: 8 }}>Tap "Rotation" on a meal you love to save it here.</p>
+          ? <p style={{ ...s.empty, marginTop: 8 }}>Tap "Recipe Box" on a meal you love to save it here.</p>
           : rotation.length > 0 && (
             <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
               {rotation.map((r: any, i: number) => (
@@ -2041,7 +2041,7 @@ function ThisWeekView({ currentWeek, liked, setLiked, avoid, setAvoid, rotation,
                   <button
                     onClick={() => addToRotationLocal(entry.meal?.data)}
                     style={s.rotateBtn}
-                    title="Save to rotation"
+                    title="Save to Recipe Box"
                   ><Star size={14} /></button>
                 </div>
               </div>
@@ -3004,7 +3004,7 @@ function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, is
             ><ThumbsDown size={15} /></button>
           )}
           <button className="btn-secondary" style={{ flex: 1 }} onClick={onSaveRotation}>
-            <Star size={16} /> Save to rotation
+            <Star size={16} /> Save to Recipe Box
           </button>
           <button className="btn-ghost" aria-label="Print" onClick={() => window.print()} style={{ padding: "0 var(--space-4)" }}>
             <Printer size={16} />
