@@ -769,7 +769,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
             onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
             liked={liked} onGenerate={generateAll}
-            onCommitWeek={commitCurrentWeek} acceptedCount={acceptedCount}
+            onAllAccepted={() => { commitCurrentWeek(); setTab("thisweek"); }} acceptedCount={acceptedCount}
           />
         )}
         {tab === "thisweek" && (
@@ -1276,100 +1276,187 @@ function SetupView(p: any) {
   );
 }
 
-/* ============================ Plan ============================ */
-function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onCommitWeek, acceptedCount }: any) {
+/* ============================ Plan — TOC wizard (TER-283) ============================ */
+function TocStatusPill({ m, isPinned }: { m: any; isPinned: boolean }) {
+  const base: any = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0 };
+  if (isPinned) return <span style={{ ...base, background: "var(--c-primary)", color: "var(--c-on-primary)" }}>📌 Pinned</span>;
+  if (!m) return <span style={{ ...base, background: "var(--c-surface-2)", color: "var(--c-text-muted)" }}>Pending</span>;
+  if (m.status === "loading") return <span style={{ ...base, background: "var(--c-warning-bg)", color: "var(--c-warning)" }}>Generating…</span>;
+  if (m.status === "error") return <span style={{ ...base, background: "var(--c-danger-bg)", color: "var(--c-danger)" }}>Error</span>;
+  if (m.status === "accepted") return <span style={{ ...base, background: "var(--c-primary)", color: "var(--c-on-primary)" }}><Check size={11} /> Accepted</span>;
+  return <span style={{ ...base, background: "var(--c-accent)", color: "var(--c-pill-text)" }}>Review</span>;
+}
+
+function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onAllAccepted, acceptedCount }: any) {
+  const [expandedId, setExpandedId] = useState<string | null>(() =>
+    days.find((d: any) => meals[d.id])?.id ?? days[0]?.id ?? null
+  );
+
   if (!days.some((d: any) => meals[d.id])) {
-    return <div style={s.card}><p style={s.empty}>No meals yet.</p><button onClick={onGenerate} disabled={busy} style={{ ...s.primaryBtn, marginTop: 12 }}><Sparkles size={16} /> Generate meal plan</button></div>;
+    return (
+      <div style={s.card}>
+        <p style={s.empty}>No meals yet.</p>
+        <button onClick={onGenerate} disabled={busy} className="btn-primary" style={{ marginTop: 12 }}>
+          <Sparkles size={16} /> Generate meal plan
+        </button>
+      </div>
+    );
   }
+
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {acceptedCount > 0 && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={onCommitWeek} className="btn-secondary btn--sm">
-            <CalendarDays size={14} /> Save this week
-          </button>
-          <button onClick={() => window.print()} className="btn-ghost btn--sm">Print recipes</button>
-        </div>
-      )}
+    <div style={{ display: "grid", gap: 4 }}>
       {days.map((day: any, i: number) => {
-        const m = meals[day.id]; const date = dateFor(i); const fx = forecast[date]; const w = fx ? wx(fx.code) : null;
+        const m = meals[day.id];
+        const date = dateFor(i);
+        const fx = forecast[date];
+        const w = fx ? wx(fx.code) : null;
+        const isExpanded = expandedId === day.id;
         const isLiked = m?.data && liked.includes(m.data.name);
         const isPinned = !!day.pinnedRecipe;
+
         return (
-          <div key={day.id} style={s.mealCard}>
-            <div style={s.mealTop}>
-              <span style={s.slotTag}>{weekdayLabel(date)} - {day.people} ppl{fx ? ` - ${w!.e} ${fx.hi}F` : ""}</span>
-              {isPinned && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, marginLeft: 8 }}>📌 Pinned</span>}
-            </div>
-            {!m && <p style={s.empty}>Not generated.</p>}
-            {m?.status === "loading" && <p style={{ ...s.empty, display: "flex", gap: 8, alignItems: "center" }}><RefreshCw size={15} className="spin" /> Thinking up a dish...</p>}
-            {m?.status === "error" && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: "var(--c-danger)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><AlertCircle size={15} /> {m.error}</span>
-                <button onClick={() => onReject(day, i)} style={s.ghostBtn}><RefreshCw size={14} /> Retry</button>
+          <div key={day.id} style={{ ...s.tocRow, ...(isExpanded ? s.tocRowActive : {}) }}>
+            {/* Compact TOC row — always visible */}
+            <button
+              onClick={() => setExpandedId(isExpanded ? null : day.id)}
+              style={s.tocSummary}
+              aria-expanded={isExpanded}
+            >
+              <div style={s.tocLeft}>
+                <span style={s.tocDate}>
+                  {weekdayLabel(date)}{" · "}{day.people} ppl{fx ? ` · ${w!.e} ${fx.hi}F` : ""}
+                </span>
+                <span style={s.tocMealName}>
+                  {m?.data?.name ?? (m?.status === "loading" ? "Generating…" : "Not yet generated")}
+                </span>
               </div>
-            )}
-            {m?.data && (m.status === "ready" || m.status === "accepted") && (
-              <>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <h3 style={s.mealName}>{m.data.name}</h3>
-                    <p style={s.mealDesc}>{m.data.cuisine ? <span style={s.cuisineTag}>{m.data.cuisine}</span> : null} {m.data.description}</p>
-                  </div>
-                  {m.status === "accepted" && !isPinned && <span style={s.acceptedPill}><Check size={13} /> Accepted</span>}
-                  {isPinned && <span style={s.acceptedPill}>📌 Pinned</span>}
-                </div>
-                {m.data.reuseNote && <div style={s.reuseNote}><Repeat size={13} /> {m.data.reuseNote}</div>}
-                {(m.data.prepMinutes != null || m.data.cookMinutes != null) && (
-                  <div style={s.timeLine}>
-                    {m.data.prepMinutes != null && `Prep: ${m.data.prepMinutes} min`}
-                    {m.data.prepMinutes != null && m.data.cookMinutes != null && " · "}
-                    {m.data.cookMinutes != null && `Cook: ${m.data.cookMinutes} min`}
-                    {" · "}Serves: {m.data.servings}
-                  </div>
-                )}
-                {m.kcalInfo && <KcalBadge kcalPerServing={m.kcalInfo.kcalPerServing} tier={m.kcalInfo.tier} />}
-                {m.data.difficulty != null && <DifficultyBadge difficulty={m.data.difficulty} />}
-                <div style={s.tagWrap}>
-                  {m.data.ingredients.map((ing: any, idx: number) => {
-                    const rStr = fmtRecipeQty(ing);
-                    const pStr = ing.purchaseSize || "";
-                    const showBuyNote = pStr && pStr !== rStr;
-                    return (
-                      <span key={idx} style={s.tag}>
-                        {ing.name}{rStr ? ` — ${rStr}` : ""}
-                        {showBuyNote && <span style={{ fontSize: 10, color: "var(--c-text-muted)", marginLeft: 3 }}>· buy: {pStr}</span>}
-                      </span>
-                    );
-                  })}
-                </div>
-                {m.data.steps?.length > 0 && (
-                  <ol style={s.stepsList}>
-                    {m.data.steps.map((step: string, si: number) => (
-                      <li key={si} style={s.stepItem}>{step}</li>
-                    ))}
-                  </ol>
-                )}
-                {!isPinned && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-                    {m.status !== "accepted" && <button onClick={() => onAccept(day.id)} style={s.acceptBtn}><Check size={15} /> Accept</button>}
-                    <button onClick={() => onReject(day, i)} style={s.rejectBtn}><RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}</button>
-                    <div style={{ flex: 1 }} />
-                    <button onClick={() => onThumbUp(day)} style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }} title="Like"><ThumbsUp size={15} /></button>
-                    <button onClick={() => onThumbDown(day, i)} style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }} title="Dislike (avoid + swap)"><ThumbsDown size={15} /></button>
-                    <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to rotation"><Star size={14} /> Rotation</button>
-                  </div>
-                )}
-                {isPinned && (
-                  <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 10, fontStyle: "italic" }}>
-                    Pinned in Setup — unpin there to enable generation or swapping.
+              <TocStatusPill m={m} isPinned={isPinned} />
+            </button>
+
+            {/* Expanded detail panel */}
+            {isExpanded && (
+              <div style={s.tocDetail}>
+                {!m && <p style={s.empty}>Run "Generate meal plan" from Setup.</p>}
+                {m?.status === "loading" && (
+                  <p style={{ ...s.empty, display: "flex", gap: 8, alignItems: "center" }}>
+                    <RefreshCw size={15} className="spin" /> Thinking up a dish...
                   </p>
                 )}
-              </>
+                {m?.status === "error" && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: "var(--c-danger)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+                      <AlertCircle size={15} /> {m.error}
+                    </span>
+                    <button onClick={() => onReject(day, i)} style={s.ghostBtn}><RefreshCw size={14} /> Retry</button>
+                  </div>
+                )}
+                {m?.data && (m.status === "ready" || m.status === "accepted") && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={s.mealName}>{m.data.name}</h3>
+                        <p style={s.mealDesc}>{m.data.cuisine ? <span style={s.cuisineTag}>{m.data.cuisine}</span> : null} {m.data.description}</p>
+                      </div>
+                      {m.status === "accepted" && !isPinned && <span style={s.acceptedPill}><Check size={13} /> Accepted</span>}
+                      {isPinned && <span style={s.acceptedPill}>📌 Pinned</span>}
+                    </div>
+                    {m.data.reuseNote && <div style={s.reuseNote}><Repeat size={13} /> {m.data.reuseNote}</div>}
+                    {(m.data.prepMinutes != null || m.data.cookMinutes != null) && (
+                      <div style={s.timeLine}>
+                        {m.data.prepMinutes != null && `Prep: ${m.data.prepMinutes} min`}
+                        {m.data.prepMinutes != null && m.data.cookMinutes != null && " · "}
+                        {m.data.cookMinutes != null && `Cook: ${m.data.cookMinutes} min`}
+                        {" · "}Serves: {m.data.servings}
+                      </div>
+                    )}
+                    {m.kcalInfo && <KcalBadge kcalPerServing={m.kcalInfo.kcalPerServing} tier={m.kcalInfo.tier} />}
+                    {m.data.difficulty != null && <DifficultyBadge difficulty={m.data.difficulty} />}
+                    <div style={s.tagWrap}>
+                      {m.data.ingredients.map((ing: any, idx: number) => {
+                        const rStr = fmtRecipeQty(ing);
+                        const pStr = ing.purchaseSize || "";
+                        const showBuyNote = pStr && pStr !== rStr;
+                        return (
+                          <span key={idx} style={s.tag}>
+                            {ing.name}{rStr ? ` — ${rStr}` : ""}
+                            {showBuyNote && <span style={{ fontSize: 10, color: "var(--c-text-muted)", marginLeft: 3 }}>· buy: {pStr}</span>}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {m.data.steps?.length > 0 && (
+                      <ol style={s.stepsList}>
+                        {m.data.steps.map((step: string, si: number) => (
+                          <li key={si} style={s.stepItem}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
+                    {!isPinned && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+                        {m.status !== "accepted" && (
+                          <button onClick={() => onAccept(day.id)} style={s.acceptBtn}><Check size={15} /> Accept</button>
+                        )}
+                        <button onClick={() => onReject(day, i)} style={s.rejectBtn}>
+                          <RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}
+                        </button>
+                        <div style={{ flex: 1 }} />
+                        <button
+                          onClick={() => onThumbUp(day)}
+                          style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }}
+                          title="Like"
+                        ><ThumbsUp size={15} /></button>
+                        <button
+                          onClick={() => onThumbDown(day, i)}
+                          style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
+                          title="Dislike (avoid + swap)"
+                        ><ThumbsDown size={15} /></button>
+                        <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to rotation">
+                          <Star size={14} /> Rotation
+                        </button>
+                      </div>
+                    )}
+                    {isPinned && (
+                      <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 10, fontStyle: "italic" }}>
+                        Pinned in Setup — unpin there to enable generation or swapping.
+                      </p>
+                    )}
+                  </>
+                )}
+
+                {/* Prev / Next navigation */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}>
+                  <button
+                    onClick={() => { const prev = days[i - 1]; if (prev) setExpandedId(prev.id); }}
+                    className="btn-ghost btn--sm"
+                    style={{ visibility: i === 0 ? "hidden" : "visible" }}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    onClick={() => { const next = days[i + 1]; if (next) setExpandedId(next.id); }}
+                    className="btn-ghost btn--sm"
+                    style={{ visibility: i === days.length - 1 ? "hidden" : "visible" }}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         );
       })}
+
+      {/* All meals accepted gate */}
+      {acceptedCount > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          <button onClick={onAllAccepted} className="btn-primary">
+            <CalendarDays size={15} /> Save to This Week
+          </button>
+          <button onClick={() => window.print()} className="btn-ghost btn--sm">
+            <Printer size={14} /> Print recipes
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1887,7 +1974,7 @@ function ThisWeekView({ currentWeek, liked, setLiked, avoid, setAvoid, rotation,
       <div style={s.card}>
         <h3 style={s.cardTitle}>This Week</h3>
         <p style={{ ...s.empty, marginTop: 8 }}>No committed week yet.</p>
-        <p style={{ ...s.cardSub, marginTop: 6 }}>Accept meals in the Meals tab, then tap "Save this week" to commit the current plan here.</p>
+        <p style={{ ...s.cardSub, marginTop: 6 }}>Accept meals in the Meals tab, then tap "Save to This Week" to commit the current plan here.</p>
       </div>
     );
   }
@@ -3037,4 +3124,12 @@ const s: Record<string, any> = {
   lvStar:     { background: "transparent", border: "none", cursor: "pointer", padding: "0 2px", flexShrink: 0, display: "grid", placeItems: "center" },
   lvStaple:   { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)" },
   lvFooter:   { marginTop: "var(--space-4)", padding: "var(--space-3) var(--space-4)", background: "var(--c-success-bg)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)" },
+  // TER-283: TOC wizard
+  tocRow:        { background: "var(--c-surface)", border: "1px solid var(--c-border)", borderRadius: 12, overflow: "hidden" },
+  tocRowActive:  { borderColor: "var(--c-primary)", boxShadow: "0 0 0 1px var(--c-primary)" },
+  tocSummary:    { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" as const, gap: 12 },
+  tocLeft:       { flex: 1, minWidth: 0, display: "grid", gap: 2 },
+  tocDate:       { fontSize: 11, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase" as const, letterSpacing: ".04em" },
+  tocMealName:   { fontFamily: "'Fraunces', Georgia, serif", fontSize: 15, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const },
+  tocDetail:     { padding: "12px 14px 14px", borderTop: "1px solid var(--c-border)" },
 };

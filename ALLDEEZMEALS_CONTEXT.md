@@ -455,9 +455,30 @@ session (status, decisions, next steps).
   `.btn-ghost` classes. Verified at 390px and desktop.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-283 — June 2026)
+- Meal review wizard: TOC list of meals, one expanded at a time.
+- **`PlanView` refactored** from an all-meals-inline layout to a TOC accordion wizard.
+  Each meal slot is always visible as a compact row (day label + meal name + status pill).
+  Only the selected row is expanded to show full detail (description, times, kcal, difficulty,
+  ingredient tags, steps, accept/reject/thumbs/rotation actions). Clicking a row expands it
+  and collapses the previous selection. Generating, accepting, or rejecting a meal updates
+  that row's status in-place without reflowing the surrounding list.
+- **Status pills**: Pending (no meal) · Generating… (loading) · Review (ready, not yet acted) ·
+  Accepted (green) · Error (red) · 📌 Pinned. Helper component: `TocStatusPill`.
+- **Prev / Next navigation** buttons in the expanded panel allow stepping through days without
+  clicking in the TOC list. Invisible (visibility:hidden) at the edges to preserve layout.
+- **"All meals accepted" soft gate**: replaces the temporary "Save this week" button (removed).
+  "Save to This Week" button + "Print recipes" ghost link appear below the TOC list when
+  `acceptedCount > 0`. Clicking "Save to This Week" calls `commitCurrentWeek()` AND routes
+  to the This Week tab via a combined `onAllAccepted` handler wired in App.
+  Planner remains editable after committing (re-running re-commits to This Week).
+- **New styles** added to `s` object: `tocRow`, `tocRowActive`, `tocSummary`, `tocLeft`,
+  `tocDate`, `tocMealName`, `tocDetail`. Conventions: inline `s` + CSS vars; `.btn-*` classes.
+- `ThisWeekView` empty-state hint copy updated to match new button label.
+- `tsc --noEmit && vite build` pass (484.30 kB JS / 9.33 kB CSS, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
-- TER-283: Meal review wizard (will call `commitCurrentWeek()` to replace the temp trigger).
 - TER-292: Nomenclature cleanup — rename rotation→Recipe Box.
 - TER-288: Order History view (surfaces archived orders from the `orders` table).
 - TER-196: Calorie cascade + UI (depends on TER-194).
