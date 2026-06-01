@@ -410,8 +410,33 @@ session (status, decisions, next steps).
 - `tsc --noEmit && vite build` pass (474.57 kB JS / 9.30 kB CSS, 0 TS errors).
 - PR #42 open: https://github.com/Terenc-LLC/alldeezmeals/pull/42
 
+## Status (TER-291 — June 2026)
+- "This Week" box: committed current-week recipe slot + review view.
+- **`currentWeek` state**: `useState<any>(null)` wired through all four persistence points
+  (localStorage load, Supabase load in sign-in effect, save payload object, save effect dep
+  array). Shape: `{ startDate, numDays, entries: [{ day, date, meal }] }` — mirrors the
+  `acceptedMealsForPrint` snapshot (meal.data incl. recipes, kcalInfo, etc.).
+- **`commitCurrentWeek()`**: snapshots `acceptedMealsForPrint` + `startDate` + `numDays`
+  into `currentWeek`. Shared entry point — TER-283's gate will call this same function.
+- **Temporary trigger**: "Save this week" button (btn-secondary btn--sm) added to PlanView
+  toolbar (shown when `acceptedCount > 0`). Superseded by TER-283.
+- **"This Week" tab**: `CalendarDays` icon, positioned between Meals and List in the nav.
+  Shows `ThisWeekView` component: list of committed recipe rows with thumbs up/down + ★
+  save-to-rotation actions, plus per-recipe detail via `RecipeCard` (with optional
+  `onThumbUp` / `onThumbDown` / `isLiked` props added to `RecipeCard`).
+- **Mark ordered**: clears `currentWeek` (`setCurrentWeek(null)`) after `resetPlan()`.
+  Confirm copy updated to mention This Week box is cleared.
+- **Start over**: does NOT clear `currentWeek`; confirm copy updated to say This Week is kept.
+- No DB migration — `currentWeek` is a new key in the existing `user_state` JSON blob.
+  Old rows load fine (`d.currentWeek ?? null` guard in localStorage load; `!== undefined`
+  guard in Supabase load per TER-189 pattern).
+- `tsc --noEmit && vite build` pass (478.59 kB JS / 9.30 kB CSS, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
+- TER-283: Meal review wizard (will call `commitCurrentWeek()` to replace the temp trigger).
+- TER-292: Nomenclature cleanup — rename rotation→Recipe Box.
+- TER-288: Order History view (surfaces archived orders from the `orders` table).
 - TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
 - TER-198: Seed catalog with ALDI core-range items.
