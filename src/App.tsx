@@ -2701,11 +2701,11 @@ function TabBtn({ active, onClick, icon, label }: any) {
 
 const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
 .spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
-.print-only{display:block}
+.print-only{display:none}/* hidden on screen; revealed only for print below */
 @media print{
   html,body,#root{height:auto!important;overflow:visible!important;}
   .no-print{display:none!important}
-  .print-only{background:none!important;padding:0!important;}
+  .print-only{display:block;background:none!important;padding:0!important;}
   .print-sheet{box-shadow:none!important;border:none!important;border-radius:0!important;padding:32px 40px!important;}
   .recipe-page{break-after:page;page-break-after:always;margin-bottom:0!important;}
   .recipe-page:last-child{break-after:auto;page-break-after:auto;}

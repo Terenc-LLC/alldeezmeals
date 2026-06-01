@@ -353,11 +353,24 @@ session (status, decisions, next steps).
 - `tsc --noEmit && vite build` pass (462 kB JS / 7.4 kB CSS, 0 TS errors).
 - **PR2–PR5 are the next steps** in the design refresh series.
 
+## Status (TER-282 — June 2026)
+- Bug fix: print-only recipe pages were rendering on-screen before print was requested.
+- **Root cause**: the injected `<style>` block in `src/App.tsx` set `.print-only{display:block}`
+  unconditionally (a side effect of TER-253 making the section always-rendered). The section is
+  conditionally *mounted* only when `acceptedMealsForPrint.length > 0`, so it appeared as soon
+  as meals were accepted.
+- **Fix** (2-line change in the `fontImport` style block, `src/App.tsx`):
+  - Screen default: `.print-only{display:block}` → `.print-only{display:none}` (hidden on screen).
+  - Added `.print-only{display:block}` inside the existing `@media print{…}` block, so the print
+    path still renders the recipes. All TER-243 pagination rules (`.recipe-page` break-after,
+    `.print-sheet` resets, `html,body,#root` overflow resets) are preserved untouched.
+- No other files changed. `tsc --noEmit && vite build` pass (474.63 kB JS / 9.30 kB CSS).
+
 ## Status (TER-253 — May 2026)
 - Design refresh PR5 — printable recipe restyle (final PR in Phase 1 series).
-- **`.print-only` section** is now `display:block` (visible on-screen as a preview when accepted
-  meals exist) instead of `display:none`. Conditional render: section only mounts when
-  `acceptedMealsForPrint.length > 0`.
+- **`.print-only` section** was made `display:block` (on-screen preview when accepted meals
+  exist); this introduced the TER-282 bug, fixed separately above. Conditional render: section
+  only mounts when `acceptedMealsForPrint.length > 0`.
 - **Each `.recipe-page`** contains a `.print-sheet` paper div. On desktop: floats on `#d9d4ca`
   mat (`--c-print-mat` token added to `src/index.css`) with `0 8px 30px rgba(26,58,52,.18)`
   elevation. On mobile: paper on `--c-bg` with `1px --c-border` border.
