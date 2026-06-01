@@ -1147,6 +1147,31 @@ function PendingView({ onSignOut }: { onSignOut: () => void }) {
   );
 }
 
+/* ============================ PeopleInput ============================ */
+function PeopleInput({ value, onChange, style }: { value: number; onChange: (n: number) => void; style?: React.CSSProperties }) {
+  const [draft, setDraft] = useState<string>(String(value));
+
+  // Keep draft in sync when parent changes value externally (e.g. "set everyone to N")
+  useEffect(() => { setDraft(String(value)); }, [value]);
+
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={1}
+      value={draft}
+      style={{ textAlign: "center", ...style }}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const n = Math.max(1, parseInt(draft, 10) || 1);
+        setDraft(String(n));
+        onChange(n);
+      }}
+    />
+  );
+}
+
 /* ============================ Setup ============================ */
 function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
@@ -1171,7 +1196,7 @@ function SetupView(p: any) {
           </div>
           <div style={{ width: 64 }}>
             <label style={s.fieldLabel}>People</label>
-            <input type="number" min={1} value={defaultPeople} onChange={(e) => setDefaultPeople(Math.max(1, Number(e.target.value) || 1))} style={{ ...s.input, width: "100%", textAlign: "center" }} />
+            <PeopleInput value={defaultPeople} onChange={setDefaultPeople} style={{ ...s.input, width: "100%" }} />
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
@@ -1197,7 +1222,7 @@ function SetupView(p: any) {
                 </div>
                 <div style={{ ...s.slotRow, flexWrap: isMobile ? "wrap" as const : undefined }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <input type="number" min={1} value={day.people} onChange={(e) => updDay(day.id, { people: Math.max(1, Number(e.target.value) || 1) })} style={{ ...s.input, width: 50, textAlign: "center" }} />
+                    <PeopleInput value={day.people} onChange={(n) => updDay(day.id, { people: n })} style={{ ...s.input, width: 50 }} />
                     <span style={s.miniLabel}>ppl</span>
                   </div>
                   <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>

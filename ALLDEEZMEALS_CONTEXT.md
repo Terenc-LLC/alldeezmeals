@@ -488,6 +488,13 @@ session (status, decisions, next steps).
 ## Terminology note
 The permanent favorites pool is called **Recipe Box** in the UI. Internally, code identifiers remain `rotation` / `setRotation` / `addToRotation`; the Supabase `user_state` JSON key is `rotation`. Do not rename these internal identifiers.
 
+## Status (TER-296 — June 2026)
+- Bug fix: People count inputs (Setup default + per-day rows) couldn't be cleared; required select-all to change value.
+- **Root cause**: both inputs coerced value on every keystroke via `Math.max(1, Number(e.target.value) || 1)`, so clearing the field snapped back to 1 immediately.
+- **Fix**: extracted a shared `PeopleInput` wrapper component (just above `SetupView` in `src/App.tsx`). It holds a local `draft: string` state; `onFocus` selects all text; `onChange` updates the draft freely; `onBlur` clamps to `Math.max(1, parseInt(draft) || 1)` and calls the parent's `onChange` with a number. A `useEffect` syncs `draft` when the parent value changes externally (e.g., "set everyone to N"). Added `inputMode="numeric"` for mobile. Both inputs replaced with `<PeopleInput>`.
+- No state shape change; no DB migration; plan generation + headcount scaling unaffected.
+- `tsc --noEmit && vite build` pass (484.50 kB JS / 9.33 kB CSS, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-288: Order History view (surfaces archived orders from the `orders` table).
