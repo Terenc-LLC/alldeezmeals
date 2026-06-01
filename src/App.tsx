@@ -182,6 +182,7 @@ export default function App() {
   const [rotation, setRotation] = useState<any[]>([]);
   const [liked, setLiked] = useState<string[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
+  const [currentWeek, setCurrentWeek] = useState<any>(null);
 
   /* ---- pinned-recipe materialization ---- */
   const pinnedSignature = useMemo(
@@ -231,6 +232,7 @@ export default function App() {
         setRotation(d.rotation ?? []);
         setLiked(d.liked ?? []);
         setAvoid(d.avoid ?? []);
+        setCurrentWeek(d.currentWeek ?? null);
       }
     } catch {}
     setLoaded(true);
@@ -270,6 +272,7 @@ export default function App() {
           if (d.rotation !== undefined) setRotation(d.rotation);
           if (d.liked !== undefined) setLiked(d.liked);
           if (d.avoid !== undefined) setAvoid(d.avoid);
+          if (d.currentWeek !== undefined) setCurrentWeek(d.currentWeek);
         } else if (data === null) {
           // No row — one-time migration: push existing localStorage up to Supabase.
           // Only fires when maybeSingle returns null (no row ever written for this user).
@@ -302,7 +305,7 @@ export default function App() {
     if (!loaded) return;
     const payload = {
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
-      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid,
+      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, currentWeek,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     if (!session) return;
@@ -317,7 +320,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, currentWeek, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -552,7 +555,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   };
 
   const handleStartOver = () => {
-    if (!window.confirm("Clear the current meal plan and grocery list?\n\nYour setup (days, people, cuisine pins), staples, and preferences (liked/avoid/rotation) will be kept.")) return;
+    if (!window.confirm("Clear the current meal plan and grocery list?\n\nYour setup (days, people, cuisine pins), staples, preferences (liked/avoid/rotation), and This Week box are kept.")) return;
     resetPlan();
   };
 
@@ -564,6 +567,14 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     await rejectMeal(day, idx);
   };
   const addToRotation = (data: any) => { setRotation((p) => (p.some((r) => r.name === data.name) ? p : [...p, data])); thumbUp(data.name); };
+
+  const commitCurrentWeek = () => {
+    setCurrentWeek({
+      startDate,
+      numDays,
+      entries: acceptedMealsForPrint.map(({ day, date, meal }: any) => ({ day, date, meal })),
+    });
+  };
 
   /* ---- grocery list ---- */
   const acceptedCount = useMemo(() => days.filter((d) => meals[d.id]?.status === "accepted").length, [days, meals]);
@@ -648,6 +659,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         return { error: error.message };
       }
       resetPlan();
+      setCurrentWeek(null);
       return { error: null };
     } catch (e: any) {
       console.warn("Failed to archive order:", e);
@@ -724,6 +736,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       <nav style={s.tabs}>
         <TabBtn active={tab === "setup"} onClick={() => setTab("setup")} icon={<Settings2 size={15} />} label="Setup" />
         <TabBtn active={tab === "plan"} onClick={() => setTab("plan")} icon={<Sparkles size={15} />} label={`Meals (${acceptedCount}/${days.length})`} />
+        <TabBtn active={tab === "thisweek"} onClick={() => setTab("thisweek")} icon={<CalendarDays size={15} />} label="This Week" />
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Saved (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
@@ -751,6 +764,15 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
             onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
             liked={liked} onGenerate={generateAll}
+            onCommitWeek={commitCurrentWeek} acceptedCount={acceptedCount}
+          />
+        )}
+        {tab === "thisweek" && (
+          <ThisWeekView
+            currentWeek={currentWeek}
+            liked={liked} setLiked={setLiked}
+            avoid={avoid} setAvoid={setAvoid}
+            rotation={rotation} setRotation={setRotation}
           />
         )}
         {tab === "list" && (
@@ -1160,15 +1182,18 @@ function SetupView(p: any) {
 }
 
 /* ============================ Plan ============================ */
-function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate }: any) {
+function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onCommitWeek, acceptedCount }: any) {
   if (!days.some((d: any) => meals[d.id])) {
     return <div style={s.card}><p style={s.empty}>No meals yet.</p><button onClick={onGenerate} disabled={busy} style={{ ...s.primaryBtn, marginTop: 12 }}><Sparkles size={16} /> Generate meal plan</button></div>;
   }
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      {days.some((d: any) => meals[d.id]?.status === "accepted") && (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button onClick={() => window.print()} className="btn-secondary btn--sm">Print recipes</button>
+      {acceptedCount > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={onCommitWeek} className="btn-secondary btn--sm">
+            <CalendarDays size={14} /> Save this week
+          </button>
+          <button onClick={() => window.print()} className="btn-ghost btn--sm">Print recipes</button>
         </div>
       )}
       {days.map((day: any, i: number) => {
@@ -1283,7 +1308,7 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     try { await navigator.clipboard.writeText(text); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
   };
   const markOrdered = async () => {
-    if (!window.confirm("Archive this plan and start fresh?\n\nYour meals and grocery list will be cleared. Setup, staples, and preferences are kept.")) return;
+    if (!window.confirm("Archive this plan and start next week?\n\nYour meals, grocery list, and This Week box will be cleared. Setup, staples, and preferences are kept.")) return;
     setOrdering(true);
     setOrderError(null);
     const { error } = await onMarkOrdered();
@@ -1747,6 +1772,105 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid 
     </div>
   );
 }
+/* ============================ This Week (TER-291) ============================ */
+function ThisWeekView({ currentWeek, liked, setLiked, avoid, setAvoid, rotation, setRotation }: any) {
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
+  const thumbUpLocal = (name: string) => { if (name) setLiked((p: string[]) => (p.includes(name) ? p : [...p, name])); };
+  const thumbDownLocal = (name: string) => {
+    if (!name) return;
+    setAvoid((p: string[]) => (p.includes(name) ? p : [...p, name]));
+    setLiked((p: string[]) => p.filter((x) => x !== name));
+  };
+  const addToRotationLocal = (data: any) => {
+    setRotation((p: any[]) => (p.some((r) => r.name === data.name) ? p : [...p, data]));
+    thumbUpLocal(data.name);
+  };
+
+  if (!currentWeek?.entries?.length) {
+    return (
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>This Week</h3>
+        <p style={{ ...s.empty, marginTop: 8 }}>No committed week yet.</p>
+        <p style={{ ...s.cardSub, marginTop: 6 }}>Accept meals in the Meals tab, then tap "Save this week" to commit the current plan here.</p>
+      </div>
+    );
+  }
+
+  if (selectedIdx !== null && currentWeek.entries[selectedIdx]) {
+    const entry = currentWeek.entries[selectedIdx];
+    const mealName = entry.meal?.data?.name;
+    return (
+      <div>
+        <button className="btn-ghost btn--sm" style={{ marginBottom: "var(--space-4)" }} onClick={() => setSelectedIdx(null)}>
+          ← Back to this week
+        </button>
+        <RecipeCard
+          meal={entry.meal?.data}
+          kcalInfo={entry.meal?.kcalInfo}
+          isLiked={liked.includes(mealName)}
+          onThumbUp={() => thumbUpLocal(mealName)}
+          onThumbDown={() => thumbDownLocal(mealName)}
+          onSaveRotation={() => { addToRotationLocal(entry.meal?.data); setSelectedIdx(null); }}
+        />
+      </div>
+    );
+  }
+
+  const endDate = addDays(currentWeek.startDate, currentWeek.numDays - 1);
+  const dateRange = `${weekdayLabel(currentWeek.startDate)} – ${weekdayLabel(endDate)}`;
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={s.card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <h3 style={s.cardTitle}>This Week</h3>
+            <p style={{ ...s.cardSub, marginTop: 2 }}>{dateRange}</p>
+          </div>
+          <button className="btn-ghost btn--sm" onClick={() => window.print()} style={{ flexShrink: 0 }}>
+            <Printer size={14} /> Print
+          </button>
+        </div>
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {currentWeek.entries.map((entry: any, i: number) => {
+            const mealName = entry.meal?.data?.name;
+            const isLiked = liked.includes(mealName);
+            return (
+              <div key={i} style={s.rotItem}>
+                <button
+                  onClick={() => setSelectedIdx(i)}
+                  style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text)" }}>{mealName}</div>
+                  <div style={s.cardSub}>{weekdayLabel(entry.date)}{entry.meal?.data?.cuisine ? ` · ${entry.meal.data.cuisine}` : ""}</div>
+                </button>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                  <button
+                    onClick={() => thumbUpLocal(mealName)}
+                    style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }}
+                    title="Like"
+                  ><ThumbsUp size={14} /></button>
+                  <button
+                    onClick={() => thumbDownLocal(mealName)}
+                    style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
+                    title="Dislike"
+                  ><ThumbsDown size={14} /></button>
+                  <button
+                    onClick={() => addToRotationLocal(entry.meal?.data)}
+                    style={s.rotateBtn}
+                    title="Save to rotation"
+                  ><Star size={14} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChipManager({ items, onRemove, empty, tone }: any) {
   if (!items.length) return <p style={{ ...s.empty, marginTop: 8 }}>{empty}</p>;
   return (
@@ -2598,7 +2722,7 @@ function DifficultyBadge({ difficulty }: { difficulty: number }) {
 }
 
 /* ============================ RecipeCard (TER-251) — standalone, no planner actions ============================ */
-function RecipeCard({ meal, kcalInfo, onSaveRotation }: { meal: any; kcalInfo?: { kcalPerServing: number | null; tier: string } | null; onSaveRotation?: () => void }) {
+function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, isLiked }: { meal: any; kcalInfo?: { kcalPerServing: number | null; tier: string } | null; onSaveRotation?: () => void; onThumbUp?: () => void; onThumbDown?: () => void; isLiked?: boolean }) {
   const isMobile = useIsMobile();
   const totalMin = (meal.prepMinutes ?? 0) + (meal.cookMinutes ?? 0);
   const diffLabel = DIFFICULTY_LABELS[meal.difficulty] ?? "";
@@ -2681,8 +2805,22 @@ function RecipeCard({ meal, kcalInfo, onSaveRotation }: { meal: any; kcalInfo?: 
             <Steps />
           </div>
         )}
-        {/* 9. Footer — no Accept/Reject/thumbs */}
-        <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-5)" }}>
+        {/* 9. Footer */}
+        <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-5)", flexWrap: "wrap" }}>
+          {onThumbUp && (
+            <button
+              onClick={onThumbUp}
+              style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }}
+              title="Like"
+            ><ThumbsUp size={15} /></button>
+          )}
+          {onThumbDown && (
+            <button
+              onClick={onThumbDown}
+              style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
+              title="Dislike"
+            ><ThumbsDown size={15} /></button>
+          )}
           <button className="btn-secondary" style={{ flex: 1 }} onClick={onSaveRotation}>
             <Star size={16} /> Save to rotation
           </button>
