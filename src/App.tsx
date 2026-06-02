@@ -567,7 +567,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   };
 
   const handleStartOver = () => {
-    if (!window.confirm("Clear the current meal plan and grocery list?\n\nYour setup (days, people, cuisine pins), staples, preferences (liked/avoid/rotation), and This Week box are kept.")) return;
+    if (!window.confirm("Discard this meal plan?\n\nThis permanently deletes the current plan and grocery list. It will NOT be saved to Order history — you won't be able to view or reprint it later.\n\nTo keep it, cancel and use \"Mark ordered & start next week\" instead.\n\n(Your setup, staples, and preferences are kept.)")) return;
     resetPlan();
   };
 
