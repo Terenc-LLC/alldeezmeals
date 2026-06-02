@@ -426,7 +426,9 @@ session (status, decisions, next steps).
   `onThumbUp` / `onThumbDown` / `isLiked` props added to `RecipeCard`).
 - **Mark ordered**: clears `currentWeek` (`setCurrentWeek(null)`) after `resetPlan()`.
   Confirm copy updated to mention This Week box is cleared.
-- **Start over**: does NOT clear `currentWeek`; confirm copy updated to say This Week is kept.
+- **Start over**: does NOT clear `currentWeek`; confirm copy strengthened (TER-300) to state
+  the plan is permanently discarded, will NOT appear in Order history, and to use
+  "Mark ordered & start next week" to preserve it. (Setup, staples, preferences kept.)
 - No DB migration — `currentWeek` is a new key in the existing `user_state` JSON blob.
   Old rows load fine (`d.currentWeek ?? null` guard in localStorage load; `!== undefined`
   guard in Supabase load per TER-189 pattern).
