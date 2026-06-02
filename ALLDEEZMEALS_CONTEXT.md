@@ -501,9 +501,30 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - **Fix**: one new `@media (max-width: 767px)` rule appended to `src/index.css` clamps `input, select, textarea` to `font-size: 16px` on mobile. 16px is the iOS zoom threshold; at or above it, Safari does not zoom on focus. Desktop sizing unchanged; no viewport meta change.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-288 — June 2026)
+- Order History tab: view & reprint past plans from archived `orders` table.
+- **New "History" tab** (Clock icon) added to the nav bar between Receipt and Catalog.
+  Routes to `OrderHistoryView` component, read-only, no editing.
+- **`OrderHistoryView`**: fetches `orders` via anon key + user JWT
+  (`supabase.from("orders").select("id, created_at, plan").eq("user_id", session.user.id).order("created_at", { ascending: false })`).
+  No service-role key. Three sub-views: order list → order detail → single meal RecipeCard.
+  - **Order list**: each order card shows date range + meal name chips.
+  - **Order detail**: meal rows (tap to expand RecipeCard), "Print recipes" button,
+    read-only grocery list per category.
+  - **Single meal**: full `RecipeCard` (read-only; no thumb/rotation props passed).
+- **Snapshot adaptation**: stored shape `{ day, date, mealData }` adapted to
+  `{ date, meal: { data: mealData } }` for `RecipeCard` and the print sheet.
+  `kcalInfo` is not archived — "Per serving" renders "—" for history. Not fabricated.
+- **Print gating (TER-282 not regressed)**: introduced `printSource: "current" | string`
+  and `historyPrintMeals` state. Existing `.print-only` block now gated on
+  `printSource === "current"`. A second `.print-only` block renders `historyPrintMeals`
+  when `printSource !== "current"`. A `useEffect` fires `window.print()` after DOM commit,
+  then resets `printSource` and `historyPrintMeals`. Only one block is ever in the DOM at
+  print time — no bleed-through between current plan and history.
+- `tsc --noEmit && vite build` pass (493.26 kB JS / 9.39 kB CSS, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
-- TER-288: Order History view (surfaces archived orders from the `orders` table).
 - TER-196: Calorie cascade + UI (depends on TER-194).
 - TER-195: Fill nutrition columns on catalog rows (FDC GTIN + Open Food Facts).
 - TER-198: Seed catalog with ALDI core-range items.
