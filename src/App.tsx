@@ -161,8 +161,18 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("setup");
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [printSource, setPrintSource] = useState<"current" | string>("current");
+  const [historyPrintMeals, setHistoryPrintMeals] = useState<Array<{ date: string; meal: { data: any } }> | null>(null);
   // TER-236: safety reset — if admin flips off while Catalog is open, redirect to setup.
   useEffect(() => { if (!isAdmin && tab === "catalog") setTab("setup"); }, [isAdmin, tab]);
+  // TER-288: after history print DOM renders, fire window.print() then reset to current plan
+  useEffect(() => {
+    if (printSource !== "current" && historyPrintMeals !== null) {
+      window.print();
+      setPrintSource("current");
+      setHistoryPrintMeals(null);
+    }
+  }, [printSource, historyPrintMeals]); // eslint-disable-line
 
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [startDate, setStartDate] = useState(isoToday());
@@ -745,6 +755,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Recipe Box (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
+        <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Clock size={15} />} label="History" />
         {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Archive size={15} />} label="Catalog" />}
       </nav>
 
@@ -791,6 +802,12 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
         )}
         {tab === "receipt" && <IngestView session={session} />}
+        {tab === "history" && (
+          <OrderHistoryView
+            session={session}
+            onReprint={(meals) => { setHistoryPrintMeals(meals); setPrintSource("history"); }}
+          />
+        )}
         {tab === "catalog" && isAdmin && <CatalogView session={session} />}
       </main>
       <footer className="no-print" style={{ marginTop: 24, padding: "16px 4px 8px", borderTop: "1px solid var(--c-border)", fontSize: 12, color: "var(--c-text-muted)", textAlign: "center" as const }}>
@@ -801,7 +818,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <a href="/privacy.html" style={{ color: "var(--c-text-muted)" }}>Privacy</a>
       </footer>
     </div>
-    {acceptedMealsForPrint.length > 0 && (
+    {printSource === "current" && acceptedMealsForPrint.length > 0 && (
     <div className="print-only" style={{ background: isMobile ? "var(--c-bg)" : "var(--c-print-mat)", padding: isMobile ? "var(--space-5)" : "var(--space-7)", overflowX: "hidden" }}>
       {acceptedMealsForPrint.map(({ day, date, meal }, pi) => (
         <div key={pi} className="recipe-page" style={{ marginBottom: pi < acceptedMealsForPrint.length - 1 ? "var(--space-7)" : 0 }}>
@@ -855,6 +872,64 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
               </div>
             </div>
             {/* footer */}
+            <div style={{ marginTop: "var(--space-7)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--c-border)", display: "flex", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-2)" }}>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>Printed from ALLDEEZMeals · {new Date().toLocaleDateString()}</span>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>kcal source: USDA FoodData Central</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    )}
+    {printSource !== "current" && historyPrintMeals !== null && (
+    <div className="print-only" style={{ background: isMobile ? "var(--c-bg)" : "var(--c-print-mat)", padding: isMobile ? "var(--space-5)" : "var(--space-7)", overflowX: "hidden" }}>
+      {historyPrintMeals.map(({ date, meal }, pi) => (
+        <div key={pi} className="recipe-page" style={{ marginBottom: pi < historyPrintMeals.length - 1 ? "var(--space-7)" : 0 }}>
+          <div className="print-sheet" style={{ background: "#fff", maxWidth: 640, margin: "0 auto", padding: isMobile ? "var(--space-6)" : "56px 64px", boxShadow: isMobile ? "none" : "0 8px 30px rgba(26,58,52,.18)", border: isMobile ? "1px solid var(--c-border)" : "none", borderRadius: isMobile ? "var(--radius-md)" : 4, color: "#1A3A34", boxSizing: "border-box" as const }}>
+            <div style={{ display: "flex", flexWrap: "wrap" as const, justifyContent: "space-between", alignItems: "baseline", gap: "var(--space-2)", borderBottom: "2px solid #1A3A34", paddingBottom: "var(--space-2)" }}>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-primary)" }}>ALLDEEZMeals</span>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>{weekdayLabel(date)} · {meal.data.cuisine}</span>
+            </div>
+            <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 26, lineHeight: "30px", fontWeight: 600, letterSpacing: "-.01em", margin: "var(--space-4) 0 0", color: "#1A3A34" }}>{meal.data.name}</h1>
+            <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--space-5)", marginTop: "var(--space-3)", paddingBottom: "var(--space-4)", borderBottom: "1px solid var(--c-border)" }}>
+              {([
+                ["Prep", meal.data.prepMinutes != null ? `${meal.data.prepMinutes} min` : "—"],
+                ["Cook", meal.data.cookMinutes != null ? `${meal.data.cookMinutes} min` : "—"],
+                ["Serves", String(meal.data.servings ?? "—")],
+                ["Per serving", "—"],
+                ["Effort", meal.data.difficulty != null ? `${(["Premade","Minimal","Simple","Moderate","Involved","Intricate"] as const)[meal.data.difficulty]} (${meal.data.difficulty}/5)` : "—"],
+              ] as [string, string][]).map(([k, v]) => (
+                <div key={k}>
+                  <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)", textTransform: "uppercase" as const, letterSpacing: ".05em" }}>{k}</div>
+                  <div style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", fontWeight: 700, color: "#1A3A34" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1.4fr", gap: isMobile ? "var(--space-5)" : "var(--space-7)", marginTop: "var(--space-5)" }}>
+              <div>
+                <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "var(--t-h3-size)", lineHeight: "var(--t-h3-lh)", fontWeight: 600, margin: "0 0 var(--space-3)", color: "#1A3A34" }}>Ingredients</h2>
+                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                  {(meal.data.ingredients ?? []).map((ing: any, ii: number) => {
+                    const rStr = fmtRecipeQty(ing);
+                    return (
+                      <li key={ii} style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", color: "#1A3A34" }}>
+                        {ing.name}{rStr ? <span style={{ color: "var(--c-text-muted)" }}>{" — "}{rStr}</span> : ""}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div>
+                <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "var(--t-h3-size)", lineHeight: "var(--t-h3-lh)", fontWeight: 600, margin: "0 0 var(--space-3)", color: "#1A3A34" }}>Instructions</h2>
+                {(meal.data.steps ?? []).length > 0 && (
+                  <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: "var(--space-2)" }}>
+                    {meal.data.steps.map((step: string, si: number) => (
+                      <li key={si} style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", paddingLeft: 4, color: "#1A3A34" }}>{step}</li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
             <div style={{ marginTop: "var(--space-7)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--c-border)", display: "flex", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-2)" }}>
               <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>Printed from ALLDEEZMeals · {new Date().toLocaleDateString()}</span>
               <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>kcal source: USDA FoodData Central</span>
@@ -3037,6 +3112,158 @@ function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, is
         </div>
       </div>
     </article>
+  );
+}
+
+/* ============================ OrderHistoryView (TER-288) — past orders, read-only ============================ */
+function OrderHistoryView({ session, onReprint }: { session: any; onReprint: (meals: Array<{ date: string; meal: { data: any } }>) => void }) {
+  const isMobile = useIsMobile();
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [selectedMealIdx, setSelectedMealIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from("orders")
+      .select("id, created_at, plan")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) setFetchError(error.message);
+        else setOrders(data ?? []);
+        setLoading(false);
+      });
+  }, [session.user.id]);
+
+  if (loading) return <div style={s.card}><p style={s.empty}>Loading order history…</p></div>;
+  if (fetchError) return <div style={s.card}><p style={{ ...s.empty, color: "var(--c-danger)" }}>Error: {fetchError}</p></div>;
+  if (orders.length === 0) return (
+    <div style={s.card}>
+      <p style={s.empty}>No past orders yet. Use "Mark ordered &amp; start next week" to archive a plan.</p>
+    </div>
+  );
+
+  // Single meal RecipeCard detail
+  if (selectedOrder && selectedMealIdx !== null) {
+    const adaptedMeals = selectedOrder.plan.meals.map((m: any) => ({ date: m.date, meal: { data: m.mealData } }));
+    const entry = adaptedMeals[selectedMealIdx];
+    return (
+      <div>
+        <button className="btn-ghost btn--sm" style={{ marginBottom: 16 }} onClick={() => setSelectedMealIdx(null)}>← Back</button>
+        <RecipeCard meal={entry.meal.data} />
+      </div>
+    );
+  }
+
+  // Order detail: meal list + grocery list
+  if (selectedOrder) {
+    const plan = selectedOrder.plan;
+    const adaptedMeals: Array<{ date: string; meal: { data: any } }> = (plan.meals ?? []).map((m: any) => ({ date: m.date, meal: { data: m.mealData } }));
+    const startLabel = plan.startDate ? weekdayLabel(plan.startDate) : "";
+    const lastMealDate = plan.meals?.length > 0 ? plan.meals[plan.meals.length - 1].date : null;
+    const endLabel = lastMealDate ? weekdayLabel(lastMealDate) : "";
+    const dateRange = startLabel && endLabel ? `${startLabel} – ${endLabel}` : new Date(selectedOrder.created_at).toLocaleDateString();
+    const groceryList: Record<string, any[]> = plan.groceryList ?? {};
+    const totalGroceryItems = Object.values(groceryList).reduce((n: number, a: any[]) => n + a.length, 0);
+
+    return (
+      <div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16, flexWrap: "wrap" as const }}>
+          <button className="btn-ghost btn--sm" onClick={() => setSelectedOrder(null)}>← Back</button>
+          <span style={{ ...s.typeH2, flex: 1 }}>{dateRange}</span>
+          {plan.location && <span style={{ ...s.typeBodySm, color: "var(--c-text-muted)" }}>{plan.location}</span>}
+        </div>
+
+        {/* Meal rows — tap to open RecipeCard */}
+        <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
+          {adaptedMeals.map((entry, i) => (
+            <button
+              key={i}
+              onClick={() => setSelectedMealIdx(i)}
+              style={{ ...s.tocSummary, background: "var(--c-surface)", border: "1px solid var(--c-border)", borderRadius: 12, cursor: "pointer" }}
+            >
+              <div style={s.tocLeft}>
+                <div style={s.tocDate}>{weekdayLabel(entry.date)}</div>
+                <div style={s.tocMealName}>{entry.meal.data.name}</div>
+                {entry.meal.data.cuisine && (
+                  <div style={{ ...s.typeBodySm, color: "var(--c-text-muted)" }}>{entry.meal.data.cuisine}</div>
+                )}
+              </div>
+              <Clock size={16} color="var(--c-text-muted)" />
+            </button>
+          ))}
+        </div>
+
+        {/* Print */}
+        <div style={{ marginBottom: 24 }}>
+          <button className="btn-secondary" onClick={() => onReprint(adaptedMeals)}>
+            <Printer size={16} /> Print recipes
+          </button>
+        </div>
+
+        {/* Grocery list — read-only */}
+        {totalGroceryItems > 0 && (
+          <div>
+            <h2 style={{ ...s.typeH2, marginBottom: 14 }}>Grocery list</h2>
+            <div style={{ display: "grid", gap: 12 }}>
+              {CATEGORIES.map((cat) => {
+                const items = groceryList[cat];
+                if (!items?.length) return null;
+                return (
+                  <div key={cat} style={s.lvCatCard}>
+                    <h3 style={s.lvCatTitle}>{cat}</h3>
+                    {items.map((it: any, ii: number) => (
+                      <div key={ii} style={{ ...s.lvRow, borderBottom: ii < items.length - 1 ? "1px solid var(--c-border)" : "none" }}>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={s.typeBody}>{it.name}</span>
+                          <span style={{ ...s.typeBodySm, color: "var(--c-text-muted)" }}>
+                            {" · "}{fmtPurchaseQty(it.qty, it.unit, it.isPurchaseStyle)}
+                          </span>
+                          {it.staple && <span style={s.lvStaple}>staple</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Order list
+  return (
+    <div>
+      <h1 style={{ ...s.typeH1, marginBottom: 16 }}>Order History</h1>
+      <div style={{ display: "grid", gap: 12 }}>
+        {orders.map((order) => {
+          const plan = order.plan;
+          const mealNames: string[] = (plan.meals ?? []).map((m: any) => m.mealData?.name ?? "").filter(Boolean);
+          const lastMealDate = plan.meals?.length > 0 ? plan.meals[plan.meals.length - 1].date : null;
+          const startLabel = plan.startDate ? weekdayLabel(plan.startDate) : "";
+          const endLabel = lastMealDate ? weekdayLabel(lastMealDate) : "";
+          const dateRange = startLabel && endLabel ? `${startLabel} – ${endLabel}` : new Date(order.created_at).toLocaleDateString();
+          return (
+            <button
+              key={order.id}
+              onClick={() => setSelectedOrder(order)}
+              style={{ ...s.card, textAlign: "left" as const, width: "100%", border: "1px solid var(--c-border)", cursor: "pointer", display: "block", background: "var(--c-surface)" }}
+            >
+              <div style={{ ...s.cardTitle, marginBottom: 6 }}>{dateRange}</div>
+              {plan.location && <div style={{ ...s.cardSub, marginBottom: 8 }}>{plan.location}</div>}
+              <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 6 }}>
+                {mealNames.slice(0, 5).map((name, i) => <span key={i} style={s.tag}>{name}</span>)}
+                {mealNames.length > 5 && <span style={s.tag}>+{mealNames.length - 5} more</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
