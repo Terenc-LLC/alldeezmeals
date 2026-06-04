@@ -668,6 +668,26 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
   need the `isApproved` check.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-325 — June 2026)
+- Referral codes + referred-by tracking + split name fields.
+- **profiles schema**: new columns `first_name`, `last_name`, `referral_code`, `referred_by`.
+- **`handle_new_user` trigger** (migration 013): reads `first_name`/`last_name`/`referred_by`
+  from `raw_user_meta_data`; mints a 12-char `referral_code` via
+  `upper(substr(md5(id::text || now()::text), 1, 12))` — UUID guarantees uniqueness even for
+  same-second signups. Composed `name` still populated for back-compat.
+- **Backfill**: all existing profile rows get a `referral_code` from
+  `md5(id || coalesce(requested_at, now()))`.
+- **`vercel.json` rewrite**: `/((?!api/|assets/|.*\\.).*) → /index.html` — SPA catches
+  `/<CODE>` paths; `/terms.html`, `/privacy.html`, `/help.html`, `/api/*` resolve normally.
+- **Referral capture (client)**: mount-only `useEffect` in `App()` reads
+  `/^\/([A-Za-z0-9]{12})$/`, stores uppercased code in `localStorage.referredBy`, replaces
+  URL with `/`. On signup, the code is forwarded as `referred_by` in OTP metadata and removed
+  from localStorage after success.
+- **SignInView**: single Name field replaced by required First name + Last name fields.
+  `canSubmit` requires both. Composed `name` sent for back-compat. `referred_by` included only
+  when present in localStorage.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
