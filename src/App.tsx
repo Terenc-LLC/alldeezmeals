@@ -94,6 +94,35 @@ function fmtPurchaseQty(qty: number, unit: string, isPurchaseStyle: boolean): st
   return unit ? `${q} ${unit}` : String(q);
 }
 
+function detectDietaryTerms(note: string): string[] {
+  const n = note.toLowerCase();
+  function hasAvoid(trigger: string): boolean {
+    const t = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return (
+      new RegExp(`\\bno\\s+${t}\\b`).test(n) ||
+      new RegExp(`\\b${t}[\\s-]free\\b`).test(n) ||
+      new RegExp(`\\bwithout\\s+${t}\\b`).test(n) ||
+      new RegExp(`\\bfree\\s+of\\s+${t}\\b`).test(n)
+    );
+  }
+  const TERMS: [string, string[]][] = [
+    ["nuts",     ["nut", "nuts", "tree nut", "tree nuts", "treenut"]],
+    ["peanuts",  ["peanut", "peanuts"]],
+    ["dairy",    ["dairy", "milk", "lactose"]],
+    ["eggs",     ["egg", "eggs"]],
+    ["gluten",   ["gluten", "wheat"]],
+    ["soy",      ["soy", "soya"]],
+    ["shellfish",["shellfish", "shrimp", "crab", "lobster"]],
+    ["fish",     ["fish"]],
+    ["sesame",   ["sesame"]],
+  ];
+  return TERMS.filter(([, triggers]) => triggers.some(hasAvoid)).map(([canonical]) => canonical);
+}
+
+function dietaryDisclaimer(items: string[]): string {
+  return `Generated to avoid: ${items.join(", ")} per your note. Verify every ingredient and package label yourself — not an allergen-safety guarantee.`;
+}
+
 function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 480);
   useEffect(() => {
@@ -492,6 +521,8 @@ export default function App() {
     if (loves.length) prefLines.push(`The family LIKED these before (lean toward this style, keep variety): ${loves.slice(0, 12).join(", ")}.`);
     if (avoid.length) prefLines.push(`AVOID these (disliked): ${avoid.slice(0, 12).join(", ")}.`);
 
+    const dietary = detectDietaryTerms(day.note ?? "");
+
     return `You are a practical weekly dinner planner for a family that shops at ALDI. Generate ONE dinner only (breakfast and lunch are covered by staples).
 
 ${wlabel}
@@ -500,6 +531,7 @@ ${tempGuide}
 ${cuisineGuide}
 ${effortGuide}
 ${day.note ? `Extra request: ${day.note}` : ""}
+${dietary.length ? `DIETARY CONSTRAINT (best-effort): the diner must avoid ${dietary.join(", ")}. Do not use these ingredients or obvious derivatives. This is a best-effort accommodation, not an allergen guarantee.` : ""}
 ${prefLines.join("\n")}
 
 ${eff}
@@ -527,6 +559,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     setMeals((m) => ({ ...m, [day.id]: { status: "loading", data: null, error: null, kcalInfo: null } }));
     try {
       const data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
+      const dietaryAvoid = detectDietaryTerms(day.note ?? "");
+      if (dietaryAvoid.length) data.dietaryAvoid = dietaryAvoid;
       setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null, kcalInfo: null } }));
       // Kick off nutrition resolution in background (non-blocking).
       const tok = session?.access_token ?? "";
@@ -870,6 +904,11 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
                 </div>
               ))}
             </div>
+            {meal.data.dietaryAvoid?.length > 0 && (
+              <div style={{ border: "1px solid #1A3A34", borderRadius: 4, padding: "8px 12px", marginTop: "var(--space-4)", fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", color: "#1A3A34" }}>
+                {dietaryDisclaimer(meal.data.dietaryAvoid)}
+              </div>
+            )}
             {/* body: ingredients + instructions */}
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1.4fr", gap: isMobile ? "var(--space-5)" : "var(--space-7)", marginTop: "var(--space-5)" }}>
               <div>
@@ -930,6 +969,11 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
                 </div>
               ))}
             </div>
+            {meal.data.dietaryAvoid?.length > 0 && (
+              <div style={{ border: "1px solid #1A3A34", borderRadius: 4, padding: "8px 12px", marginTop: "var(--space-4)", fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", lineHeight: "var(--t-body-lh)", color: "#1A3A34" }}>
+                {dietaryDisclaimer(meal.data.dietaryAvoid)}
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1.4fr", gap: isMobile ? "var(--space-5)" : "var(--space-7)", marginTop: "var(--space-5)" }}>
               <div>
                 <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "var(--t-h3-size)", lineHeight: "var(--t-h3-lh)", fontWeight: 600, margin: "0 0 var(--space-3)", color: "#1A3A34" }}>Ingredients</h2>
@@ -1502,6 +1546,9 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                       {isPinned && <span style={s.acceptedPill}>📌 Pinned</span>}
                     </div>
                     {m.data.reuseNote && <div style={s.reuseNote}><Repeat size={13} /> {m.data.reuseNote}</div>}
+                    {m.data.dietaryAvoid?.length > 0 && (
+                      <div style={s.reuseNote}>{dietaryDisclaimer(m.data.dietaryAvoid)}</div>
+                    )}
                     {(m.data.prepMinutes != null || m.data.cookMinutes != null) && (
                       <div style={s.timeLine}>
                         {m.data.prepMinutes != null && `Prep: ${m.data.prepMinutes} min`}
@@ -3142,6 +3189,9 @@ function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, is
             </span>
           )}
         </div>
+        {meal.dietaryAvoid?.length > 0 && (
+          <div style={{ ...s.reuseNote, marginTop: "var(--space-3)" }}>{dietaryDisclaimer(meal.dietaryAvoid)}</div>
+        )}
         {/* 6. Divider */}
         <hr style={s.rcDivider} />
         {/* 7+8. Ingredients + Instructions */}
