@@ -579,6 +579,19 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - **Future**: `recipeStars` data is available for `recipe_library` rollup (TER-303) — numeric 1–5 per-user quality signal.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-308 — June 2026)
+- Skip-a-day toggle: per-day `skip` field on the day object.
+- **`makeDay`**: `skip: false` added to the returned object. Missing `skip` on previously-persisted days is treated as false (`!!day.skip`).
+- **Pinned-recipe materialization effect**: updated `pinnedSignature` to include `!!d.skip`. Effect: if `day.skip === true`, clear any meal for that day (skip overrides pin); otherwise materialize pin as before.
+- **`generateAll`**: `if (!!day.skip) continue;` added before the pinnedRecipe check — no `/api/generate` call for skipped days.
+- **`commitCurrentWeek`**: snapshot now includes both accepted meals and skipped-day entries; each entry carries `skip: boolean`. Sorted by date. Downstream consumers read `entry.skip` from the snapshot, not live `days`.
+- **`groceryList`**: guard `if (!!d.skip) return;` added before accumulating ingredients — skipped days contribute zero items.
+- **`acceptedMealsForPrint`**: `!day.skip` filter added — skipped days are excluded from print.
+- **`SetupView`**: per-day "Skip this day — no dinner" checkbox added below the note field. When skip is on, other controls (cuisine/temp/effort/pin/note) are visually de-emphasized (`opacity: 0.4, pointerEvents: none`).
+- **`PlanView`**: `TocStatusPill` gains an `isSkipped` prop (shows italic "Skipped" pill). Skipped day rows are at 0.65 opacity and show "Skipped — no dinner" in the name slot. Expanded panel shows a placeholder message.
+- **`ThisWeekView`**: skipped entries (from snapshot) render a non-interactive "Skipped — no dinner" placeholder row; not clickable; no thumb/star actions.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).

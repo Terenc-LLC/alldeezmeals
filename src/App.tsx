@@ -58,7 +58,7 @@ function wx(code: number) {
 }
 const tempBand = (hi: number | null | undefined) => (hi == null ? "mild" : hi >= 82 ? "hot" : hi <= 45 ? "cold" : "mild");
 
-const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Auto", effort: "any", note: "", pinnedRecipe: undefined as any });
+const makeDay = (people = 4) => ({ id: uid(), people, cuisine: "Any", temp: "Auto", effort: "any", note: "", pinnedRecipe: undefined as any, skip: false });
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -199,7 +199,7 @@ export default function App() {
 
   /* ---- pinned-recipe materialization ---- */
   const pinnedSignature = useMemo(
-    () => days.map((d) => `${d.id}:${d.pinnedRecipe?.name ?? ""}:${d.people}`).join("|"),
+    () => days.map((d) => `${d.id}:${d.pinnedRecipe?.name ?? ""}:${d.people}:${!!d.skip}`).join("|"),
     [days]
   );
 
@@ -208,7 +208,14 @@ export default function App() {
       let next = { ...prev };
       let changed = false;
       for (const day of days) {
-        if (day.pinnedRecipe) {
+        if (day.skip) {
+          // Skip overrides everything — clear any meal for this day
+          if (next[day.id] != null) {
+            const { [day.id]: _removed, ...rest } = next;
+            next = rest;
+            changed = true;
+          }
+        } else if (day.pinnedRecipe) {
           const scaled = scaleRecipeToHeadcount(day.pinnedRecipe, day.people);
           next = { ...next, [day.id]: { status: "accepted", data: scaled, error: null, kcalInfo: null, pinned: true } };
           changed = true;
@@ -552,6 +559,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     const committed = days.map((d) => meals[d.id]).filter((m) => m && m.status === "accepted").map((m) => m.data);
     for (let i = 0; i < days.length; i++) {
       const day = days[i];
+      if (!!day.skip) continue; // skip overrides pin
       if (day.pinnedRecipe) continue;
       if (meals[day.id]?.status === "accepted") continue;
       const data = await generateOne(day, i, [...committed]);
@@ -592,10 +600,16 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   const addToRotation = (data: any) => { setRotation((p) => (p.some((r) => r.name === data.name) ? p : [...p, data])); thumbUp(data.name); };
 
   const commitCurrentWeek = () => {
+    // Build entries: accepted meals + skipped days, sorted by date
+    const acceptedEntries = acceptedMealsForPrint.map(({ day, date, meal }: any) => ({ day, date, meal, skip: false }));
+    const skippedEntries = days
+      .map((d, i) => ({ day: d, date: addDays(startDate, i), meal: null, skip: true }))
+      .filter((e) => !!e.day.skip);
+    const allEntries = [...acceptedEntries, ...skippedEntries].sort((a, b) => a.date.localeCompare(b.date));
     setCurrentWeek({
       startDate,
       numDays,
-      entries: acceptedMealsForPrint.map(({ day, date, meal }: any) => ({ day, date, meal })),
+      entries: allEntries,
     });
   };
 
@@ -622,7 +636,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       if (!agg[key]) agg[key] = { name, qty: 0, unit, category, staple: false, isPurchaseStyle };
       agg[key].qty += qty;
     };
-    days.forEach((d) => { const m = meals[d.id]; if (m?.status === "accepted") m.data.ingredients.forEach(pushIngredient); });
+    days.forEach((d) => { if (!!d.skip) return; const m = meals[d.id]; if (m?.status === "accepted") m.data.ingredients.forEach(pushIngredient); });
     staples.filter((st) => st.enabled).forEach((st) => {
       const k = `${normalizeIngName(st.name)}|${st.unit.toLowerCase()}`;
       if (!agg[k]) agg[k] = { name: st.name, qty: 0, unit: st.unit, category: CATEGORIES.includes(st.category) ? st.category : "Other", staple: false, isPurchaseStyle: false };
@@ -645,7 +659,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   const acceptedMealsForPrint = useMemo(
     () => days
       .map((d, i) => ({ day: d, date: addDays(startDate, i), meal: meals[d.id] }))
-      .filter(({ meal }) => meal?.status === "accepted"),
+      .filter(({ day, meal }) => !day.skip && meal?.status === "accepted"),
     [days, meals, startDate]
   );
 
@@ -1306,41 +1320,54 @@ function SetupView(p: any) {
                   <span style={s.dayDate}>{weekdayLabel(date)}</span>
                   {fx ? <span style={s.fxChip}>{w!.e} {fx.hi}/{fx.lo}F - {w!.l}</span> : <span style={s.fxChipMuted}>no forecast</span>}
                 </div>
-                <div style={{ ...s.slotRow, flexWrap: isMobile ? "wrap" as const : undefined }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <PeopleInput value={day.people} onChange={(n) => updDay(day.id, { people: n })} style={{ ...s.input, width: 50 }} />
-                    <span style={s.miniLabel}>ppl</span>
+                <div style={{ opacity: day.skip ? 0.4 : 1, pointerEvents: day.skip ? "none" : undefined }}>
+                  <div style={{ ...s.slotRow, flexWrap: isMobile ? "wrap" as const : undefined }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <PeopleInput value={day.people} onChange={(n) => updDay(day.id, { people: n })} style={{ ...s.input, width: 50 }} />
+                      <span style={s.miniLabel}>ppl</span>
+                    </div>
+                    <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
+                    <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: isMobile ? "100%" : 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
+                    <select
+                      aria-label="Desired effort"
+                      value={day.effort ?? "any"}
+                      onChange={(e) => updDay(day.id, { effort: e.target.value })}
+                      disabled={!!day.pinnedRecipe}
+                      title={day.pinnedRecipe ? "Pinned days skip generation" : "Desired cooking effort"}
+                      style={{ ...s.input, width: isMobile ? "100%" : 130 }}
+                    >
+                      {EFFORT_LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+                    </select>
                   </div>
-                  <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
-                  <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: isMobile ? "100%" : 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
-                  <select
-                    aria-label="Desired effort"
-                    value={day.effort ?? "any"}
-                    onChange={(e) => updDay(day.id, { effort: e.target.value })}
-                    disabled={!!day.pinnedRecipe}
-                    title={day.pinnedRecipe ? "Pinned days skip generation" : "Desired cooking effort"}
-                    style={{ ...s.input, width: isMobile ? "100%" : 130 }}
-                  >
-                    {EFFORT_LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
-                  </select>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+                    <select
+                      value={day.pinnedRecipe?.name ?? ""}
+                      onChange={(e) => {
+                        const found = rotation.find((r: any) => r.name === e.target.value);
+                        updDay(day.id, { pinnedRecipe: found ? { ...found } : undefined });
+                      }}
+                      style={{ ...s.input, flex: 1 }}
+                      disabled={rotation.length === 0}
+                      title={rotation.length === 0 ? "Save a recipe to your Recipe Box first" : ""}
+                    >
+                      <option value="">{rotation.length === 0 ? "Save a recipe to Recipe Box first" : "None (generate)"}</option>
+                      {rotation.map((r: any) => <option key={r.name} value={r.name}>{r.name}</option>)}
+                    </select>
+                    {day.pinnedRecipe && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, whiteSpace: "nowrap" as const }}>📌 Pinned</span>}
+                  </div>
+                  <input value={day.note} onChange={(e) => updDay(day.id, { note: e.target.value })} placeholder="optional note" style={{ ...s.input, fontSize: 12.5, marginTop: 6, width: "100%" }} />
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-                  <select
-                    value={day.pinnedRecipe?.name ?? ""}
-                    onChange={(e) => {
-                      const found = rotation.find((r: any) => r.name === e.target.value);
-                      updDay(day.id, { pinnedRecipe: found ? { ...found } : undefined });
-                    }}
-                    style={{ ...s.input, flex: 1 }}
-                    disabled={rotation.length === 0}
-                    title={rotation.length === 0 ? "Save a recipe to your Recipe Box first" : ""}
-                  >
-                    <option value="">{rotation.length === 0 ? "Save a recipe to Recipe Box first" : "None (generate)"}</option>
-                    {rotation.map((r: any) => <option key={r.name} value={r.name}>{r.name}</option>)}
-                  </select>
-                  {day.pinnedRecipe && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, whiteSpace: "nowrap" as const }}>📌 Pinned</span>}
-                </div>
-                <input value={day.note} onChange={(e) => updDay(day.id, { note: e.target.value })} placeholder="optional note" style={{ ...s.input, fontSize: 12.5, marginTop: 6, width: "100%" }} />
+                <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!day.skip}
+                    onChange={(e) => updDay(day.id, { skip: e.target.checked })}
+                    style={{ width: 15, height: 15, flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 13, color: day.skip ? "var(--c-danger)" : "var(--c-text-muted)" }}>
+                    Skip this day — no dinner
+                  </span>
+                </label>
               </div>
             );
           })}
@@ -1388,8 +1415,9 @@ function SetupView(p: any) {
 }
 
 /* ============================ Plan — TOC wizard (TER-283) ============================ */
-function TocStatusPill({ m, isPinned }: { m: any; isPinned: boolean }) {
+function TocStatusPill({ m, isPinned, isSkipped }: { m: any; isPinned: boolean; isSkipped?: boolean }) {
   const base: any = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0 };
+  if (isSkipped) return <span style={{ ...base, background: "var(--c-surface-2)", color: "var(--c-text-muted)", fontStyle: "italic" }}>Skipped</span>;
   if (isPinned) return <span style={{ ...base, background: "var(--c-primary)", color: "var(--c-on-primary)" }}>📌 Pinned</span>;
   if (!m) return <span style={{ ...base, background: "var(--c-surface-2)", color: "var(--c-text-muted)" }}>Pending</span>;
   if (m.status === "loading") return <span style={{ ...base, background: "var(--c-warning-bg)", color: "var(--c-warning)" }}>Generating…</span>;
@@ -1424,9 +1452,10 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
         const isExpanded = expandedId === day.id;
         const isLiked = m?.data && liked.includes(m.data.name);
         const isPinned = !!day.pinnedRecipe;
+        const isSkipped = !!day.skip;
 
         return (
-          <div key={day.id} style={{ ...s.tocRow, ...(isExpanded ? s.tocRowActive : {}) }}>
+          <div key={day.id} style={{ ...s.tocRow, ...(isExpanded ? s.tocRowActive : {}), ...(isSkipped ? { opacity: 0.65 } : {}) }}>
             {/* Compact TOC row — always visible */}
             <button
               onClick={() => setExpandedId(isExpanded ? null : day.id)}
@@ -1437,17 +1466,18 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                 <span style={s.tocDate}>
                   {weekdayLabel(date)}{" · "}{day.people} ppl{fx ? ` · ${w!.e} ${fx.hi}F` : ""}
                 </span>
-                <span style={s.tocMealName}>
-                  {m?.data?.name ?? (m?.status === "loading" ? "Generating…" : "Not yet generated")}
+                <span style={{ ...s.tocMealName, fontStyle: isSkipped ? "italic" : undefined }}>
+                  {isSkipped ? "Skipped — no dinner" : (m?.data?.name ?? (m?.status === "loading" ? "Generating…" : "Not yet generated"))}
                 </span>
               </div>
-              <TocStatusPill m={m} isPinned={isPinned} />
+              <TocStatusPill m={m} isPinned={isPinned} isSkipped={isSkipped} />
             </button>
 
             {/* Expanded detail panel */}
             {isExpanded && (
               <div style={s.tocDetail}>
-                {!m && <p style={s.empty}>Run "Generate meal plan" from Setup.</p>}
+                {isSkipped && <p style={{ ...s.empty, fontStyle: "italic" }}>This day is marked as skip — no dinner will be generated or added to the grocery list.</p>}
+                {!isSkipped && !m && <p style={s.empty}>Run "Generate meal plan" from Setup.</p>}
                 {m?.status === "loading" && (
                   <p style={{ ...s.empty, display: "flex", gap: 8, alignItems: "center" }}>
                     <RefreshCw size={15} className="spin" /> Thinking up a dish...
@@ -2108,7 +2138,7 @@ function ThisWeekView({ currentWeek, liked, setLiked, avoid, setAvoid, rotation,
     );
   }
 
-  if (selectedIdx !== null && currentWeek.entries[selectedIdx]) {
+  if (selectedIdx !== null && currentWeek.entries[selectedIdx] && !currentWeek.entries[selectedIdx].skip) {
     const entry = currentWeek.entries[selectedIdx];
     const mealName = entry.meal?.data?.name;
     return (
@@ -2145,6 +2175,16 @@ function ThisWeekView({ currentWeek, liked, setLiked, avoid, setAvoid, rotation,
         </div>
         <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
           {currentWeek.entries.map((entry: any, i: number) => {
+            if (entry.skip) {
+              return (
+                <div key={i} style={{ ...s.rotItem, opacity: 0.55 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text-muted)", fontStyle: "italic" }}>Skipped — no dinner</div>
+                    <div style={s.cardSub}>{weekdayLabel(entry.date)}</div>
+                  </div>
+                </div>
+              );
+            }
             const mealName = entry.meal?.data?.name;
             const isLiked = liked.includes(mealName);
             return (
