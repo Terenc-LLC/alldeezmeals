@@ -706,6 +706,17 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - **`USER_FROM_EMAIL`** added to `.env.example`; set in Vercel as `noreply@alldeezmeals.com`.
 - `tsc --noEmit && vite build` pass.
 
+## TER-327 — Wave 2 PR1: Brand + typography foundation
+- **Font swap**: Replaced Fraunces + Nunito Sans with Plus Jakarta Sans (PJS) everywhere.
+  - `fontImport` in `src/App.tsx`: `@import` now loads PJS weights 400/500/600/700/800.
+  - `const serif` → `'Plus Jakarta Sans', system-ui, sans-serif`; `const sans` (both module-level ~3486 and local ~1104) → PJS equivalents.
+  - `src/index.css` `:root`: `--font-serif` and `--font-sans` updated to PJS. Zero Fraunces/Nunito references remain.
+- **DPlate component**: New `function DPlate({ size })` in `src/App.tsx` — teal rounded-square tile (27% radius, var(--c-primary) bg, PJS-800 white "D", coral var(--c-accent) dot at 57%/53% of the glyph span).
+- **Header** (both signed-out and signed-in instances): replaced `<div style={s.logoMark}><Utensils/>` with `<DPlate size={isMobile ? 40 : 46} />`. `s.logoMark` and the `Utensils` import removed. Wordmark changed to two-tone `<h1>`: `ALLDEEZ` in `var(--c-text)`, `Meals` in `var(--c-primary)`; `s.h1` fontWeight bumped to 800. Tagline changed to "A week of dinners, planned in minutes."
+- **Favicon / app-icon**: `public/favicon.svg` (SVG D-Plate: teal rounded rect, white PJS-800 "D", coral dot); `public/apple-touch-icon.png` (180×180, generated with rsvg-convert from the SVG).
+- **`index.html` `<head>`**: added `<link rel="icon">`, `<link rel="apple-touch-icon">`, `<meta name="theme-color" content="#2B8C7E">`, and Google Fonts preconnect tags.
+- `tsc --noEmit && vite build` pass (499.93 kB JS, 9.67 kB CSS).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).

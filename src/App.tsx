@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
-  Utensils, ListChecks, CheckCircle2, AlertCircle, Repeat,
+  ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
   MessageSquare,
@@ -810,10 +810,10 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <style>{fontImport}</style>
         <header style={s.header}>
           <div style={s.logoRow}>
-            <div style={s.logoMark}><Utensils size={20} color="var(--c-on-primary)" /></div>
+            <DPlate size={isMobile ? 40 : 46} />
             <div>
-              <h1 style={s.h1}>ALLDEEZMeals</h1>
-              <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
+              <h1 style={s.h1}><span style={{ color: "var(--c-text)" }}>ALLDEEZ</span><span style={{ color: "var(--c-primary)" }}>Meals</span></h1>
+              <p style={s.sub}>A week of dinners, planned in minutes.</p>
             </div>
           </div>
         </header>
@@ -845,10 +845,10 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       <header style={s.header}>
         <div style={{ ...s.logoRow, justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={s.logoMark}><Utensils size={20} color="var(--c-on-primary)" /></div>
+            <DPlate size={isMobile ? 40 : 46} />
             <div>
-              <h1 style={s.h1}>ALLDEEZMeals</h1>
-              <p style={s.sub}>Weather-aware dinners - learns your taste - ALDI list</p>
+              <h1 style={s.h1}><span style={{ color: "var(--c-text)" }}>ALLDEEZ</span><span style={{ color: "var(--c-primary)" }}>Meals</span></h1>
+              <p style={s.sub}>A week of dinners, planned in minutes.</p>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1101,7 +1101,7 @@ function FeedbackModal({ session, tab, onClose }: { session: any; tab: string; o
     }
   };
 
-  const sans = "'Nunito Sans', -apple-system, sans-serif";
+  const sans = "'Plus Jakarta Sans', -apple-system, sans-serif";
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1114,7 +1114,7 @@ function FeedbackModal({ session, tab, onClose }: { session: any; tab: string; o
         ) : (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 17, fontWeight: 600, margin: 0, color: "var(--c-text)" }}>Send feedback</h2>
+              <h2 style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", fontSize: 17, fontWeight: 600, margin: 0, color: "var(--c-text)" }}>Send feedback</h2>
               <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--c-text-muted)", padding: 4, display: "grid", placeItems: "center" }} aria-label="Close">
                 <X size={18} />
               </button>
@@ -3467,11 +3467,24 @@ function OrderHistoryView({ session, onReprint }: { session: any; onReprint: (me
   );
 }
 
+function DPlate({ size = 40 }: { size?: number }) {
+  const dSize = size * 0.60;
+  const dotSize = dSize * 0.20;
+  return (
+    <div style={{ width: size, height: size, borderRadius: size * 0.27, background: "var(--c-primary)", display: "grid", placeItems: "center", boxShadow: "0 2px 6px rgba(43,140,126,.3)", flexShrink: 0 }}>
+      <span style={{ position: "relative", fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", fontWeight: 800, fontSize: dSize, color: "#fff", lineHeight: 1 }}>
+        D
+        <span style={{ position: "absolute", left: "57%", top: "53%", transform: "translate(-50%,-50%)", width: dotSize, height: dotSize, borderRadius: "50%", background: "var(--c-accent)" }} />
+      </span>
+    </div>
+  );
+}
+
 function TabBtn({ active, onClick, icon, label }: any) {
   return <button onClick={onClick} aria-label={label} style={{ ...s.tab, ...(active ? s.tabActive : {}) }}>{icon}<span className="tab-label">{label}</span></button>;
 }
 
-const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
+const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 .spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 .print-only{display:none}/* hidden on screen; revealed only for print below */
 @media print{
@@ -3482,14 +3495,13 @@ const fontImport = `@import url('https://fonts.googleapis.com/css2?family=Fraunc
   .recipe-page{break-after:page;page-break-after:always;margin-bottom:0!important;}
   .recipe-page:last-child{break-after:auto;page-break-after:auto;}
 }`;
-const serif = "'Fraunces', Georgia, serif";
-const sans = "'Nunito Sans', -apple-system, sans-serif";
+const serif = "'Plus Jakarta Sans', system-ui, sans-serif";
+const sans  = "'Plus Jakarta Sans', -apple-system, sans-serif";
 
 const s: Record<string, any> = {
   shell: { fontFamily: "var(--font-sans)", background: "var(--c-bg)", minHeight: "100%", color: "var(--c-text)", padding: "var(--space-5)", maxWidth: 780, margin: "0 auto" },
   header: { marginBottom: 18 }, logoRow: { display: "flex", alignItems: "center", gap: 12 },
-  logoMark: { width: 40, height: 40, borderRadius: 11, background: "var(--c-primary)", display: "grid", placeItems: "center", boxShadow: "0 2px 6px rgba(43,140,126,.3)" },
-  h1: { fontFamily: serif, fontSize: 23, fontWeight: 600, margin: 0, letterSpacing: "-.01em" },
+  h1: { fontFamily: serif, fontSize: 23, fontWeight: 800, margin: 0, letterSpacing: "-.01em" },
   sub: { margin: "2px 0 0", fontSize: 12.5, color: "var(--c-text-muted)" },
   tabs: { display: "flex", gap: 5, marginBottom: 18, background: "var(--c-surface-2)", padding: 5, borderRadius: 12 },
   tab: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px 4px", border: "none", borderRadius: 9, background: "transparent", color: "var(--c-text-muted)", fontFamily: sans, fontWeight: 600, fontSize: 12, cursor: "pointer" },
@@ -3582,6 +3594,6 @@ const s: Record<string, any> = {
   tocSummary:    { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" as const, gap: 12 },
   tocLeft:       { flex: 1, minWidth: 0, display: "grid", gap: 2 },
   tocDate:       { fontSize: 11, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase" as const, letterSpacing: ".04em" },
-  tocMealName:   { fontFamily: "'Fraunces', Georgia, serif", fontSize: 15, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const },
+  tocMealName:   { fontFamily: serif, fontSize: 15, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const },
   tocDetail:     { padding: "12px 14px 14px", borderTop: "1px solid var(--c-border)" },
 };

@@ -30,8 +30,8 @@
   --c-print-mat: #d9d4ca;
 
   /* ---- Typography ---- */
-  --font-serif: 'Fraunces', Georgia, serif;
-  --font-sans: 'Nunito Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 
   --t-display-size: 28px; --t-display-lh: 32px; --t-display-w: 600;
   --t-h1-size: 22px;      --t-h1-lh: 28px;      --t-h1-w: 600;
