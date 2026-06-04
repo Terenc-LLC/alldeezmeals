@@ -525,6 +525,27 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
   print time — no bleed-through between current plan and history.
 - `tsc --noEmit && vite build` pass (493.26 kB JS / 9.39 kB CSS, 0 TS errors).
 
+## Status (TER-302 — June 2026)
+- LLM cost monitoring — per-user usage logging + reporting view + read-only BI role.
+- **Migration** `supabase/migrations/20260604_009_llm_usage.sql` (manual apply): creates
+  `llm_usage` table (`id bigserial pk`, `user_id uuid`, `created_at`, `model`, `input_tokens`,
+  `output_tokens`, `cache_read_tokens`, `cost_usd numeric(10,5)`, `feature default 'meal_gen'`).
+  RLS enabled; service-role inserts bypass it. Index on `(user_id, created_at)`. Read policy
+  for the owning user only.
+- **Reporting view** `llm_usage_daily`: `user_id`, `day`, `gen_count`, `total_cost_usd` —
+  daily aggregates for BI consumption.
+- **Read-only BI role** `reporting_ro`: `SELECT` on `llm_usage_daily` and `llm_usage`.
+  Chris wires the Looker Studio (or other BI tool) database connection separately.
+  **Never use the service-role key for the BI connection.**
+- **`api/generate.ts`**: on each successful Anthropic call, reads `data.usage` and inserts
+  one row via a separate service-role client (`SUPABASE_SERVICE_ROLE_KEY` — same legacy `eyJ…`
+  key used by `ingest-order.ts`). A `LLM_RATES` table at the top of the file documents prices
+  (Sonnet 4.6 $3/$15 MTok in/out; Haiku 4.5 $1/$5 MTok in/out; cache-read ≈ 0.1× input);
+  `cost_usd` is computed at write time so stored values are frozen even if rates change.
+  The entire logging block is wrapped in its own `try/catch` — a logging failure never
+  affects the 200 response. Missing `data.usage` is handled without throwing.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
