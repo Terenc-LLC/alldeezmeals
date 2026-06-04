@@ -607,6 +607,43 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - **Phase 2** = structured dietary profile (vegan/vegetarian + allergy toggles) — out of P1 scope.
 - `tsc --noEmit && vite build` pass (498.05 kB JS / 9.39 kB CSS, 0 TS errors).
 
+## Status (TER-317 — June 2026)
+- Recipe library P2a — reuse core (serve-as-is, zero-LLM) + lossless full-payload column.
+- **Migration** `supabase/migrations/20260604_011_recipe_json.sql` (manual apply): adds
+  `recipe_json jsonb` column to `recipe_library` via `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
+- **`api/recipes.ts`**: upsert object gains `recipe_json: body` (the full incoming request
+  object), storing the exact payload the client would have received from a fresh generate call.
+  No other change to this file.
+- **`api/recipes-reuse.ts`**: new `POST /api/recipes-reuse` endpoint. Auth mirrors
+  `api/recipes.ts` (405 non-POST, 500 missing env, 401 bad JWT via `anonClient.auth.getUser`,
+  service-role client `svc` for DB). Request body: `{ people, cuisine, effortMin, effortMax,
+  excludeNames }`. Any unexpected error returns `{ reuse:false }` — never 500s the caller.
+  - **Maturity dial**: counts active originals with `recipe_json` not null;
+    `reuseRatio(n)`: n<10→0, n<30→0.25, n<1000→0.5, else 0.8. `Math.random() >= ratio`
+    triggers the generate fallback (ratio 0 = never reuse).
+  - **Candidate query**: filters `active=true`, `base_recipe_id IS NULL`, `recipe_json IS NOT NULL`,
+    `servings = people`; optionally filters by `cuisine` and `difficulty` range; orders by
+    `times_reused asc`; limits to 50.
+  - **Exclusion**: drops candidates whose normalized name matches any in `excludeNames`
+    (same `normalizeRecipeName` as `api/recipes.ts`). If none remain → `{ reuse:false }`.
+  - **Rotation**: picks randomly among those tied at the minimum `times_reused` (least-served first).
+  - **Increment**: best-effort `times_reused + 1` update — failure never blocks serving.
+  - **Response**: `{ reuse:true, recipe: chosen.recipe_json }` or `{ reuse:false }`.
+- **`src/App.tsx` `generateOne`**: before calling Claude, computes `dietaryAvoid` and `tok`.
+  When `tok && dietaryAvoid.length === 0 && !day.pinnedRecipe`, attempts `POST /api/recipes-reuse`
+  with `{ people, cuisine, effortMin/effortMax (null when effort=any), excludeNames }` built from
+  `[...avoid, ...rotation.map(r=>r.name), ...committed.map(m=>m.name), ...(reject?[reject]:[]) ]`.
+  On `{ reuse:true, recipe }`: sets the meal slot to `{ status:"ready", data:recipe }`, kicks off
+  `resolveNutrition` (same stale-guard pattern), returns the recipe — skips `callClaude` and the
+  `/api/recipes` save (already in the library). On `{ reuse:false }` or any fetch error: falls
+  through to the existing generate path unchanged.
+  - **Safety**: dietary-note days always generate (TER-306 constraint + disclaimer apply).
+    Pinned days always use the pinned recipe (bypass is in `generateAll`/`acceptMeal`, not
+    `generateOne`). Reuse only activates on authenticated, unconstrained, un-pinned slots.
+- **Server-only**: `recipe_library` RLS has no anon policy — all reuse logic is server-side.
+  Client never reads `recipe_library` directly.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
