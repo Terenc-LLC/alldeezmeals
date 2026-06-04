@@ -728,6 +728,21 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - No stray `"thisweek"` value remains. All existing views (Setup, Meals/Plan, Shopping List, Recipe Box, Receipt, History, Catalog) functional. Default landing tab remains `"setup"`.
 - `tsc --noEmit && vite build` pass (500.58 kB JS / 9.67 kB CSS, 0 TS errors).
 
+## TER-329 — Wave 2 PR3: Today / cook-mode screen
+- **`TodayCook` component** replaces `ThisWeekView` on the Today tab. Purpose: cook tonight's dinner on the counter, tracking gather/cook progress per day; rate when done.
+- **Day bar** (sticky header, `--elev-1`): Tonight/Upcoming/Earlier label + weekday h1 (`whiteSpace: nowrap`); weather chip (`wx(forecast[activeDate].code)` emoji + hi°F); prev `‹` / 7-day rail / next `›`. Day rail pill per entry — active = filled `--c-primary`; past = transparent + check glyph; future = `--c-surface-2` + weather emoji; skipped = transparent + "skip" label; today = coral dot indicator. Prev/next navigate `entries[]` (including skipped); rail buttons disabled for skipped entries.
+- **Recipe header**: cuisine pill (coral, uppercase), h2 title (21px mobile / 24px tablet), body-sm description, meta row (Clock + total min, Flame + ~N kcal, effort dot-pip badge, Users + serving stepper `− N +`).
+- **Two-column body** (tablet: `0.85fr 1.25fr`; mobile: stacked): Gather section (ingredient checklist with 24px checkbox, name, qty, staple pill) + Cook section (progress bar, step cards with current/done/upcoming states, hint on first open).
+- **Footer** (sticky bottom, `--elev`): "Mark as made" (secondary → primary solid once all steps done) + optional "Next day →" ghost. After mark-made → rating panel: green check + "Logged for…" header; 5-star tap rating (Star from lucide-react, coral fill); responsive copy ≥4 / 3 / ≤2; "On to {next day} →" primary button.
+- **`cookProgress` state**: `Record<string, { gathered: number[]; done: number[]; servings: number; made: boolean }>` keyed by ISO date. Wired into all four persistence points: `useState`, localStorage load (`if (d.cookProgress)`), Supabase load (`if (d.cookProgress !== undefined)`), save payload + dep array. Progress is per-day persistent — survives reload and tab switch.
+- **Rating** writes `recipeStars[name]` (TER-307 store); pre-fills from `recipeStars[name]`; taste nudge is symmetric: r≥4 → liked (+ removed from avoid); r≤2 → avoid (+ removed from liked); r=3 → neutral, clears both.
+- **Staple indicator**: `alwaysHave.includes(normalizeIngName(ing.name)) || pantry.includes(ing.name.toLowerCase())` — reuses same logic as grocery list.
+- **Servings** shown read-only ("Serves N"); stepper removed — scaling deliberately out of scope. `servings` field kept vestigially in `cookProgress` shape for forward-compatibility.
+- **Empty state**: "No plan for this week yet — head to Planning to generate dinners."
+- **`ThisWeekView` removed** (replaced entirely; no other references).
+- New lucide imports: `ChevronLeft`, `ChevronRight`.
+- `tsc --noEmit && vite build` pass (513.17 kB JS / 9.69 kB CSS, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
