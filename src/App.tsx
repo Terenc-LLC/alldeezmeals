@@ -4,7 +4,7 @@ import {
   ListChecks, CheckCircle2, AlertCircle, Repeat,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
-  MessageSquare,
+  MessageSquare, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
@@ -240,6 +240,7 @@ export default function App() {
   const [avoid, setAvoid] = useState<string[]>([]);
   const [recipeStars, setRecipeStars] = useState<Record<string, number>>({});
   const [currentWeek, setCurrentWeek] = useState<any>(null);
+  const [cookProgress, setCookProgress] = useState<Record<string, { gathered: number[]; done: number[]; servings: number; made: boolean }>>({});
 
   /* ---- pinned-recipe materialization ---- */
   const pinnedSignature = useMemo(
@@ -298,6 +299,7 @@ export default function App() {
         setAvoid(d.avoid ?? []);
         if (d.recipeStars) setRecipeStars(d.recipeStars);
         setCurrentWeek(d.currentWeek ?? null);
+        if (d.cookProgress) setCookProgress(d.cookProgress);
       }
     } catch {}
     setLoaded(true);
@@ -339,6 +341,7 @@ export default function App() {
           if (d.avoid !== undefined) setAvoid(d.avoid);
           if (d.recipeStars !== undefined) setRecipeStars(d.recipeStars);
           if (d.currentWeek !== undefined) setCurrentWeek(d.currentWeek);
+          if (d.cookProgress !== undefined) setCookProgress(d.cookProgress);
         } else if (data === null) {
           // No row — one-time migration: push existing localStorage up to Supabase.
           // Only fires when maybeSingle returns null (no row ever written for this user).
@@ -371,7 +374,7 @@ export default function App() {
     if (!loaded) return;
     const payload = {
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
-      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek,
+      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     if (!session) return;
@@ -386,7 +389,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -907,11 +910,18 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           />
         )}
         {tab === "today" && (
-          <ThisWeekView
+          <TodayCook
             currentWeek={currentWeek}
+            forecast={forecast}
+            isMobile={isMobile}
+            cookProgress={cookProgress}
+            setCookProgress={setCookProgress}
+            recipeStars={recipeStars}
+            setRecipeStars={setRecipeStars}
             liked={liked} setLiked={setLiked}
             avoid={avoid} setAvoid={setAvoid}
-            rotation={rotation} setRotation={setRotation}
+            pantry={pantry}
+            alwaysHave={alwaysHave}
           />
         )}
         {tab === "list" && (
@@ -2246,111 +2256,325 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid,
     </div>
   );
 }
-/* ============================ This Week (TER-291) ============================ */
-function ThisWeekView({ currentWeek, liked, setLiked, avoid, setAvoid, rotation, setRotation }: any) {
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+/* ============================ Today / Cook Mode (TER-329) ============================ */
+function TodayCook({
+  currentWeek, forecast, isMobile,
+  cookProgress, setCookProgress,
+  recipeStars, setRecipeStars,
+  liked, setLiked, avoid, setAvoid,
+  pantry, alwaysHave,
+}: any) {
+  const today = isoToday();
+  const entries: any[] = currentWeek?.entries ?? [];
+  const cookableEntries = entries.filter((e: any) => !e.skip);
 
-  const thumbUpLocal = (name: string) => { if (name) setLiked((p: string[]) => (p.includes(name) ? p : [...p, name])); };
-  const thumbDownLocal = (name: string) => {
-    if (!name) return;
-    setAvoid((p: string[]) => (p.includes(name) ? p : [...p, name]));
-    setLiked((p: string[]) => p.filter((x) => x !== name));
-  };
-  const addToRotationLocal = (data: any) => {
-    setRotation((p: any[]) => (p.some((r) => r.name === data.name) ? p : [...p, data]));
-    thumbUpLocal(data.name);
-  };
+  const [activeDate, setActiveDate] = useState(() => {
+    if (!cookableEntries.length) return today;
+    return cookableEntries.find((e: any) => e.date === today)?.date ?? cookableEntries[0].date;
+  });
+  const [hoverStar, setHoverStar] = useState(0);
 
-  if (!currentWeek?.entries?.length) {
+  if (!currentWeek || !entries.length) {
     return (
-      <div style={s.card}>
-        <h3 style={s.cardTitle}>This Week</h3>
-        <p style={{ ...s.empty, marginTop: 8 }}>No committed week yet.</p>
-        <p style={{ ...s.cardSub, marginTop: 6 }}>Accept meals in the Meals tab, then tap "Save to This Week" to commit the current plan here.</p>
+      <div style={{ padding: "var(--space-7)", textAlign: "center" as const }}>
+        <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", lineHeight: "var(--t-body-lh)" }}>
+          No plan for this week yet — head to Planning to generate dinners.
+        </p>
       </div>
     );
   }
 
-  if (selectedIdx !== null && currentWeek.entries[selectedIdx] && !currentWeek.entries[selectedIdx].skip) {
-    const entry = currentWeek.entries[selectedIdx];
-    const mealName = entry.meal?.data?.name;
-    return (
-      <div>
-        <button className="btn-ghost btn--sm" style={{ marginBottom: "var(--space-4)" }} onClick={() => setSelectedIdx(null)}>
-          ← Back to this week
-        </button>
-        <RecipeCard
-          meal={entry.meal?.data}
-          kcalInfo={entry.meal?.kcalInfo}
-          isLiked={liked.includes(mealName)}
-          onThumbUp={() => thumbUpLocal(mealName)}
-          onThumbDown={() => thumbDownLocal(mealName)}
-          onSaveRotation={() => { addToRotationLocal(entry.meal?.data); setSelectedIdx(null); }}
-        />
-      </div>
-    );
-  }
+  const activeIdx = Math.max(0, entries.findIndex((e: any) => e.date === activeDate));
+  const activeEntry = entries[activeIdx];
+  const meal = activeEntry?.meal;
+  const data = meal?.data;
 
-  const endDate = addDays(currentWeek.startDate, currentWeek.numDays - 1);
-  const dateRange = `${weekdayLabel(currentWeek.startDate)} – ${weekdayLabel(endDate)}`;
+  const defaultProg = { gathered: [] as number[], done: [] as number[], servings: data?.servings ?? 2, made: false };
+  const prog = { ...defaultProg, ...(cookProgress[activeDate] ?? {}) };
+  const gathered: number[] = prog.gathered ?? [];
+  const done: number[] = prog.done ?? [];
+  const servings: number = prog.servings || data?.servings || 2;
+  const made: boolean = prog.made ?? false;
+
+  const setProgress = (updates: Record<string, any>) =>
+    setCookProgress((p: any) => ({ ...p, [activeDate]: { ...defaultProg, ...(p[activeDate] ?? {}), ...updates } }));
+
+  const name: string = data?.name ?? "";
+  const stars: number = recipeStars[name] ?? 0;
+  const onRate = (r: number) => {
+    setRecipeStars((p: any) => ({ ...p, [name]: r }));
+    if (r >= 4) setLiked((p: string[]) => (p.includes(name) ? p : [...p, name]));
+    else if (r <= 2) {
+      setAvoid((p: string[]) => (p.includes(name) ? p : [...p, name]));
+      setLiked((p: string[]) => p.filter((x: string) => x !== name));
+    }
+  };
+
+  const ingredients: any[] = data?.ingredients ?? [];
+  const steps: string[] = data?.steps ?? [];
+  const currentStep = steps.findIndex((_: any, i: number) => !done.includes(i));
+  const allDone = steps.length > 0 && done.length === steps.length;
+
+  const isIngStaple = (ing: any): boolean =>
+    alwaysHave.includes(normalizeIngName(ing.name ?? "")) ||
+    pantry.includes((ing.name ?? "").toLowerCase());
+
+  const dayLabel = activeDate === today ? "Tonight" : activeDate > today ? "Upcoming" : "Earlier";
+  const fxDay = forecast[activeDate];
+  const wxDay = fxDay ? wx(fxDay.code) : null;
+
+  const totalMin = (data?.prepMinutes ?? 0) + (data?.cookMinutes ?? 0);
+  const difficulty: number | null = data?.difficulty ?? null;
+  const diffLabel = difficulty != null ? (DIFFICULTY_LABELS[difficulty] ?? "") : "";
+  const kcal = meal?.kcalInfo?.kcalPerServing ?? null;
+
+  const nextCookable = cookableEntries.find((e: any) => e.date > activeDate);
+
+  const footerBase: React.CSSProperties = { position: "sticky", bottom: 0, background: "var(--c-surface)", borderTop: "1px solid var(--c-border)", padding: "var(--space-4) var(--space-5)", boxShadow: "0 -2px 10px rgba(26,58,52,.05)" };
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div style={s.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+    <div style={{ minHeight: "100%", background: "var(--c-bg)", display: "flex", flexDirection: "column" }}>
+      <style>{`.tc-srv{width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-primary);font-size:18px;font-weight:700;line-height:1;cursor:pointer;display:grid;place-items:center;font-family:var(--font-sans)}.tc-srv:hover{background:var(--c-surface-2);border-color:var(--c-primary)}`}</style>
+
+      {/* ── DAY BAR ── */}
+      <div style={{ background: "var(--c-surface)", borderBottom: "1px solid var(--c-border)", padding: "var(--space-4) var(--space-5)", boxShadow: "var(--elev-1)" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
           <div>
-            <h3 style={s.cardTitle}>This Week</h3>
-            <p style={{ ...s.cardSub, marginTop: 2 }}>{dateRange}</p>
+            <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", color: "var(--c-primary)", margin: 0 }}>{dayLabel}</p>
+            <h1 style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-h1-size)", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: "var(--t-h1-lh)", color: "var(--c-text)", margin: "2px 0 0", whiteSpace: "nowrap" }}>{weekdayLabel(activeDate)}</h1>
           </div>
-          <button className="btn-ghost btn--sm" onClick={() => window.print()} style={{ flexShrink: 0 }}>
-            <Printer size={14} /> Print
+          {wxDay && fxDay && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-pill)", padding: "7px 11px", fontSize: "var(--t-bodysm-size)", fontFamily: "var(--font-sans)", color: "var(--c-text)", flexShrink: 0 }}>
+              <span style={{ fontSize: 14 }}>{wxDay.e}</span>{fxDay.hi}°F
+            </span>
+          )}
+        </div>
+        {/* prev / rail / next */}
+        <div style={{ display: "flex", alignItems: "stretch", gap: "var(--space-2)" }}>
+          <button onClick={() => { const prev = entries[activeIdx - 1]; if (prev) setActiveDate(prev.date); }} disabled={activeIdx === 0}
+            aria-label="Previous day" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "0 8px" }}>
+            <ChevronLeft size={18} strokeWidth={2.2} />
+          </button>
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+            <div style={{ display: "flex", gap: 3, overflow: "hidden" }}>
+              {entries.map((entry: any) => {
+                const isActive = entry.date === activeDate;
+                const isPast = entry.date < today;
+                const isToday = entry.date === today;
+                const d = parseISO(entry.date);
+                const wd = d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3);
+                const dayNum = d.getDate();
+                const entryFx = forecast[entry.date];
+                const entryWx = entryFx ? wx(entryFx.code) : null;
+                return (
+                  <button key={entry.date} onClick={() => { if (!entry.skip) setActiveDate(entry.date); }} disabled={entry.skip}
+                    style={{
+                      flex: "1 1 0", minWidth: 0, cursor: entry.skip ? "default" : "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                      padding: "7px 2px 6px", borderRadius: "var(--radius-md)",
+                      border: `1px solid ${isActive ? "var(--c-primary)" : "transparent"}`,
+                      background: isActive ? "var(--c-primary)" : (entry.skip || isPast) ? "transparent" : "var(--c-surface-2)",
+                      color: isActive ? "var(--c-on-primary)" : "var(--c-text-muted)",
+                      opacity: (isPast && !isActive) || (entry.skip && !isActive) ? 0.55 : 1,
+                      transition: "background .15s, color .15s",
+                    }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" as const, fontFamily: "var(--font-sans)", opacity: 0.75 }}>{wd}</span>
+                    <span style={{ fontWeight: 600, fontSize: 17, lineHeight: 1, fontFamily: "var(--font-sans)" }}>{dayNum}</span>
+                    {entry.skip ? (
+                      <span style={{ fontSize: 9, fontFamily: "var(--font-sans)", opacity: 0.6 }}>skip</span>
+                    ) : isPast ? (
+                      <Check size={10} strokeWidth={3} />
+                    ) : (
+                      <span style={{ fontSize: 11 }}>{entryWx?.e ?? ""}</span>
+                    )}
+                    {isToday && <span style={{ width: 4, height: 4, borderRadius: 4, background: isActive ? "var(--c-on-primary)" : "var(--c-accent)" }} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <button onClick={() => { const next = entries[activeIdx + 1]; if (next) setActiveDate(next.date); }} disabled={activeIdx >= entries.length - 1}
+            aria-label="Next day" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "0 8px" }}>
+            <ChevronRight size={18} strokeWidth={2.2} />
           </button>
         </div>
-        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-          {currentWeek.entries.map((entry: any, i: number) => {
-            if (entry.skip) {
-              return (
-                <div key={i} style={{ ...s.rotItem, opacity: 0.55 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text-muted)", fontStyle: "italic" }}>Skipped — no dinner</div>
-                    <div style={s.cardSub}>{weekdayLabel(entry.date)}</div>
-                  </div>
+      </div>
+
+      {/* ── SKIPPED / NO DATA ── */}
+      {activeEntry?.skip ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-7)" }}>
+          <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", fontStyle: "italic", textAlign: "center" }}>No dinner planned for this day.</p>
+        </div>
+      ) : !data ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-7)" }}>
+          <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", textAlign: "center" }}>Recipe data not available for this day.</p>
+        </div>
+      ) : (
+        <>
+          {/* ── RECIPE BODY ── */}
+          <div style={{ flex: 1, padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-5)", overflowX: "hidden" }}>
+            <div>
+              <span style={{ display: "inline-block", background: "var(--c-accent)", color: "var(--c-pill-text)", fontSize: "var(--t-caption-size)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" as const, padding: "4px 10px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)" }}>
+                {data.cuisine}
+              </span>
+              <h2 style={{ marginTop: "var(--space-3)", fontSize: isMobile ? 21 : 24, lineHeight: isMobile ? "27px" : "30px", fontWeight: 600, letterSpacing: "-0.01em", fontFamily: "var(--font-sans)", color: "var(--c-text)" }}>
+                {data.name}
+              </h2>
+              <p style={{ marginTop: "var(--space-2)", fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", lineHeight: "var(--t-bodysm-lh)", color: "var(--c-text-muted)" }}>
+                {data.description}
+              </p>
+              {/* Meta row */}
+              <div style={{ marginTop: "var(--space-4)", display: "flex", flexWrap: "wrap", gap: "var(--space-4)", alignItems: "center" }}>
+                {totalMin > 0 && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
+                    <Clock size={15} color="var(--c-primary)" strokeWidth={1.8} />{totalMin} min
+                  </span>
+                )}
+                {kcal && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
+                    <Flame size={15} color="var(--c-primary)" strokeWidth={1.8} />~{kcal} kcal
+                  </span>
+                )}
+                {difficulty != null && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-pill)", padding: "3px 10px", fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", color: "var(--c-text)" }}>
+                    <span style={{ letterSpacing: 1 }}>{"●".repeat(difficulty)}{"○".repeat(5 - difficulty)}</span>{" "}{diffLabel}
+                  </span>
+                )}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                  <Users size={15} color="var(--c-primary)" strokeWidth={1.8} />
+                  <button onClick={() => setProgress({ servings: Math.max(1, servings - 1) })} className="tc-srv" aria-label="Fewer servings">−</button>
+                  <span style={{ fontWeight: 700, minWidth: 18, textAlign: "center" as const, fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)" }}>{servings}</span>
+                  <button onClick={() => setProgress({ servings: servings + 1 })} className="tc-srv" aria-label="More servings">+</button>
+                </span>
+              </div>
+            </div>
+
+            <hr style={{ border: "none", borderTop: "1px solid var(--c-border)", margin: 0 }} />
+
+            {/* ── Two-column (tablet) / stacked (mobile) ── */}
+            <div style={isMobile ? { display: "grid", gap: "var(--space-6)" } : { display: "grid", gridTemplateColumns: "0.85fr 1.25fr", gap: "var(--space-7)", alignItems: "start" }}>
+              {/* ── GATHER ── */}
+              <div>
+                <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-text-muted)", margin: "0 0 var(--space-3)" }}>
+                  Gather · {gathered.length}/{ingredients.length}
+                </p>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "var(--space-1)" }}>
+                  {ingredients.map((ing: any, i: number) => {
+                    const on = gathered.includes(i);
+                    const qtyStr = fmtRecipeQty(ing);
+                    const staple = isIngStaple(ing);
+                    return (
+                      <li key={i}>
+                        <button onClick={() => setProgress({ gathered: on ? gathered.filter((x) => x !== i) : [...gathered, i] })}
+                          style={{ width: "100%", display: "flex", alignItems: "center", gap: "var(--space-3)", minHeight: 46, background: "transparent", border: "none", borderBottom: "1px dashed var(--c-border)", cursor: "pointer", textAlign: "left" as const, padding: "4px 0" }}>
+                          <span style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 6, border: `2px solid ${on ? "var(--c-primary)" : "var(--c-border)"}`, background: on ? "var(--c-primary)" : "transparent", display: "grid", placeItems: "center", transition: "background .12s, border-color .12s" }}>
+                            {on && <Check size={13} color="var(--c-on-primary)" strokeWidth={2.8} />}
+                          </span>
+                          <span style={{ flex: 1, fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", textDecoration: on ? "line-through" : "none", color: on ? "var(--c-text-muted)" : "var(--c-text)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const }}>
+                            {ing.name}
+                            {staple && <span style={{ display: "inline-block", background: "var(--c-warning-bg)", color: "var(--c-warning)", fontSize: "var(--t-caption-size)", fontWeight: 600, padding: "1px 7px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)", flexShrink: 0 }}>staple</span>}
+                          </span>
+                          <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text-muted)", flexShrink: 0 }}>{qtyStr}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              {/* ── COOK ── */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
+                  <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-text-muted)", margin: 0 }}>
+                    Cook · {done.length}/{steps.length} steps
+                  </p>
+                  <span style={{ flex: 1, maxWidth: 160, height: 5, marginLeft: 12, background: "var(--c-surface-2)", borderRadius: 4, overflow: "hidden" }}>
+                    <span style={{ display: "block", height: "100%", width: `${steps.length ? (done.length / steps.length) * 100 : 0}%`, background: "var(--c-primary)", transition: "width .2s" }} />
+                  </span>
                 </div>
-              );
-            }
-            const mealName = entry.meal?.data?.name;
-            const isLiked = liked.includes(mealName);
-            return (
-              <div key={i} style={s.rotItem}>
-                <button
-                  onClick={() => setSelectedIdx(i)}
-                  style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text)" }}>{mealName}</div>
-                  <div style={s.cardSub}>{weekdayLabel(entry.date)}{entry.meal?.data?.cuisine ? ` · ${entry.meal.data.cuisine}` : ""}</div>
+                {done.length === 0 && (
+                  <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", color: "var(--c-text-muted)", margin: "-4px 0 var(--space-3)" }}>
+                    Tap a step to mark your place as you cook
+                  </p>
+                )}
+                <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "var(--space-2)" }}>
+                  {steps.map((step: string, i: number) => {
+                    const isDone = done.includes(i);
+                    const isCurrent = i === currentStep;
+                    return (
+                      <li key={i}>
+                        <button onClick={() => setProgress({ done: isDone ? done.filter((x) => x !== i) : [...done, i] })}
+                          style={{ width: "100%", textAlign: "left" as const, cursor: "pointer", display: "flex", gap: "var(--space-3)", alignItems: "flex-start", padding: "var(--space-3) var(--space-4)", borderRadius: "var(--radius-md)", border: `1px solid ${isCurrent ? "var(--c-primary)" : "var(--c-border)"}`, background: isCurrent ? "var(--c-primary-tint)" : isDone ? "transparent" : "var(--c-surface)", boxShadow: isCurrent ? "var(--elev-1)" : "none", transition: "background .15s, border-color .15s" }}>
+                          <span style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "var(--radius-pill)", background: isDone || isCurrent ? "var(--c-primary)" : "var(--c-surface-2)", color: isDone || isCurrent ? "var(--c-on-primary)" : "var(--c-text-muted)", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13, fontFamily: "var(--font-sans)" }}>
+                            {isDone ? <Check size={15} strokeWidth={2.6} /> : i + 1}
+                          </span>
+                          <span style={{ paddingTop: 3, fontFamily: "var(--font-sans)", fontSize: isMobile ? "var(--t-body-size)" : "var(--t-bodylg-size)", lineHeight: isMobile ? "var(--t-body-lh)" : "var(--t-bodylg-lh)", color: isDone ? "var(--c-text-muted)" : "var(--c-text)", textDecoration: isDone ? "line-through" : "none", textDecorationColor: "var(--c-border)" }}>
+                            {step}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          {/* ── FOOTER ── */}
+          {!made ? (
+            <div style={{ ...footerBase, display: "flex", gap: "var(--space-3)" }}>
+              <button onClick={() => setProgress({ made: true })} className={allDone ? "btn-primary btn--block" : "btn-secondary btn--block"} style={{ flex: 1 }}>
+                <Check size={17} strokeWidth={2.4} />{allDone ? "Made it — log dinner" : "Mark as made"}
+              </button>
+              {nextCookable && (
+                <button onClick={() => setActiveDate(nextCookable.date)} className="btn-ghost" style={{ flexShrink: 0 }}>
+                  Next day <ChevronRight size={16} strokeWidth={2.2} />
                 </button>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                  <button
-                    onClick={() => thumbUpLocal(mealName)}
-                    style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }}
-                    title="Like"
-                  ><ThumbsUp size={14} /></button>
-                  <button
-                    onClick={() => thumbDownLocal(mealName)}
-                    style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
-                    title="Dislike"
-                  ><ThumbsDown size={14} /></button>
-                  <button
-                    onClick={() => addToRotationLocal(entry.meal?.data)}
-                    style={s.rotateBtn}
-                    title="Save to Recipe Box"
-                  ><Star size={14} /></button>
+              )}
+            </div>
+          ) : (
+            <div style={{ ...footerBase, display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                <span style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--c-success-bg)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                  <Check size={19} color="var(--c-success-text)" strokeWidth={2.6} />
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontFamily: "var(--font-sans)", fontWeight: 600, fontSize: "var(--t-h3-size)", lineHeight: "var(--t-h3-lh)", color: "var(--c-text)", margin: 0 }}>
+                    Logged for {weekdayLabel(activeDate)}
+                  </p>
+                  <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text-muted)", margin: 0 }}>
+                    {stars ? "Thanks — that helps us tune next week." : "How was it? Rate it so we learn your taste."}
+                  </p>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", flexWrap: "wrap" as const }}>
+                <div style={{ display: "flex", gap: 4 }} onMouseLeave={() => setHoverStar(0)}>
+                  {[1, 2, 3, 4, 5].map((n) => {
+                    const on = (hoverStar || stars) >= n;
+                    return (
+                      <button key={n} onClick={() => onRate(n)} onMouseEnter={() => setHoverStar(n)}
+                        aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: 2, lineHeight: 0 }}>
+                        <Star size={28} fill={on ? "var(--c-accent)" : "none"} color={on ? "var(--c-accent)" : "var(--c-border)"} strokeWidth={1.6} />
+                      </button>
+                    );
+                  })}
+                </div>
+                {stars > 0 && (
+                  <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-primary)", fontWeight: 700 }}>
+                    {stars >= 4 ? "More like this →" : stars === 3 ? "Noted — it was fine" : "We'll show it less ↓"}
+                  </span>
+                )}
+              </div>
+              {nextCookable && (
+                <button onClick={() => setActiveDate(nextCookable.date)} className="btn-primary btn--block">
+                  On to {weekdayLabel(nextCookable.date)} <ChevronRight size={16} strokeWidth={2.2} />
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
