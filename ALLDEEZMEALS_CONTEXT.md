@@ -688,6 +688,24 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
   when present in localStorage.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-324 — June 2026)
+- User-facing transactional emails on signup (request received) and on admin approval.
+- **`api/_email.ts`** (new shared helper, not a Vercel route): exports `htmlEscape` and
+  `sendResendEmail`. Never throws — returns `true` on success, `false` on any failure. Uses
+  `RESEND_API_KEY` + `USER_FROM_EMAIL` env vars; fails closed (logs + returns false) if either
+  is missing.
+- **Email 1 — "request received"** (`api/admin/notify-signup.ts`): added best-effort user send
+  immediately before the final `200` response (after the admin alert has succeeded). Greets by
+  `first_name` (falls back to first token of `name`, then "there"). A Resend failure here is
+  silent — it never changes the `200` or fails the webhook.
+- **Email 2 — "approved"** (`api/admin/approve-user.ts`): update call now returns
+  `select("email, first_name, referral_code")`. After a successful update, sends best-effort
+  approval email: greets by `first_name`, links to `alldeezmeals.com`, and includes a personal
+  `https://alldeezmeals.com/<CODE>` invite block when `referral_code` is present. If email
+  fails the approval `200` still fires and the flag is already flipped.
+- **`USER_FROM_EMAIL`** added to `.env.example`; set in Vercel as `noreply@alldeezmeals.com`.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
