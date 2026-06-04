@@ -644,6 +644,30 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
   Client never reads `recipe_library` directly.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-323 — June 2026)
+- Approval gate enforced on all authenticated `/api` endpoints + `llm_usage` RLS.
+- **Root cause**: authenticated `/api` endpoints validated the JWT but did not check
+  `profiles.approved`, so a pending account could POST `/api/generate` (paid LLM) directly.
+- **`api/_approved.ts`** (new shared helper, not a Vercel route): exports
+  `isApproved(token, userId): Promise<boolean>`. Creates a user-context Supabase client
+  (token forwarded in `Authorization` header) so the "read own profile" RLS policy applies.
+  Reads `profiles.approved` for the given user; returns `false` on any error (fail-closed).
+- **Endpoints gated** (all insert `isApproved` call immediately after the `getUser` 401 block;
+  return `403 { error: "Account pending approval" }` if false):
+  - `api/generate.ts` — the primary paid-LLM hole
+  - `api/recipes.ts` — library-write integrity
+  - `api/recipes-reuse.ts` — consistency; carries LLM cost in P2b
+  - `api/nutrition.ts` — FDC quota protection
+  - `api/ingest-order.ts` — shared-catalog integrity
+  Untouched: `api/admin/*` (admin-gated), `api/me.ts`, `api/shared-list/*` (public token links).
+- **Migration 012** `supabase/migrations/20260604_012_llm_usage_approval_gate.sql` (manual apply):
+  enables RLS on `llm_usage` and adds the restrictive `approved users only` policy
+  (`as restrictive for all to authenticated using (public.is_approved())`), mirroring migration 006/007.
+- **`CLAUDE.md`**: new "Approval gate" section codifying the two standing rules — new
+  client-accessible tables need the restrictive policy; new non-admin authenticated endpoints
+  need the `isApproved` check.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
