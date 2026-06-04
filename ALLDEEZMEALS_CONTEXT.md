@@ -592,6 +592,21 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - **`ThisWeekView`**: skipped entries (from snapshot) render a non-interactive "Skipped — no dinner" placeholder row; not clickable; no thumb/star actions.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-306 — June 2026)
+- Per-day free-text dietary notes honored in generation + locked disclaimer (Phase 1 of TER-305 series).
+- **`detectDietaryTerms(note: string): string[]`**: top-level pure function in `src/App.tsx`. Lowercases the note; uses word-boundary regex to detect avoid-context phrasings for these canonical terms: `nuts`, `peanuts`, `dairy`, `eggs`, `gluten`, `soy`, `shellfish`, `fish`, `sesame`. Detected phrasings: "no X", "X free", "X-free", "without X", "free of X", "allergic to X", "X allergy/allergies/allergic", "can't/cant have X", "cannot have X", "skip (the) X", "hold the X". Trigger words: nuts ← nut/nuts/tree nut/treenut; fish ← fish only (naturally guarded by word boundaries — "shellfish" does not trigger "fish"). Returns deduped array in stable declaration order; returns `[]` when nothing matches.
+- **`dietaryDisclaimer(items: string[]): string`**: locked helper. Returns verbatim: `Generated to avoid: ${items.join(", ")} per your note. Verify every ingredient and package label yourself — not an allergen-safety guarantee.` The word "safe" (standalone) never appears in this feature's code or copy.
+- **`buildPrompt` injection**: computes `detectDietaryTerms(day.note ?? "")` inside `buildPrompt`; when dietary terms are found, appends a `DIETARY CONSTRAINT (best-effort): …` block to the prompt. The existing `Extra request:` line and ORIGINALITY/SPECIFIC NAME guardrails are untouched.
+- **`generateOne` stamp**: after `callClaude` resolves, stamps `data.dietaryAvoid = dietary` when terms are found. This persists with the meal object through `meals` state, `currentWeek` snapshot, print sheets, and order history — no extra wiring needed.
+- **Render sites** (all conditional on `meal.dietaryAvoid?.length > 0`):
+  - `RecipeCard`: callout rendered after the badges row, before the divider, using `s.reuseNote` warning palette.
+  - Current-plan print sheet: bordered note (`border: 1px solid #1A3A34`, `color: #1A3A34`) after the meta strip, before the ingredients+instructions grid.
+  - History print sheet: same placement and style.
+  - PlanView TOC expanded detail panel: `s.reuseNote` div rendered after the existing `reuseNote` div.
+- **Pinned days excluded**: `generateOne` is never called for pinned days, so no dietary injection or disclaimer for pinned recipes in P1.
+- **Phase 2** = structured dietary profile (vegan/vegetarian + allergy toggles) — out of P1 scope.
+- `tsc --noEmit && vite build` pass (498.05 kB JS / 9.39 kB CSS, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
