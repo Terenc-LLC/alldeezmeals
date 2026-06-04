@@ -6,6 +6,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { normalizeIngName } from "../src/lib/normalize.ts";
+import { isApproved } from "./_approved.js";
 
 const VALID_CATEGORIES = [
   "Produce", "Meat & Seafood", "Dairy & Eggs", "Pantry", "Frozen", "Bakery", "Other",
@@ -62,6 +63,9 @@ export default async function handler(req: any, res: any) {
     return;
   }
   const userId = userData.user.id;
+
+  const approved = await isApproved(token, userId);
+  if (!approved) { res.status(403).json({ error: "Account pending approval" }); return; }
 
   let body: { rows?: IngestRow[]; orderDate?: string };
   try {

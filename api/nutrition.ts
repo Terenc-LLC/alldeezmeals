@@ -5,6 +5,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { normalizeIngName, normalizeGtin, gtinDigits } from "../src/lib/normalize.js";
+import { isApproved } from "./_approved.js";
 
 const FDC_BASE = "https://api.nal.usda.gov/fdc/v1";
 const OFF_BASE = "https://world.openfoodfacts.org/api/v0";
@@ -296,6 +297,9 @@ export default async function handler(req: any, res: any) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
+  const approved = await isApproved(token, userData.user.id);
+  if (!approved) { res.status(403).json({ error: "Account pending approval" }); return; }
 
   let body: { mode?: string; ingredient?: string; gtin?: string };
   try {

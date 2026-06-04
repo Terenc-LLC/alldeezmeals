@@ -42,6 +42,13 @@ Use the **legacy service_role JWT** (starts with `eyJ…`) from Supabase → API
 
 The parenthetical-stripping ingredient normalizer lives in `src/lib/normalize.ts` (`normalizeIngName`). Do not copy it elsewhere. The `normalized_product` logic in `api/ingest-order.ts` (lowercase+trim only, no parenthetical strip) is a separate normalizer for product names — leave it alone.
 
+## Approval gate
+
+Every new feature that touches auth must observe the following two rules:
+
+- **New tables** readable or writable by authenticated users MUST include the restrictive `approved users only` policy in their migration (mirror migration 006/007 pattern: `as restrictive for all to authenticated using (public.is_approved())`). Tables that are service-role-only (no client-facing RLS policy — e.g. `shared_lists`, `recipe_library`) are exempt.
+- **New authenticated, non-admin `/api` endpoints** MUST call `isApproved(token, userId)` (from `api/_approved.ts`) immediately after the successful `getUser` block and return `403 { error: "Account pending approval" }` if false. Exempt: `api/admin/*` (already admin-gated), `api/me.ts`, `api/shared-list/*` (public token links, no user auth).
+
 ## Recipe originality
 
 All generated recipes must be original. The `buildPrompt` in `src/App.tsx` instructs the model to write original cooking directions and descriptions (not copied text); ingredient quantities/lists are fine. Only model-generated recipes enter the global `recipe_library` (TER-303/304); user-entered recipes (TER-234) are account-private and never sync to the shared library.

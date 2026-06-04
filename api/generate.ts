@@ -2,6 +2,7 @@
 // Keeps ANTHROPIC_API_KEY secret. Frontend calls POST /api/generate with { prompt }.
 
 import { createClient } from "@supabase/supabase-js";
+import { isApproved } from "./_approved.js";
 
 // ── LLM cost rate table ($/MTok) ─────────────────────────────────────────────
 // Update this table when Anthropic changes pricing; cost_usd is frozen at write time.
@@ -66,6 +67,9 @@ export default async function handler(req: any, res: any) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
+  const approved = await isApproved(token, userData.user.id);
+  if (!approved) { res.status(403).json({ error: "Account pending approval" }); return; }
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};

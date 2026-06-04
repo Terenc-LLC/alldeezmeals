@@ -2,6 +2,7 @@
 // Authenticated, service-role. Mirrors api/recipes.ts auth pattern.
 
 import { createClient } from "@supabase/supabase-js";
+import { isApproved } from "./_approved.js";
 
 function normalizeRecipeName(name: string): string {
   return name
@@ -46,6 +47,9 @@ export default async function handler(req: any, res: any) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
+  const approved = await isApproved(token, userData.user.id);
+  if (!approved) { res.status(403).json({ error: "Account pending approval" }); return; }
 
   try {
     let body: any;

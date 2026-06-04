@@ -4,6 +4,7 @@
 
 import { createHash } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { isApproved } from "./_approved.js";
 
 // Separate from normalizeIngName (src/lib/normalize.ts) and normalized_product (ingest-order.ts).
 // Deterministic: lowercase, strip punctuation, collapse whitespace.
@@ -58,6 +59,9 @@ export default async function handler(req: any, res: any) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
+  const approved = await isApproved(token, userData.user.id);
+  if (!approved) { res.status(403).json({ error: "Account pending approval" }); return; }
 
   let body: any;
   try {
