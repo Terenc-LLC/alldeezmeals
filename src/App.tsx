@@ -141,6 +141,15 @@ function useIsMobile(): boolean {
 
 /* ====================================================================== */
 export default function App() {
+  // TER-325: capture referral code from /<CODE> path before auth loads
+  useEffect(() => {
+    const m = window.location.pathname.match(/^\/([A-Za-z0-9]{12})$/);
+    if (m) {
+      try { localStorage.setItem("referredBy", m[1].toUpperCase()); } catch {}
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
+
   /* ---- Supabase auth ---- */
   const [session, setSession] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1156,7 +1165,8 @@ function FeedbackModal({ session, tab, onClose }: { session: any; tab: string; o
 function SignInView() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [nearestAldi, setNearestAldi] = useState("");
   const [reason, setReason] = useState("");
   const [sent, setSent] = useState(false);
@@ -1178,18 +1188,29 @@ function SignInView() {
 
   const handleSignUp = async () => {
     const addr = email.trim();
-    if (!addr || !name.trim()) return;
+    if (!addr || !firstName.trim() || !lastName.trim()) return;
     setLoading(true);
     setError("");
+    const referredBy = localStorage.getItem("referredBy");
     const { error: err } = await supabase.auth.signInWithOtp({
       email: addr,
       options: {
         shouldCreateUser: true,
-        data: { name: name.trim(), nearest_aldi: nearestAldi.trim(), reason: reason.trim() },
+        data: {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          nearest_aldi: nearestAldi.trim(),
+          reason: reason.trim(),
+          ...(referredBy ? { referred_by: referredBy } : {}),
+        },
       },
     });
     setLoading(false);
-    if (err) { setError(err.message); } else { setSent(true); }
+    if (err) { setError(err.message); } else {
+      try { localStorage.removeItem("referredBy"); } catch {}
+      setSent(true);
+    }
   };
 
   const switchMode = (m: "signin" | "signup") => { setMode(m); setError(""); setSent(false); };
@@ -1217,7 +1238,7 @@ function SignInView() {
   }
 
   if (mode === "signup") {
-    const canSubmit = email.trim() && name.trim() && !loading;
+    const canSubmit = email.trim() && firstName.trim() && lastName.trim() && !loading;
     return (
       <div style={{ ...s.card, maxWidth: 360, margin: "48px auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
@@ -1234,14 +1255,24 @@ function SignInView() {
         )}
         <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
           <div>
-            <label style={s.fieldLabel}>Name *</label>
+            <label style={s.fieldLabel}>First name *</label>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
               style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
-              placeholder="Your name"
+              placeholder="First name"
               autoFocus
+            />
+          </div>
+          <div>
+            <label style={s.fieldLabel}>Last name *</label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
+              placeholder="Last name"
             />
           </div>
           <div>
