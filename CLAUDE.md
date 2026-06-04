@@ -41,3 +41,7 @@ Use the **legacy service_role JWT** (starts with `eyJ…`) from Supabase → API
 ## Normalizer rule
 
 The parenthetical-stripping ingredient normalizer lives in `src/lib/normalize.ts` (`normalizeIngName`). Do not copy it elsewhere. The `normalized_product` logic in `api/ingest-order.ts` (lowercase+trim only, no parenthetical strip) is a separate normalizer for product names — leave it alone.
+
+## Recipe originality
+
+All generated recipes must be original. The `buildPrompt` in `src/App.tsx` instructs the model to write original cooking directions and descriptions (not copied text); ingredient quantities/lists are fine. Only model-generated recipes enter the global `recipe_library` (TER-303/304); user-entered recipes (TER-234) are account-private and never sync to the shared library.

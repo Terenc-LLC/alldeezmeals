@@ -32,6 +32,7 @@ session (status, decisions, next steps).
 - Generate dinners sequentially so each can reuse earlier ingredients and avoid double-buying.
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
+- **Recipe originality**: all generated recipes must be original — original cooking directions and descriptions in the model's own words; never copied text from published recipes. (Ingredient quantities/lists are fine.) Only model-generated recipes enter the global `recipe_library`; user-entered recipes (TER-234) are account-private and never sync.
 
 ## Status (TER-173 — May 2026)
 - Per-user Supabase schema + RLS (TER-173): created five tables with row-level security.
