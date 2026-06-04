@@ -717,6 +717,17 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - **`index.html` `<head>`**: added `<link rel="icon">`, `<link rel="apple-touch-icon">`, `<meta name="theme-color" content="#2B8C7E">`, and Google Fonts preconnect tags.
 - `tsc --noEmit && vite build` pass (499.93 kB JS, 9.67 kB CSS).
 
+## TER-328 — Wave 2 PR2: IA / navigation
+- **Nav reorder**: Today · [Planning group: Setup · Meals] · Shopping List · Recipe Box · Receipt · History · Catalog.
+- **"This Week" tab retired**: tab value `"thisweek"` renamed to `"today"` throughout (`tab === "today"`, `setTab("today")`, `onAllAccepted` callback). The surface still renders `ThisWeekView` as an interim placeholder until PR3 replaces it with the real cook screen.
+- **Planning group**: `<div>` wrapper around Setup + Meals tabs with `s.planGroup` / `s.planGroupActive` styles — visual border highlights when either child is active. `<span>` "PLANNING" label above the two inner TabBtns. Pure visual; no routing or state change.
+- **"List" → "Shopping List"**: tab label only (`label="Shopping List (${totalItems})"`). Tab value `"list"` and `ListView` component unchanged.
+- **Nav scrolls-x on narrow**: `s.tabs` gains `overflowX: "auto"`, `WebkitOverflowScrolling: "touch"` and tabs get `flexShrink: 0` — nav scrolls internally at 390px, no page-level horizontal scroll.
+- **Active tab color**: `s.tabActive` updated to `color: "var(--c-primary)"` + `fontWeight: 700` (white bg + shadow retained per spec).
+- **New `s` entries**: `planGroup`, `planGroupActive`, `planGroupLabel`.
+- No stray `"thisweek"` value remains. All existing views (Setup, Meals/Plan, Shopping List, Recipe Box, Receipt, History, Catalog) functional. Default landing tab remains `"setup"`.
+- `tsc --noEmit && vite build` pass (500.58 kB JS / 9.67 kB CSS, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).

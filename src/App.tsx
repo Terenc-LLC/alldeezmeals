@@ -867,10 +867,15 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       </header>
 
       <nav style={s.tabs}>
-        <TabBtn active={tab === "setup"} onClick={() => setTab("setup")} icon={<Settings2 size={15} />} label="Setup" />
-        <TabBtn active={tab === "plan"} onClick={() => setTab("plan")} icon={<Sparkles size={15} />} label={`Meals (${acceptedCount}/${days.length})`} />
-        <TabBtn active={tab === "thisweek"} onClick={() => setTab("thisweek")} icon={<CalendarDays size={15} />} label="This Week" />
-        <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`List (${totalItems})`} />
+        <TabBtn active={tab === "today"} onClick={() => setTab("today")} icon={<CalendarDays size={15} />} label="Today" />
+        <div style={{ ...s.planGroup, ...((tab === "setup" || tab === "plan") ? s.planGroupActive : {}) }}>
+          <span style={s.planGroupLabel}>Planning</span>
+          <div style={{ display: "flex", gap: 5 }}>
+            <TabBtn active={tab === "setup"} onClick={() => setTab("setup")} icon={<Settings2 size={15} />} label="Setup" />
+            <TabBtn active={tab === "plan"} onClick={() => setTab("plan")} icon={<Sparkles size={15} />} label={`Meals (${acceptedCount}/${days.length})`} />
+          </div>
+        </div>
+        <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`Shopping List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Recipe Box (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
         <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Clock size={15} />} label="History" />
@@ -898,10 +903,10 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
             onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
             liked={liked} onGenerate={generateAll}
-            onAllAccepted={() => { commitCurrentWeek(); setTab("thisweek"); }} acceptedCount={acceptedCount}
+            onAllAccepted={() => { commitCurrentWeek(); setTab("today"); }} acceptedCount={acceptedCount}
           />
         )}
-        {tab === "thisweek" && (
+        {tab === "today" && (
           <ThisWeekView
             currentWeek={currentWeek}
             liked={liked} setLiked={setLiked}
@@ -3503,9 +3508,12 @@ const s: Record<string, any> = {
   header: { marginBottom: 18 }, logoRow: { display: "flex", alignItems: "center", gap: 12 },
   h1: { fontFamily: serif, fontSize: 23, fontWeight: 800, margin: 0, letterSpacing: "-.01em" },
   sub: { margin: "2px 0 0", fontSize: 12.5, color: "var(--c-text-muted)" },
-  tabs: { display: "flex", gap: 5, marginBottom: 18, background: "var(--c-surface-2)", padding: 5, borderRadius: 12 },
-  tab: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px 4px", border: "none", borderRadius: 9, background: "transparent", color: "var(--c-text-muted)", fontFamily: sans, fontWeight: 600, fontSize: 12, cursor: "pointer" },
-  tabActive: { background: "var(--c-surface)", color: "var(--c-text)", boxShadow: "0 1px 3px rgba(0,0,0,.08)" },
+  tabs: { display: "flex", gap: 5, marginBottom: 18, background: "var(--c-surface-2)", padding: 5, borderRadius: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" },
+  tab: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px 4px", border: "none", borderRadius: 9, background: "transparent", color: "var(--c-text-muted)", fontFamily: sans, fontWeight: 600, fontSize: 12, cursor: "pointer", flexShrink: 0 },
+  tabActive: { background: "var(--c-surface)", color: "var(--c-primary)", fontWeight: 700, boxShadow: "0 1px 3px rgba(0,0,0,.08)" },
+  planGroup: { display: "flex", flexDirection: "column", gap: 4, padding: "4px 6px 5px", border: "1px solid var(--c-border)", borderRadius: 12, background: "rgba(43,140,126,0.06)", flexShrink: 0 },
+  planGroupActive: { borderColor: "var(--c-primary)" },
+  planGroupLabel: { fontSize: 9, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--c-text-muted)", paddingLeft: 2 },
   main: { paddingBottom: 40 },
   card: { background: "var(--c-surface)", borderRadius: 13, padding: 16, border: "1px solid var(--c-border)" },
   cardTitle: { fontFamily: serif, fontSize: 16.5, fontWeight: 600, margin: 0 },
