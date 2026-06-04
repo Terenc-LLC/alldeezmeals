@@ -102,7 +102,13 @@ function detectDietaryTerms(note: string): string[] {
       new RegExp(`\\bno\\s+${t}\\b`).test(n) ||
       new RegExp(`\\b${t}[\\s-]free\\b`).test(n) ||
       new RegExp(`\\bwithout\\s+${t}\\b`).test(n) ||
-      new RegExp(`\\bfree\\s+of\\s+${t}\\b`).test(n)
+      new RegExp(`\\bfree\\s+of\\s+${t}\\b`).test(n) ||
+      new RegExp(`\\ballergic\\s+to\\s+${t}\\b`).test(n) ||
+      new RegExp(`\\b${t}\\s+allerg(?:y|ies|ic)\\b`).test(n) ||
+      new RegExp(`\\bcan['']?t\\s+have\\s+${t}\\b`).test(n) ||
+      new RegExp(`\\bcannot\\s+have\\s+${t}\\b`).test(n) ||
+      new RegExp(`\\bskip\\s+(?:the\\s+)?${t}\\b`).test(n) ||
+      new RegExp(`\\bhold\\s+the\\s+${t}\\b`).test(n)
     );
   }
   const TERMS: [string, string[]][] = [
