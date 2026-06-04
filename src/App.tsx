@@ -194,6 +194,7 @@ export default function App() {
   const [rotation, setRotation] = useState<any[]>([]);
   const [liked, setLiked] = useState<string[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
+  const [recipeStars, setRecipeStars] = useState<Record<string, number>>({});
   const [currentWeek, setCurrentWeek] = useState<any>(null);
 
   /* ---- pinned-recipe materialization ---- */
@@ -244,6 +245,7 @@ export default function App() {
         setRotation(d.rotation ?? []);
         setLiked(d.liked ?? []);
         setAvoid(d.avoid ?? []);
+        if (d.recipeStars) setRecipeStars(d.recipeStars);
         setCurrentWeek(d.currentWeek ?? null);
       }
     } catch {}
@@ -284,6 +286,7 @@ export default function App() {
           if (d.rotation !== undefined) setRotation(d.rotation);
           if (d.liked !== undefined) setLiked(d.liked);
           if (d.avoid !== undefined) setAvoid(d.avoid);
+          if (d.recipeStars !== undefined) setRecipeStars(d.recipeStars);
           if (d.currentWeek !== undefined) setCurrentWeek(d.currentWeek);
         } else if (data === null) {
           // No row — one-time migration: push existing localStorage up to Supabase.
@@ -317,7 +320,7 @@ export default function App() {
     if (!loaded) return;
     const payload = {
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
-      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, currentWeek,
+      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     if (!session) return;
@@ -332,7 +335,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, currentWeek, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -807,7 +810,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             session={session} />
         )}
         {tab === "rotation" && (
-          <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} />
+          <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} recipeStars={recipeStars} setRecipeStars={setRecipeStars} />
         )}
         {tab === "receipt" && <IngestView session={session} />}
         {tab === "history" && (
@@ -2000,7 +2003,7 @@ function ManualRecipeForm({ rotation, onSave, onCancel }: { rotation: any[]; onS
 }
 
 /* ============================ Rotation ============================ */
-function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid }: any) {
+function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid, recipeStars, setRecipeStars }: any) {
   const [showForm, setShowForm] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
@@ -2035,15 +2038,33 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid 
           ? <p style={{ ...s.empty, marginTop: 8 }}>Tap "Recipe Box" on a meal you love to save it here.</p>
           : rotation.length > 0 && (
             <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-              {rotation.map((r: any, i: number) => (
-                <div key={i} style={s.rotItem}>
-                  <button onClick={() => setSelectedIdx(i)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text)" }}>{r.name}</div>
-                    <div style={s.cardSub}>{r.cuisine ? `${r.cuisine} · ` : ""}{r.ingredients?.length ?? 0} ingredients</div>
-                  </button>
-                  <button onClick={() => setRotation((p: any[]) => p.filter((_, idx) => idx !== i))} style={s.iconBtn}><Trash2 size={15} color="var(--c-danger)" /></button>
-                </div>
-              ))}
+              {rotation.map((r: any, i: number) => {
+                const rating = recipeStars[r.name] ?? 0;
+                return (
+                  <div key={i} style={s.rotItem}>
+                    <button onClick={() => setSelectedIdx(i)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text)" }}>{r.name}</div>
+                      <div style={s.cardSub}>{r.cuisine ? `${r.cuisine} · ` : ""}{r.ingredients?.length ?? 0} ingredients</div>
+                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <button
+                          key={n}
+                          onClick={() => setRecipeStars((prev: Record<string, number>) => {
+                            const next = { ...prev };
+                            if (next[r.name] === n) delete next[r.name];
+                            else next[r.name] = n;
+                            return next;
+                          })}
+                          style={{ ...s.starBtn, color: n <= rating ? "var(--c-warning)" : "var(--c-border)" }}
+                          title={n <= rating && n === rating ? "Clear rating" : `Rate ${n} star${n > 1 ? "s" : ""}`}
+                        >★</button>
+                      ))}
+                    </div>
+                    <button onClick={() => setRotation((p: any[]) => p.filter((_, idx) => idx !== i))} style={s.iconBtn}><Trash2 size={15} color="var(--c-danger)" /></button>
+                  </div>
+                );
+              })}
             </div>
           )
         }

@@ -572,6 +572,13 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
   (TER-234) do NOT call this endpoint.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-307 — June 2026)
+- 1–5 star quality ratings in Recipe Box (coexist with thumbs).
+- **`recipeStars` state**: `Record<string, number>` keyed by recipe name (same identity as rotation items). Value is 1–5; absent key = no rating. Clearing a rating deletes the key (never stored as 0). Wired into all four standard persistence points: `useState`, localStorage load (guarded `if (d.recipeStars)`), Supabase load (`if (d.recipeStars !== undefined)`), save payload + dep array.
+- **UI**: `RotationView` renders a 5-star row on each Recipe Box item, between the name/info button and the trash button. Clicking a star sets the rating; clicking the already-set star clears it. Filled amber (★) vs border-color (★) based on `recipeStars[recipe.name]`. Thumbs up/down, liked, and avoid logic unchanged.
+- **Future**: `recipeStars` data is available for `recipe_library` rollup (TER-303) — numeric 1–5 per-user quality signal.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
