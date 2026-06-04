@@ -1,0 +1,259 @@
+/* =====================================================================
+   WARM MARKET — refreshed design tokens for ALLDEEZMeals (Phase 1)
+   Built ON the existing :root color tokens from src/index.css.
+   Colors are preserved verbatim; type / spacing / radius / elevation
+   are NEW token layers proposed in this direction.
+   Maps back to the app's approach: CSS variables + inline-style objects.
+   ===================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
+
+:root {
+  /* ---- COLOR (existing — source of truth, unchanged) ---- */
+  --c-primary: #2B8C7E;
+  --c-primary-hover: #236F64;
+  --c-accent: #F2856B;
+  --c-accent-hover: #E37152;
+  --c-bg: #FBF7F1;
+  --c-surface: #FFFFFF;
+  --c-surface-2: #F4F1E9;
+  --c-text: #1A3A34;
+  --c-text-muted: #7C8A80;
+  --c-border: #E6DDD0;
+  --c-on-primary: #FFFFFF;
+  --c-success-bg: #E6F1EC;
+  --c-success-text: #136B58;
+  --c-pill-bg: #F2856B;
+  --c-pill-text: #5E281A;
+  --c-danger: #A8453C;
+  --c-danger-bg: #F6E7E4;
+  --c-warning: #8A6D3B;
+  --c-warning-bg: #F3EAD6;
+
+  /* ---- COLOR (NEW — proposed additions, flagged as gaps) ---- */
+  /* GAP: no primary tint existed (success-bg was doubling as one). */
+  --c-primary-tint: #E4F0EC;       /* soft teal fill for selected / info */
+  /* GAP: no neutral shadow color — shadows were ad-hoc black rgba. */
+  --c-shadow: 26 58 52;            /* = --c-text as RGB, for tinted elevation */
+
+  /* ---- TYPE families ---- */
+  --font-serif: 'Fraunces', Georgia, serif;     /* display + headings */
+  --font-sans: 'Nunito Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* ---- TYPE scale (size / line-height / weight) ---- */
+  /* display — page title (Fraunces 600) */
+  --t-display-size: 28px;   --t-display-lh: 32px;   --t-display-w: 600;
+  /* h1 — screen / section title */
+  --t-h1-size: 22px;        --t-h1-lh: 28px;        --t-h1-w: 600;
+  /* h2 — meal name / card hero */
+  --t-h2-size: 19px;        --t-h2-lh: 25px;        --t-h2-w: 600;
+  /* h3 — card title / category header */
+  --t-h3-size: 16px;        --t-h3-lh: 22px;        --t-h3-w: 600;
+  /* body-lg — emphasized body / list items */
+  --t-bodylg-size: 16px;    --t-bodylg-lh: 24px;    --t-bodylg-w: 400;
+  /* body — default body */
+  --t-body-size: 15px;      --t-body-lh: 22px;      --t-body-w: 400;
+  /* body-sm — secondary / descriptions */
+  --t-bodysm-size: 13px;    --t-bodysm-lh: 18px;    --t-bodysm-w: 400;
+  /* label — UPPERCASE tags, field labels (tracked) */
+  --t-label-size: 12px;     --t-label-lh: 16px;     --t-label-w: 700;
+  --t-label-tracking: 0.05em;
+  /* caption — meta, quantities, attributions */
+  --t-caption-size: 11px;   --t-caption-lh: 14px;   --t-caption-w: 600;
+
+  /* ---- SPACING (4px base) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* ---- RADIUS ---- */
+  --radius-sm: 8px;     /* inputs, chips, small controls */
+  --radius-md: 12px;    /* buttons, inner blocks */
+  --radius-lg: 16px;    /* cards, surfaces */
+  --radius-pill: 999px; /* tags, pills, toggles */
+
+  /* ---- ELEVATION (tinted with --c-shadow, not pure black) ---- */
+  --elev-0: none;
+  --elev-1: 0 1px 2px rgba(var(--c-shadow) / 0.06), 0 1px 3px rgba(var(--c-shadow) / 0.05);
+  --elev-2: 0 4px 14px rgba(var(--c-shadow) / 0.09), 0 2px 6px rgba(var(--c-shadow) / 0.05);
+  --elev-primary: 0 2px 8px rgba(43, 140, 126, 0.28);
+
+  /* ---- INTERACTION ---- */
+  --tap-min: 44px;            /* minimum touch target (mobile) */
+  --focus-ring: 0 0 0 3px rgba(43, 140, 126, 0.30);
+}
+
+/* =====================================================================
+   BASE
+   ===================================================================== */
+.wm {
+  font-family: var(--font-sans);
+  color: var(--c-text);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.wm *, .wm *::before, .wm *::after { box-sizing: border-box; }
+
+/* =====================================================================
+   TYPE UTILITIES
+   ===================================================================== */
+.wm-display { font-family: var(--font-serif); font-size: var(--t-display-size); line-height: var(--t-display-lh); font-weight: var(--t-display-w); letter-spacing: -0.015em; margin: 0; }
+.wm-h1 { font-family: var(--font-serif); font-size: var(--t-h1-size); line-height: var(--t-h1-lh); font-weight: var(--t-h1-w); letter-spacing: -0.01em; margin: 0; }
+.wm-h2 { font-family: var(--font-serif); font-size: var(--t-h2-size); line-height: var(--t-h2-lh); font-weight: var(--t-h2-w); letter-spacing: -0.01em; margin: 0; }
+.wm-h3 { font-family: var(--font-serif); font-size: var(--t-h3-size); line-height: var(--t-h3-lh); font-weight: var(--t-h3-w); margin: 0; }
+.wm-bodylg { font-family: var(--font-sans); font-size: var(--t-bodylg-size); line-height: var(--t-bodylg-lh); font-weight: var(--t-bodylg-w); margin: 0; }
+.wm-body { font-family: var(--font-sans); font-size: var(--t-body-size); line-height: var(--t-body-lh); font-weight: var(--t-body-w); margin: 0; }
+.wm-bodysm { font-family: var(--font-sans); font-size: var(--t-bodysm-size); line-height: var(--t-bodysm-lh); font-weight: var(--t-bodysm-w); margin: 0; }
+.wm-label { font-family: var(--font-sans); font-size: var(--t-label-size); line-height: var(--t-label-lh); font-weight: var(--t-label-w); letter-spacing: var(--t-label-tracking); text-transform: uppercase; margin: 0; }
+.wm-caption { font-family: var(--font-sans); font-size: var(--t-caption-size); line-height: var(--t-caption-lh); font-weight: var(--t-caption-w); margin: 0; }
+.wm-muted { color: var(--c-text-muted); }
+
+/* =====================================================================
+   SURFACES
+   ===================================================================== */
+.wm-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-1);
+  padding: var(--space-4);
+}
+.wm-sunken {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+/* =====================================================================
+   BUTTONS  (min-height = tap target on mobile)
+   ===================================================================== */
+.wm-btn {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--t-body-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background .15s, box-shadow .15s, border-color .15s, transform .05s;
+  white-space: nowrap;
+}
+.wm-btn:active { transform: translateY(1px); }
+.wm-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.wm-btn--primary { background: var(--c-primary); color: var(--c-on-primary); box-shadow: var(--elev-primary); }
+.wm-btn--primary:hover { background: var(--c-primary-hover); }
+
+.wm-btn--secondary { background: var(--c-surface); color: var(--c-primary); border-color: var(--c-border); box-shadow: var(--elev-0); }
+.wm-btn--secondary:hover { background: var(--c-surface-2); border-color: var(--c-primary); }
+
+.wm-btn--ghost { background: transparent; color: var(--c-text-muted); border-color: var(--c-border); }
+.wm-btn--ghost:hover { background: var(--c-surface-2); color: var(--c-text); }
+
+.wm-btn--block { width: 100%; }
+.wm-btn--sm { min-height: 36px; font-size: var(--t-bodysm-size); padding: 0 var(--space-3); border-radius: var(--radius-sm); }
+
+/* =====================================================================
+   TAGS / PILLS / BADGES
+   ===================================================================== */
+.wm-tag {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  font-family: var(--font-sans); font-weight: 600;
+  font-size: var(--t-caption-size); line-height: 1;
+  padding: 5px 10px; border-radius: var(--radius-pill);
+  background: var(--c-surface-2); color: var(--c-text-muted);
+}
+.wm-tag--cuisine { background: var(--c-accent); color: var(--c-pill-text); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.wm-tag--primary { background: var(--c-primary); color: var(--c-on-primary); font-weight: 700; }
+.wm-tag--effort  { background: var(--c-accent); color: var(--c-pill-text); font-weight: 700; }
+.wm-tag--est     { background: var(--c-warning-bg); color: var(--c-warning); font-weight: 700; }
+.wm-tag--catalog { background: var(--c-surface-2); color: var(--c-primary); font-weight: 700; }
+
+/* =====================================================================
+   FORM CONTROLS
+   ===================================================================== */
+.wm-field-label {
+  display: block; margin-bottom: var(--space-2);
+  font-family: var(--font-sans); font-weight: 700;
+  font-size: var(--t-label-size); line-height: var(--t-label-lh);
+  letter-spacing: var(--t-label-tracking); text-transform: uppercase;
+  color: var(--c-text-muted);
+}
+.wm-input, .wm-select {
+  font-family: var(--font-sans); font-size: var(--t-body-size);
+  color: var(--c-text); background: var(--c-surface);
+  border: 1px solid var(--c-border); border-radius: var(--radius-sm);
+  padding: 0 var(--space-3); min-height: var(--tap-min);
+  width: 100%;
+}
+.wm-input:focus, .wm-select:focus { outline: none; border-color: var(--c-primary); box-shadow: var(--focus-ring); }
+.wm-select { appearance: none; background-image: none; cursor: pointer; }
+
+/* =====================================================================
+   IMAGE SLOT (placeholder — graceful no-photo state is the default)
+   ===================================================================== */
+.wm-imgslot {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background-color: var(--c-surface-2);
+  background-image:
+    repeating-linear-gradient(135deg,
+      rgba(43,140,126,0.06) 0 10px,
+      transparent 10px 20px);
+  border: 1px solid var(--c-border);
+  display: grid; place-items: center;
+}
+.wm-imgslot__hint {
+  font-family: var(--font-sans);
+  font-size: var(--t-caption-size);
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--c-text-muted);
+  text-transform: lowercase;
+  background: rgba(255,255,255,0.65);
+  padding: 4px 10px; border-radius: var(--radius-pill);
+}
+
+/* =====================================================================
+   GROCERY LIST ROW
+   ===================================================================== */
+.wm-listrow {
+  display: flex; align-items: center; gap: var(--space-3);
+  min-height: var(--tap-min); padding: var(--space-1) 0;
+}
+.wm-check {
+  flex: 0 0 auto; width: 24px; height: 24px;
+  border-radius: var(--radius-sm); border: 2px solid var(--c-border);
+  background: var(--c-surface); cursor: pointer;
+  display: grid; place-items: center; transition: background .12s, border-color .12s;
+}
+.wm-check[data-checked="true"] { background: var(--c-primary); border-color: var(--c-primary); }
+.wm-listrow__label { flex: 1 1 auto; min-width: 0; }
+.wm-listrow[data-checked="true"] .wm-listrow__name { text-decoration: line-through; color: var(--c-text-muted); }
+
+/* =====================================================================
+   DAY CONTROL ROW (spec reference)
+   ===================================================================== */
+.wm-daycontrol {
+  display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+}
+.wm-daycontrol > * { min-height: var(--tap-min); }
+
+/* =====================================================================
+   DIVIDER
+   ===================================================================== */
+.wm-divider { height: 1px; background: var(--c-border); border: 0; margin: var(--space-4) 0; }
