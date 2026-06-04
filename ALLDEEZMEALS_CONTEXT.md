@@ -735,8 +735,9 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - **Two-column body** (tablet: `0.85fr 1.25fr`; mobile: stacked): Gather section (ingredient checklist with 24px checkbox, name, qty, staple pill) + Cook section (progress bar, step cards with current/done/upcoming states, hint on first open).
 - **Footer** (sticky bottom, `--elev`): "Mark as made" (secondary → primary solid once all steps done) + optional "Next day →" ghost. After mark-made → rating panel: green check + "Logged for…" header; 5-star tap rating (Star from lucide-react, coral fill); responsive copy ≥4 / 3 / ≤2; "On to {next day} →" primary button.
 - **`cookProgress` state**: `Record<string, { gathered: number[]; done: number[]; servings: number; made: boolean }>` keyed by ISO date. Wired into all four persistence points: `useState`, localStorage load (`if (d.cookProgress)`), Supabase load (`if (d.cookProgress !== undefined)`), save payload + dep array. Progress is per-day persistent — survives reload and tab switch.
-- **Rating** writes `recipeStars[name]` (TER-307 store); pre-fills from `recipeStars[name]`; taste nudge: r≥4 → liked, r≤2 → avoid + remove from liked, r=3 → stars only.
+- **Rating** writes `recipeStars[name]` (TER-307 store); pre-fills from `recipeStars[name]`; taste nudge is symmetric: r≥4 → liked (+ removed from avoid); r≤2 → avoid (+ removed from liked); r=3 → neutral, clears both.
 - **Staple indicator**: `alwaysHave.includes(normalizeIngName(ing.name)) || pantry.includes(ing.name.toLowerCase())` — reuses same logic as grocery list.
+- **Servings** shown read-only ("Serves N"); stepper removed — scaling deliberately out of scope. `servings` field kept vestigially in `cookProgress` shape for forward-compatibility.
 - **Empty state**: "No plan for this week yet — head to Planning to generate dinners."
 - **`ThisWeekView` removed** (replaced entirely; no other references).
 - New lucide imports: `ChevronLeft`, `ChevronRight`.

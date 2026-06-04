@@ -2303,10 +2303,16 @@ function TodayCook({
   const stars: number = recipeStars[name] ?? 0;
   const onRate = (r: number) => {
     setRecipeStars((p: any) => ({ ...p, [name]: r }));
-    if (r >= 4) setLiked((p: string[]) => (p.includes(name) ? p : [...p, name]));
-    else if (r <= 2) {
+    if (r >= 4) {
+      setLiked((p: string[]) => (p.includes(name) ? p : [...p, name]));
+      setAvoid((p: string[]) => p.filter((x: string) => x !== name));
+    } else if (r <= 2) {
       setAvoid((p: string[]) => (p.includes(name) ? p : [...p, name]));
       setLiked((p: string[]) => p.filter((x: string) => x !== name));
+    } else {
+      // r === 3 → neutral: clear any prior nudge in both directions
+      setLiked((p: string[]) => p.filter((x: string) => x !== name));
+      setAvoid((p: string[]) => p.filter((x: string) => x !== name));
     }
   };
 
@@ -2334,8 +2340,6 @@ function TodayCook({
 
   return (
     <div style={{ minHeight: "100%", background: "var(--c-bg)", display: "flex", flexDirection: "column" }}>
-      <style>{`.tc-srv{width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid var(--c-border);background:var(--c-surface);color:var(--c-primary);font-size:18px;font-weight:700;line-height:1;cursor:pointer;display:grid;place-items:center;font-family:var(--font-sans)}.tc-srv:hover{background:var(--c-surface-2);border-color:var(--c-primary)}`}</style>
-
       {/* ── DAY BAR ── */}
       <div style={{ background: "var(--c-surface)", borderBottom: "1px solid var(--c-border)", padding: "var(--space-4) var(--space-5)", boxShadow: "var(--elev-1)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
@@ -2440,11 +2444,9 @@ function TodayCook({
                     <span style={{ letterSpacing: 1 }}>{"●".repeat(difficulty)}{"○".repeat(5 - difficulty)}</span>{" "}{diffLabel}
                   </span>
                 )}
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: "auto", fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
                   <Users size={15} color="var(--c-primary)" strokeWidth={1.8} />
-                  <button onClick={() => setProgress({ servings: Math.max(1, servings - 1) })} className="tc-srv" aria-label="Fewer servings">−</button>
-                  <span style={{ fontWeight: 700, minWidth: 18, textAlign: "center" as const, fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)" }}>{servings}</span>
-                  <button onClick={() => setProgress({ servings: servings + 1 })} className="tc-srv" aria-label="More servings">+</button>
+                  Serves {data.servings ?? servings}
                 </span>
               </div>
             </div>
