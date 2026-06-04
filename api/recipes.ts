@@ -97,6 +97,7 @@ export default async function handler(req: any, res: any) {
       active:            true,
       source:            "generated",
       model:             model ?? "claude-sonnet-4-6",
+      recipe_json:       body,
     },
     { onConflict: "content_hash", ignoreDuplicates: true },
   );

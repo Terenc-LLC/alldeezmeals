@@ -564,12 +564,56 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
   const generateOne = async (day: any, idx: number, committed: any[], reject?: string) => {
     setMeals((m) => ({ ...m, [day.id]: { status: "loading", data: null, error: null, kcalInfo: null } }));
     try {
-      const data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
       const dietaryAvoid = detectDietaryTerms(day.note ?? "");
+      const tok = session?.access_token ?? "";
+
+      // Attempt library reuse when safe: authenticated, no dietary constraints, not a pinned day.
+      if (tok && dietaryAvoid.length === 0 && !day.pinnedRecipe) {
+        try {
+          const lvl = EFFORT_LEVELS.find((l) => l.key === (day.effort ?? "any"));
+          const effortMin = (lvl && lvl.key !== "any") ? lvl.min : null;
+          const effortMax = (lvl && lvl.key !== "any") ? lvl.max : null;
+          const excludeNames = [
+            ...avoid,
+            ...rotation.map((r: any) => r.name),
+            ...committed.map((m: any) => m.name),
+            ...(reject ? [reject] : []),
+          ];
+          const rr = await fetch("/api/recipes-reuse", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${tok}` },
+            body: JSON.stringify({
+              people: day.people,
+              cuisine: (day.cuisine && day.cuisine !== "Any") ? day.cuisine : null,
+              effortMin,
+              effortMax,
+              excludeNames,
+            }),
+          });
+          if (rr.ok) {
+            const rj = await rr.json();
+            if (rj.reuse && rj.recipe) {
+              const reusedData = rj.recipe;
+              setMeals((m) => ({ ...m, [day.id]: { status: "ready", data: reusedData, error: null, kcalInfo: null } }));
+              resolveNutrition(reusedData, tok).then((kcalInfo: NutritionResult) => {
+                setMeals((m) => {
+                  const cur = m[day.id];
+                  if (!cur?.data || cur.data.name !== reusedData.name) return m; // stale guard
+                  return { ...m, [day.id]: { ...cur, kcalInfo } };
+                });
+              }).catch(() => {});
+              return reusedData;
+            }
+          }
+        } catch {
+          // Reuse failure — fall through to generate path.
+        }
+      }
+
+      const data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
       if (dietaryAvoid.length) data.dietaryAvoid = dietaryAvoid;
       setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null, kcalInfo: null } }));
       // Kick off nutrition resolution in background (non-blocking).
-      const tok = session?.access_token ?? "";
       if (tok) {
         resolveNutrition(data, tok).then((kcalInfo: NutritionResult) => {
           setMeals((m) => {
