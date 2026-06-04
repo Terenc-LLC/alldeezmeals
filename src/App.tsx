@@ -529,6 +529,14 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
           });
         }).catch(() => {});
       }
+      // Best-effort: save to global recipe_library — failure must never affect generation.
+      if (tok) {
+        fetch("/api/recipes", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${tok}` },
+          body: JSON.stringify(data),
+        }).catch(() => {});
+      }
       return data;
     } catch (e: any) {
       setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: e?.message || "Couldn't generate -- retry.", kcalInfo: null } }));

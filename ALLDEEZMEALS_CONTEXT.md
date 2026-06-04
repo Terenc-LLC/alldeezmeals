@@ -547,6 +547,31 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
   affects the 200 response. Missing `data.usage` is handled without throwing.
 - `tsc --noEmit && vite build` pass.
 
+## Status (TER-304 — June 2026)
+- Recipe library P1 — save generated originals to `recipe_library`.
+- **Migration** `supabase/migrations/20260604_010_recipe_library.sql` (manual apply): creates
+  `recipe_library` table with full P1–P3 schema: `content_hash` (UNIQUE, exact-dup guard),
+  `normalized_recipe` (indexed, non-unique, groups dish variants), `name`, `cuisine`,
+  `dietary_tags jsonb default '[]'`, `ingredients jsonb`, `steps jsonb`, `nutrition jsonb`
+  (e.g. `{ kcalPerServing }`), `difficulty`, `servings`, `base_recipe_id` (self-FK, NULL = original),
+  `times_reused`, `active`, `source`, `model`, `created_at`. RLS enabled; no anon policy
+  (service-role bypasses). No `user_id` — global, unattributed pool. Two indexes:
+  `recipe_library_normalized_recipe_idx` on `(normalized_recipe)` and partial UNIQUE
+  `recipe_library_variant_idx` on `(base_recipe_id, servings) WHERE base_recipe_id IS NOT NULL`.
+- **`api/recipes.ts`**: new `POST /api/recipes` endpoint. Mirrors `ingest-order.ts` auth pattern
+  (anon client validates JWT; separate service-role client for the write). Computes server-side:
+  `content_hash` = SHA-256 of (normalized name + "|" + sorted normalized ingredient names + "|" +
+  steps joined); `normalized_recipe` = `normalizeRecipeName(name) + "|" + cuisine.toLowerCase()`.
+  Inserts as original: `base_recipe_id = NULL`, `source = 'generated'`, `model` defaults to
+  `'claude-sonnet-4-6'`. Upserts with `ON CONFLICT (content_hash) DO NOTHING`.
+- **`normalizeRecipeName`**: defined inline in `api/recipes.ts` (lowercase, strip punctuation,
+  collapse whitespace). Separate from `normalizeIngName` and `normalized_product` logic.
+- **`src/App.tsx` hook**: `generateOne` fires a best-effort POST to `/api/recipes` after a
+  successful generate (after the nutrition kick-off block). Wrapped in `.catch(() => {})` —
+  a save failure never affects generation or UI. `parseReceipt` and user-entered recipes
+  (TER-234) do NOT call this endpoint.
+- `tsc --noEmit && vite build` pass.
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
