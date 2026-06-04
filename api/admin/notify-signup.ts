@@ -1,6 +1,7 @@
 // TER-238: Supabase Database Webhook — fires on profiles INSERT.
 // Verifies x-webhook-secret header, then sends a Resend email to the admin.
 // No user auth here — caller is Supabase's webhook service.
+import { sendResendEmail } from "../_email.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
@@ -20,6 +21,7 @@ export default async function handler(req: any, res: any) {
   const name = record.name ?? "(no name)";
   const nearest_aldi = record.nearest_aldi ?? "(not provided)";
   const reason = record.reason ?? "(not provided)";
+  const first_name = record.first_name || String(record.name ?? "").split(" ")[0] || "there";
   const requested_at = record.requested_at
     ? new Date(record.requested_at).toLocaleString("en-US", { timeZone: "UTC" }) + " UTC"
     : "(unknown)";
@@ -63,6 +65,17 @@ export default async function handler(req: any, res: any) {
       console.error("notify-signup: Resend error", emailRes.status, text);
       res.status(500).json({ error: `Resend error ${emailRes.status}` }); return;
     }
+
+    await sendResendEmail({
+      to: record.email,
+      subject: "Your ALLDEEZMeals request is in",
+      html: `
+<p>Hi ${htmlEscape(first_name)},</p>
+<p>Thanks for requesting access to ALLDEEZMeals — the ALDI-first weekly dinner planner.</p>
+<p>Your request is in and waiting on a quick review (I'm onboarding testers in small batches).
+I'll email you the moment you're approved so you can jump straight in.</p>
+<p>— Chris<br>ALLDEEZMeals</p>`.trim(),
+    });
 
     res.status(200).json({ ok: true });
   } catch (err: any) {
