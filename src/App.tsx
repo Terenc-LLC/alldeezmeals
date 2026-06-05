@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
-  ListChecks, CheckCircle2, AlertCircle, Repeat,
+  ListChecks, CheckCircle2, AlertCircle, Repeat, Info,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
   MessageSquare, ChevronLeft, ChevronRight,
@@ -493,6 +493,9 @@ export default function App() {
       const preparedEarlier: boolean = i.preparedEarlier === true;
       return { name, recipeAmount, purchaseSize, purchaseQty, category, source, preparedEarlier };
     }).filter((i: any) => i.name);
+    obj.provenance = typeof obj.provenance === "string" ? obj.provenance : "";
+    obj.reuseNotes = Array.isArray(obj.reuseNotes) ? obj.reuseNotes.filter((s: any) => typeof s === "string") : [];
+    obj.pantryNote = typeof obj.pantryNote === "string" ? obj.pantryNote : "";
     return obj;
   };
 
@@ -544,8 +547,11 @@ export default function App() {
 - Share ingredients across the week; minimize waste.
 - The family likes bulk chicken breasts poached with onion+garlic then shredded for multiple dinners. Favor this kind of batch prep — those prepped items are source:"reused".
 - If a whole chicken is used, use its parts across more than one dinner.
-- Set "reuseNote" to 1–3 short sentences narrating the PROVENANCE of non-buy items: name which specific meals share a pack (source:"reused") and call out pantry staples as a group (source:"staple"). Example: "Corn tortillas: from the 30-ct pack bought this week for the chorizo tacos. Shredded chicken: poached & shredded earlier from the breast pack. Garlic powder, cumin, and chili powder are pantry staples you likely have."`
-      : `Use mainstream, affordable ALDI ingredients. Bias to ALDI-stocked everyday items; avoid exotic or specialty items unless they are central to the dish. Include EVERY ingredient in the array with a "source" field: "buy" (net-new purchase), "reused" (from another meal's pack or batch-prep this week), or "staple" (common pantry item assumed on hand). Set reuseNote to briefly explain provenance of non-buy items.`;
+- Set "reuseNote" to 1–3 short sentences narrating the PROVENANCE of non-buy items: name which specific meals share a pack (source:"reused") and call out pantry staples as a group (source:"staple"). Example: "Corn tortillas: from the 30-ct pack bought this week for the chorizo tacos. Shredded chicken: poached & shredded earlier from the breast pack. Garlic powder, cumin, and chili powder are pantry staples you likely have."
+- Set "provenance" to 1–2 sentences for the cook explaining what was batch-prepped from a PRIOR meal and is ready to use now (e.g. "The chicken is already cooked — you made it Saturday."). Empty string when nothing was prepared earlier (no preparedEarlier:true ingredients).
+- Set "reuseNotes" to a string array — one entry per reused/prepared item or logical group (e.g. ["Shredded chicken: poached & shredded earlier from the breast pack.", "Corn tortillas: from the 30-ct pack bought for the chorizo tacos."]). This is the same reasoning as reuseNote split per line. Empty array if no reuse.
+- Set "pantryNote" to a short comma-separated string listing the pantry staples used (e.g. "Cumin, chili powder, garlic powder, salt"). Empty string if none.`
+      : `Use mainstream, affordable ALDI ingredients. Bias to ALDI-stocked everyday items; avoid exotic or specialty items unless they are central to the dish. Include EVERY ingredient in the array with a "source" field: "buy" (net-new purchase), "reused" (from another meal's pack or batch-prep this week), or "staple" (common pantry item assumed on hand). Set reuseNote to briefly explain provenance of non-buy items. Set provenance to 1–2 sentences about what was batch-prepped earlier and is ready to use (empty string if none). Set reuseNotes to a string array — one entry per reused item or group (empty array if none). Set pantryNote to a comma-separated list of pantry staples used (empty string if none).`;
 
     const loves = Array.from(new Set([...liked, ...rotation.map((r) => r.name)]));
     const prefLines: string[] = [];
@@ -575,7 +581,7 @@ ${prior}
 Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0. For source:"staple" omit or zero purchaseSize/purchaseQty. preparedEarlier (boolean, default false): set to true ONLY if this ingredient was actually prepped/cooked in an EARLIER meal this week and is being reused in that prepared form (e.g. shredded chicken poached Monday, onions diced earlier). A whole/raw item pulled from a shared pack is NOT preparedEarlier (e.g. half an onion from the already-purchased bag → preparedEarlier:false). This field is independent of source.
 
 Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. ORIGINALITY: write original recipes — original cooking directions and descriptions in your own words; do not copy text from published recipes. (Quantities/ingredient lists are fine; the written steps/description must be original.) SPECIFIC NAME: set "name" to a distinctive, specific dish name (e.g. "Ginger-Soy Chicken Stir Fry with Peppers"), NOT a generic category ("Chicken Stir Fry"). Exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","provenance":"","reuseNotes":[],"pantryNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -2660,12 +2666,19 @@ function TodayCook({
         <>
           {/* ── RECIPE BODY ── */}
           <div style={{ flex: 1, padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-5)", overflowX: "hidden" }}>
-            {data.reuseNote && (
+            {data.provenance ? (
+              <div style={{ display: "flex", gap: "var(--space-3)", background: "var(--c-surface)", border: "1px solid var(--c-border)", borderLeft: "3px solid var(--c-primary)", borderRadius: "var(--radius-sm)", padding: "var(--space-3) var(--space-4)", fontFamily: "var(--font-sans)" }}>
+                <Info size={15} color="var(--c-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+                <p style={{ margin: 0, fontSize: "var(--t-bodysm-size)", lineHeight: "var(--t-bodysm-lh)", fontWeight: 400, color: "var(--c-text)" }}>
+                  <strong style={{ fontWeight: 700 }}>Good to know · </strong>{data.provenance}
+                </p>
+              </div>
+            ) : data.reuseNote ? (
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "var(--c-warning-bg)", border: "1px solid var(--c-warning-bg)", color: "var(--c-warning)", fontSize: "var(--t-bodysm-size)", lineHeight: "var(--t-bodysm-lh)", padding: "10px 13px", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)" }}>
                 <Repeat size={15} style={{ flexShrink: 0, marginTop: 2 }} />
                 <span><strong style={{ fontWeight: 700 }}>Good to know: </strong>{data.reuseNote}</span>
               </div>
-            )}
+            ) : null}
             <div>
               <span style={{ display: "inline-block", background: "var(--c-accent)", color: "var(--c-pill-text)", fontSize: "var(--t-caption-size)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" as const, padding: "4px 10px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)" }}>
                 {data.cuisine}
