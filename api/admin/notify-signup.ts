@@ -69,6 +69,7 @@ export default async function handler(req: any, res: any) {
     await sendResendEmail({
       to: record.email,
       subject: "Your ALLDEEZMeals request is in",
+      headers: { "List-Unsubscribe": "<mailto:alldeezmeals@terenc.com?subject=unsubscribe>" },
       html: `
 <p>Hi ${htmlEscape(first_name)},</p>
 <p>Thanks for requesting access to ALLDEEZMeals — the ALDI-first weekly dinner planner.</p>

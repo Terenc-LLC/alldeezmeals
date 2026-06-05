@@ -48,7 +48,8 @@ export default async function handler(req: any, res: any) {
       const n = claimedNumber as number;
       await sendResendEmail({
         to,
-        subject: `You're in — 1 year free locked in (#${n} of 50)`,
+        subject: `Your ALLDEEZMeals beta spot is confirmed (#${n} of 50)`,
+        headers: { "List-Unsubscribe": "<mailto:alldeezmeals@terenc.com?subject=unsubscribe>" },
         html: `<p>Hi ${firstName},</p>
 <p>You just locked in your spot — you're qualifier #${n} of 50, which means a full year of ALLDEEZMeals free once beta ends.</p>
 <p>Nothing to do right now: keep planning your weeks and handing off your ALDI list. I'll be in touch as the beta develops.</p>
