@@ -204,12 +204,21 @@ export default function App() {
   }, [session?.user?.id]); // eslint-disable-line
 
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState("setup");
+  const VALID_TABS = ["today", "setup", "plan", "list", "rotation", "receipt", "history", "catalog"];
+  const [tab, setTab] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("alldeezmeals-active-tab");
+      if (saved && VALID_TABS.includes(saved)) return saved;
+    } catch {}
+    return "today";
+  });
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [printSource, setPrintSource] = useState<"current" | string>("current");
   const [historyPrintMeals, setHistoryPrintMeals] = useState<Array<{ date: string; meal: { data: any } }> | null>(null);
   // TER-236: safety reset — if admin flips off while Catalog is open, redirect to setup.
   useEffect(() => { if (!isAdmin && tab === "catalog") setTab("setup"); }, [isAdmin, tab]);
+  // TER-348: persist active tab so refresh restores user's place.
+  useEffect(() => { try { localStorage.setItem("alldeezmeals-active-tab", tab); } catch {} }, [tab]);
   // TER-288: after history print DOM renders, fire window.print() then reset to current plan
   useEffect(() => {
     if (printSource !== "current" && historyPrintMeals !== null) {
