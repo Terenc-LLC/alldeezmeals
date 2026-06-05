@@ -112,7 +112,8 @@ export function validateRecipe(recipe: any): ValidationResult {
         hardFailures.push(`ingredient_no_name: ingredient at index ${i} has no name`);
       }
       const qty = ing?.recipeAmount?.qty;
-      if (typeof qty !== "number" || !(qty > 0)) {
+      const src = ing?.source;
+      if (src !== "staple" && (typeof qty !== "number" || !(qty > 0))) {
         hardFailures.push(`ingredient_bad_qty: ingredient "${ing.name ?? i}" has invalid quantity (must be number > 0)`);
       }
     }

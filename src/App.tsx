@@ -487,7 +487,9 @@ export default function App() {
           : String(recipeAmount.qty);
         purchaseQty = 1;
       }
-      return { name, recipeAmount, purchaseSize, purchaseQty, category };
+      const source: "buy" | "reused" | "staple" =
+        i.source === "reused" ? "reused" : i.source === "staple" ? "staple" : "buy";
+      return { name, recipeAmount, purchaseSize, purchaseQty, category, source };
     }).filter((i: any) => i.name);
     return obj;
   };
@@ -519,23 +521,29 @@ export default function App() {
       : "";
 
     const prior = committed.length
-      ? committed.map((m) => `- ${m.name}: ${m.ingredients.map((i: any) => {
-          const buy = i.purchaseSize
-            ? `${i.purchaseQty ?? 1}×${i.purchaseSize}`
-            : `${i.qty ?? 0}${i.unit ? " " + i.unit : ""}`;
-          return `${i.name} [buy: ${buy}]`;
-        }).join(", ")}`).join("\n")
+      ? committed.map((m) => `- ${m.name}: ${m.ingredients
+          .filter((i: any) => !i.source || i.source === "buy")
+          .map((i: any) => {
+            const buy = i.purchaseSize
+              ? `${i.purchaseQty ?? 1}×${i.purchaseSize}`
+              : `${i.recipeAmount?.qty ?? i.qty ?? 0}${i.recipeAmount?.unit ?? i.unit ? " " + (i.recipeAmount?.unit ?? i.unit) : ""}`;
+            return `${i.name} [buy: ${buy}]`;
+          }).join(", ")}`).join("\n")
       : "none yet";
 
     const eff = efficiency
       ? `Efficiency rules:
 - Mainstream, affordable ALDI ingredients. Bias strongly to ALDI-stocked everyday items; avoid exotic spices, specialty oils, or artisan/niche products unless they are the central defining ingredient of the dish — substitute a common ALDI item when possible.
-- Common seasonings and basic oils are assumed to be in the pantry already. Do NOT add these to the ingredients list: salt, black pepper, common dried or ground spices (garlic powder, onion powder, paprika, cumin, chili powder, cayenne, oregano, basil, thyme, cinnamon, etc.), and basic cooking oils (vegetable oil, olive oil, canola oil). Mention them freely in cooking steps only. Exception: if one of these IS the defining/star flavor of the dish and would realistically need to be purchased, include it.
+- INCLUDE EVERY ingredient needed to cook this dish in the "ingredients" array — mains, reused items, AND pantry staples. No omissions. The recipe card must be cookable on its own.
+- Assign each ingredient a "source" value:
+    "buy"    — net-new purchase needed (include purchaseSize + purchaseQty).
+    "reused" — from a pack already bought this week for another meal, OR batch-prepped earlier (e.g. shredded chicken from Monday). recipeAmount required; set purchaseSize to "" and purchaseQty to 0.
+    "staple" — common pantry item assumed on hand (salt, pepper, dried spices, vegetable/olive oil, etc.). recipeAmount optional (use "to taste" in unit if no qty); omit purchaseSize/purchaseQty.
 - Share ingredients across the week; minimize waste.
-- The family likes bulk chicken breasts poached with onion+garlic then shredded for multiple dinners. Favor this kind of batch prep.
+- The family likes bulk chicken breasts poached with onion+garlic then shredded for multiple dinners. Favor this kind of batch prep — those prepped items are source:"reused".
 - If a whole chicken is used, use its parts across more than one dinner.
-- AVOID DOUBLE BUYING (purchase basis): if a package already bought for an earlier dinner this week covers what you need here (e.g. one 2 lb bag of rice already purchased), do NOT include that ingredient in "ingredients" — note the reuse in "reuseNote" instead.`
-      : `Use mainstream, affordable ALDI ingredients. Bias to ALDI-stocked everyday items; avoid exotic or specialty items unless they are central to the dish. Common seasonings and basic oils (salt, pepper, dried spices, vegetable/olive oil) are assumed on hand — do not include them in the ingredients list.`;
+- Set "reuseNote" to 1–3 short sentences narrating the PROVENANCE of non-buy items: name which specific meals share a pack (source:"reused") and call out pantry staples as a group (source:"staple"). Example: "Corn tortillas: from the 30-ct pack bought this week for the chorizo tacos. Shredded chicken: poached & shredded earlier from the breast pack. Garlic powder, cumin, and chili powder are pantry staples you likely have."`
+      : `Use mainstream, affordable ALDI ingredients. Bias to ALDI-stocked everyday items; avoid exotic or specialty items unless they are central to the dish. Include EVERY ingredient in the array with a "source" field: "buy" (net-new purchase), "reused" (from another meal's pack or batch-prep this week), or "staple" (common pantry item assumed on hand). Set reuseNote to briefly explain provenance of non-buy items.`;
 
     const loves = Array.from(new Set([...liked, ...rotation.map((r) => r.name)]));
     const prefLines: string[] = [];
@@ -562,10 +570,10 @@ ${reject ? `\nThe user REJECTED "${reject}". Propose a clearly DIFFERENT dinner 
 Dinners already planned this week (with purchased ingredients):
 ${prior}
 
-Each ingredient requires: recipeAmount {qty, unit} (the cooking amount used in the recipe), purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen"), purchaseQty (integer ≥ 1, whole packages rounded UP to cover recipeAmount — usually 1).
+Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0. For source:"staple" omit or zero purchaseSize/purchaseQty.
 
 Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. ORIGINALITY: write original recipes — original cooking directions and descriptions in your own words; do not copy text from published recipes. (Quantities/ingredient lists are fine; the written steps/description must be original.) SPECIFIC NAME: set "name" to a distinctive, specific dish name (e.g. "Ginger-Soy Chicken Stir Fry with Peppers"), NOT a generic category ("Chicken Stir Fry"). Exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -737,6 +745,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     const pushIngredient = (i: any) => {
       const name = String(i.name || "").trim();
       if (!name) return;
+      // Only source:"buy" (or absent source for old recipes) goes on the shopping list.
+      if (i.source === "reused" || i.source === "staple") return;
       const category = CATEGORIES.includes(i.category) ? i.category : "Other";
       let unit: string, qty: number, isPurchaseStyle: boolean;
       if (i.purchaseSize != null && i.purchaseQty != null) {
@@ -2437,6 +2447,12 @@ function TodayCook({
         <>
           {/* ── RECIPE BODY ── */}
           <div style={{ flex: 1, padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-5)", overflowX: "hidden" }}>
+            {data.reuseNote && (
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "var(--c-warning-bg)", border: "1px solid var(--c-warning-bg)", color: "var(--c-warning)", fontSize: "var(--t-bodysm-size)", lineHeight: "var(--t-bodysm-lh)", padding: "10px 13px", borderRadius: "var(--radius-md)", fontFamily: "var(--font-sans)" }}>
+                <Repeat size={15} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span><strong style={{ fontWeight: 700 }}>Good to know: </strong>{data.reuseNote}</span>
+              </div>
+            )}
             <div>
               <span style={{ display: "inline-block", background: "var(--c-accent)", color: "var(--c-pill-text)", fontSize: "var(--t-caption-size)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" as const, padding: "4px 10px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)" }}>
                 {data.cuisine}
@@ -2494,7 +2510,8 @@ function TodayCook({
                           </span>
                           <span style={{ flex: 1, fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", textDecoration: on ? "line-through" : "none", color: on ? "var(--c-text-muted)" : "var(--c-text)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const }}>
                             {ing.name}
-                            {staple && <span style={{ display: "inline-block", background: "var(--c-warning-bg)", color: "var(--c-warning)", fontSize: "var(--t-caption-size)", fontWeight: 600, padding: "1px 7px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)", flexShrink: 0 }}>staple</span>}
+                            {(staple || ing.source === "staple") && <span style={{ display: "inline-block", background: "var(--c-warning-bg)", color: "var(--c-warning)", fontSize: "var(--t-caption-size)", fontWeight: 600, padding: "1px 7px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)", flexShrink: 0 }}>pantry</span>}
+                            {ing.source === "reused" && <span style={{ display: "inline-block", background: "var(--c-primary-tint)", color: "var(--c-primary)", fontSize: "var(--t-caption-size)", fontWeight: 600, padding: "1px 7px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)", flexShrink: 0 }}>reused</span>}
                           </span>
                           <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text-muted)", flexShrink: 0 }}>{qtyStr}</span>
                         </button>
