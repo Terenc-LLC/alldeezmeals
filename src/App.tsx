@@ -993,6 +993,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <a href="/terms.html" style={{ color: "var(--c-text-muted)" }}>Terms</a>
         {" · "}
         <a href="/privacy.html" style={{ color: "var(--c-text-muted)" }}>Privacy</a>
+        {" · "}
+        <a href="/offer.html" style={{ color: "var(--c-text-muted)" }}>Beta Offer</a>
         <br />
         ALLDEEZMeals is an independent service and is not affiliated with, endorsed by, or sponsored by ALDI. ALDI is a trademark of its respective owner.
       </footer>
@@ -1309,6 +1311,9 @@ function SignInView() {
           </button>
         </div>
         <p style={s.cardSub}>Fill in a few details — an admin approves before you get full access.</p>
+        <p style={{ fontSize: 12, color: "var(--c-primary)", margin: "4px 0 0" }}>
+          <a href="/offer.html" style={{ color: "var(--c-primary)" }}>First 50 beta testers → 1 year free</a>
+        </p>
         {error && (
           <p style={{ color: "var(--c-danger)", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
             <AlertCircle size={14} /> {error}
