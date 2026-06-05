@@ -41,7 +41,8 @@ people who'll actually cook:<br>
       : "";
     await sendResendEmail({
       to: prof.email,
-      subject: "You're in — welcome to ALLDEEZMeals",
+      subject: "Your ALLDEEZMeals account is ready",
+      headers: { "List-Unsubscribe": "<mailto:alldeezmeals@terenc.com?subject=unsubscribe>" },
       html: `
 <p>Hi ${htmlEscape(firstName)},</p>
 <p>Good news — your account is approved and ready to go.</p>
