@@ -2596,11 +2596,16 @@ function TodayCook({
             <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", color: "var(--c-primary)", margin: 0 }}>{dayLabel}</p>
             <h1 style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-h1-size)", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: "var(--t-h1-lh)", color: "var(--c-text)", margin: "2px 0 0", whiteSpace: "nowrap" }}>{weekdayLabel(activeDate)}</h1>
           </div>
-          {wxDay && fxDay && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-pill)", padding: "7px 11px", fontSize: "var(--t-bodysm-size)", fontFamily: "var(--font-sans)", color: "var(--c-text)", flexShrink: 0 }}>
-              <span style={{ fontSize: 14 }}>{wxDay.e}</span>{fxDay.hi}°F
-            </span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0 }}>
+            {wxDay && fxDay && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-pill)", padding: "7px 11px", fontSize: "var(--t-bodysm-size)", fontFamily: "var(--font-sans)", color: "var(--c-text)" }}>
+                <span style={{ fontSize: 14 }}>{wxDay.e}</span>{fxDay.hi}°F
+              </span>
+            )}
+            <button onClick={() => window.print()} className="btn-ghost btn--sm" aria-label="Print recipes" style={{ padding: "0 var(--space-2)", minHeight: 34 }}>
+              <Printer size={15} />
+            </button>
+          </div>
         </div>
         {/* prev / rail / next */}
         <div style={{ display: "flex", alignItems: "stretch", gap: "var(--space-2)" }}>
