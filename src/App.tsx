@@ -489,7 +489,8 @@ export default function App() {
       }
       const source: "buy" | "reused" | "staple" =
         i.source === "reused" ? "reused" : i.source === "staple" ? "staple" : "buy";
-      return { name, recipeAmount, purchaseSize, purchaseQty, category, source };
+      const preparedEarlier: boolean = i.preparedEarlier === true;
+      return { name, recipeAmount, purchaseSize, purchaseQty, category, source, preparedEarlier };
     }).filter((i: any) => i.name);
     return obj;
   };
@@ -570,10 +571,10 @@ ${reject ? `\nThe user REJECTED "${reject}". Propose a clearly DIFFERENT dinner 
 Dinners already planned this week (with purchased ingredients):
 ${prior}
 
-Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0. For source:"staple" omit or zero purchaseSize/purchaseQty.
+Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0. For source:"staple" omit or zero purchaseSize/purchaseQty. preparedEarlier (boolean, default false): set to true ONLY if this ingredient was actually prepped/cooked in an EARLIER meal this week and is being reused in that prepared form (e.g. shredded chicken poached Monday, onions diced earlier). A whole/raw item pulled from a shared pack is NOT preparedEarlier (e.g. half an onion from the already-purchased bag → preparedEarlier:false). This field is independent of source.
 
 Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. ORIGINALITY: write original recipes — original cooking directions and descriptions in your own words; do not copy text from published recipes. (Quantities/ingredient lists are fine; the written steps/description must be original.) SPECIFIC NAME: set "name" to a distinctive, specific dish name (e.g. "Ginger-Soy Chicken Stir Fry with Peppers"), NOT a generic category ("Chicken Stir Fry"). Exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -2496,14 +2497,16 @@ function TodayCook({
                 <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-text-muted)", margin: "0 0 var(--space-3)" }}>
                   Gather · {gathered.length}/{ingredients.length}
                 </p>
-                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "var(--space-1)" }}>
-                  {ingredients.map((ing: any, i: number) => {
+                {(() => {
+                  const prepared = ingredients.filter((ing: any) => ing.preparedEarlier === true);
+                  const remaining = ingredients.filter((ing: any) => ing.preparedEarlier !== true);
+                  const renderIngRow = (ing: any, i: number) => {
                     const on = gathered.includes(i);
                     const qtyStr = fmtRecipeQty(ing);
                     const staple = isIngStaple(ing);
                     return (
                       <li key={i}>
-                        <button onClick={() => setProgress({ gathered: on ? gathered.filter((x) => x !== i) : [...gathered, i] })}
+                        <button onClick={() => setProgress({ gathered: on ? gathered.filter((x: number) => x !== i) : [...gathered, i] })}
                           style={{ width: "100%", display: "flex", alignItems: "center", gap: "var(--space-3)", minHeight: 46, background: "transparent", border: "none", borderBottom: "1px dashed var(--c-border)", cursor: "pointer", textAlign: "left" as const, padding: "4px 0" }}>
                           <span style={{ flexShrink: 0, width: 24, height: 24, borderRadius: 6, border: `2px solid ${on ? "var(--c-primary)" : "var(--c-border)"}`, background: on ? "var(--c-primary)" : "transparent", display: "grid", placeItems: "center", transition: "background .12s, border-color .12s" }}>
                             {on && <Check size={13} color="var(--c-on-primary)" strokeWidth={2.8} />}
@@ -2511,14 +2514,32 @@ function TodayCook({
                           <span style={{ flex: 1, fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", textDecoration: on ? "line-through" : "none", color: on ? "var(--c-text-muted)" : "var(--c-text)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const }}>
                             {ing.name}
                             {(staple || ing.source === "staple") && <span style={{ display: "inline-block", background: "var(--c-warning-bg)", color: "var(--c-warning)", fontSize: "var(--t-caption-size)", fontWeight: 600, padding: "1px 7px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)", flexShrink: 0 }}>pantry</span>}
-                            {ing.source === "reused" && <span style={{ display: "inline-block", background: "var(--c-primary-tint)", color: "var(--c-primary)", fontSize: "var(--t-caption-size)", fontWeight: 600, padding: "1px 7px", borderRadius: "var(--radius-pill)", fontFamily: "var(--font-sans)", flexShrink: 0 }}>reused</span>}
                           </span>
                           <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text-muted)", flexShrink: 0 }}>{qtyStr}</span>
                         </button>
                       </li>
                     );
-                  })}
-                </ul>
+                  };
+                  if (prepared.length === 0) {
+                    return (
+                      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "var(--space-1)" }}>
+                        {ingredients.map((ing: any, i: number) => renderIngRow(ing, i))}
+                      </ul>
+                    );
+                  }
+                  return (
+                    <>
+                      <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-text-muted)", margin: "0 0 var(--space-1)" }}>Prepared earlier this week</p>
+                      <ul style={{ listStyle: "none", margin: "0 0 var(--space-3)", padding: 0, display: "grid", gap: "var(--space-1)" }}>
+                        {prepared.map((ing: any) => renderIngRow(ing, ingredients.indexOf(ing)))}
+                      </ul>
+                      <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-text-muted)", margin: "0 0 var(--space-1)" }}>Remaining ingredients</p>
+                      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "var(--space-1)" }}>
+                        {remaining.map((ing: any) => renderIngRow(ing, ingredients.indexOf(ing)))}
+                      </ul>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* ── COOK ── */}
