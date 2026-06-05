@@ -231,6 +231,7 @@ export default function App() {
   const [pantry, setPantry] = useState<string[]>([]);
   const [alwaysHave, setAlwaysHave] = useState<string[]>([]);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [weekAdditions, setWeekAdditions] = useState<Array<{id: string; name: string; qty: string}>>([]);
   const [defaultPeople, setDefaultPeople] = useState(4);
   const [efficiency, setEfficiency] = useState(true);
   const [mixCuisines, setMixCuisines] = useState(true);
@@ -292,6 +293,7 @@ export default function App() {
         setPantry(d.pantry ?? []);
         setAlwaysHave(d.alwaysHave ?? []);
         setCheckedItems(d.checkedItems ?? {});
+        if (d.weekAdditions) setWeekAdditions(d.weekAdditions);
         setDefaultPeople(d.defaultPeople ?? 4);
         setEfficiency(d.efficiency ?? true);
         setMixCuisines(d.mixCuisines ?? true);
@@ -334,6 +336,7 @@ export default function App() {
           if (d.pantry !== undefined) setPantry(d.pantry);
           if (d.alwaysHave !== undefined) setAlwaysHave(d.alwaysHave);
           if (d.checkedItems !== undefined) setCheckedItems(d.checkedItems);
+          if (d.weekAdditions !== undefined) setWeekAdditions(d.weekAdditions);
           if (d.defaultPeople !== undefined) setDefaultPeople(d.defaultPeople);
           if (d.efficiency !== undefined) setEfficiency(d.efficiency);
           if (d.mixCuisines !== undefined) setMixCuisines(d.mixCuisines);
@@ -375,7 +378,7 @@ export default function App() {
     if (!loaded) return;
     const payload = {
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
-      checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress,
+      checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     if (!session) return;
@@ -390,7 +393,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -715,6 +718,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
     }
     setMeals(pinned);
     setCheckedItems({});
+    setWeekAdditions([]);
   };
 
   const handleStartOver = () => {
@@ -966,6 +970,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         {tab === "list" && (
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
             pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
+            weekAdditions={weekAdditions} setWeekAdditions={setWeekAdditions}
             acceptedCount={acceptedCount} slotCount={days.length} location={location}
             onMarkOrdered={handleMarkOrdered} alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave}
             session={session} qualificationNumber={qualificationNumber} setQualificationNumber={setQualificationNumber} />
@@ -1970,13 +1975,15 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
+function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, weekAdditions, setWeekAdditions, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
   const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [newAlwaysHave, setNewAlwaysHave] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addQty, setAddQty] = useState("");
   const [qualToast, setQualToast] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Array<{ normalized_name: string | null; upc: string | null; last_price_cents: number | null }>>([]);
 
@@ -1992,10 +1999,23 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     });
   }, [session, groceryList]);
 
-  const copy = async () => { try { await navigator.clipboard.writeText(listText); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {} };
+  const handleAddItem = () => {
+    const name = addName.trim();
+    if (!name) return;
+    setWeekAdditions((prev: any[]) => [...prev, { id: uid(), name, qty: addQty.trim() }]);
+    setAddName(""); setAddQty("");
+  };
+
+  const copy = async () => {
+    const addText = weekAdditions.length
+      ? "\n\nAdded by you:\n" + weekAdditions.map((it: any) => `  - ${it.name}${it.qty ? ` (${it.qty})` : ""}`).join("\n")
+      : "";
+    try { await navigator.clipboard.writeText(listText + addText); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+  };
   const copyForInstacartAI = async () => {
     const { preamble, lines } = buildInstacartHandoff(groceryList, catalog);
-    const text = `${preamble}\n\n${lines.join("\n")}`;
+    const addLines = weekAdditions.map((it: any) => `- ${it.name}${it.qty ? ` — ${it.qty}` : ""}`);
+    const text = `${preamble}\n\n${[...lines, ...addLines].join("\n")}`;
     try { await navigator.clipboard.writeText(text); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
     if (acceptedCount >= 5 && session?.access_token) {
       try {
@@ -2180,6 +2200,66 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
             })}
           </div>
         )}
+
+        {/* Added by you */}
+        <div style={{ marginTop: "var(--space-4)" }}>
+          <div style={s.lvCatCard}>
+            <h3 style={s.lvCatTitle}>Added by you</h3>
+            {weekAdditions.length > 0 && (
+              <div style={{ marginBottom: "var(--space-3)" }}>
+                {weekAdditions.map((it: any) => {
+                  const key = `manual|${it.id}`;
+                  const checked = !!checkedItems[key];
+                  return (
+                    <div key={it.id} style={s.lvRow}>
+                      <button
+                        onClick={() => setCheckedItems((p: any) => ({ ...p, [key]: !p[key] }))}
+                        aria-label={checked ? "Uncheck" : "Check"}
+                        style={{ ...s.lvCheck, background: checked ? "var(--c-primary)" : "var(--c-surface)", borderColor: checked ? "var(--c-primary)" : "var(--c-border)" }}
+                      >
+                        {checked && <Check size={14} color="var(--c-on-primary)" strokeWidth={2.6} />}
+                      </button>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ ...s.typeBody, color: checked ? "var(--c-text-muted)" : "var(--c-text)", textDecoration: checked ? "line-through" : "none" }}>
+                          {it.name}
+                        </span>
+                        {it.qty && (
+                          <span style={{ ...s.typeBodySm, color: "var(--c-text-muted)" }}>{" · "}{it.qty}</span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => setWeekAdditions((prev: any[]) => prev.filter((x: any) => x.id !== it.id))}
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--c-text-muted)", display: "grid", lineHeight: 1 }}
+                        aria-label="Remove item"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+              <input
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
+                placeholder="Item name…"
+                style={{ ...s.input, flex: "2 1 120px", fontSize: 12.5, padding: "6px 9px" }}
+              />
+              <input
+                value={addQty}
+                onChange={(e) => setAddQty(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
+                placeholder="Qty (optional)"
+                style={{ ...s.input, flex: "1 1 80px", fontSize: 12.5, padding: "6px 9px" }}
+              />
+              <button onClick={handleAddItem} disabled={!addName.trim()} style={{ ...s.addBtn, opacity: addName.trim() ? 1 : 0.45 }}>
+                <Plus size={14} /> Add
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Price estimate footer */}
         {session && priceEstimate.pricedCount > 0 && (
