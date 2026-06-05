@@ -629,6 +629,21 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
+          // Gate: server validates and saves. Hard fail → retry; transport/5xx → fail open.
+          if (tok) {
+            try {
+              const vr = await fetch("/api/recipes", {
+                method: "POST",
+                headers: { "content-type": "application/json", authorization: `Bearer ${tok}` },
+                body: JSON.stringify(data),
+              });
+              if (vr.status === 422) throw new Error("bad shape");
+              if (!vr.ok) throw new Error(`save error ${vr.status}`);
+            } catch (fe: any) {
+              if (fe?.message === "bad shape") throw fe;
+              console.warn("Recipe save endpoint error — failing open:", fe);
+            }
+          }
           break;
         } catch (e: any) {
           const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape";
@@ -646,14 +661,6 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             if (!cur?.data || cur.data.name !== data.name) return m; // stale guard
             return { ...m, [day.id]: { ...cur, kcalInfo } };
           });
-        }).catch(() => {});
-      }
-      // Best-effort: save to global recipe_library — failure must never affect generation.
-      if (tok) {
-        fetch("/api/recipes", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${tok}` },
-          body: JSON.stringify(data),
         }).catch(() => {});
       }
       return data;
