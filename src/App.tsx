@@ -3306,6 +3306,49 @@ const REJECT_CATEGORIES: { value: string; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+// TER-358: default curated seed targets — one per line as "Cuisine - Dish name"
+const DEFAULT_SEED_TARGETS = `Italian - Tuscan white-bean and sausage skillet
+Italian - Shrimp scampi with linguine
+Italian - Chicken cacciatore
+Italian - Eggplant Parmesan
+Italian - Butternut squash risotto
+Mexican - Chicken enchiladas verde
+Mexican - Black bean and corn quesadillas
+Mexican - Carnitas tacos
+Mexican - Shrimp fajitas
+Mexican - Pozole rojo
+Asian - Beef and broccoli stir-fry
+Asian - Chicken pad thai
+Asian - Miso-glazed salmon
+Asian - Korean ground beef bulgogi bowls
+Asian - Egg fried rice with edamame
+American - Honey garlic chicken thighs
+American - BBQ pulled pork sliders
+American - Turkey meatball soup
+American - Sheet-pan chicken and roasted vegetables
+American - Black bean turkey chili
+Mediterranean - Greek lemon chicken with orzo
+Mediterranean - Shakshuka with feta
+Mediterranean - Falafel bowls with tahini sauce
+Mediterranean - Lamb and vegetable stew
+Indian - Chicken tikka masala
+Indian - Dal tadka with basmati rice
+Indian - Paneer butter masala
+Indian - Chickpea and spinach curry
+French - Coq au vin
+French - Bouillabaisse-style fish stew`.trim();
+
+function parseSeedTargets(raw: string): Array<{ cuisine: string; dish: string }> {
+  return raw.split("\n")
+    .map(l => l.trim())
+    .filter(l => l.includes(" - "))
+    .map(l => {
+      const idx = l.indexOf(" - ");
+      return { cuisine: l.slice(0, idx).trim(), dish: l.slice(idx + 3).trim() };
+    })
+    .filter(t => t.cuisine && t.dish);
+}
+
 function CatalogView({ session }: { session: any }) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3335,6 +3378,14 @@ function CatalogView({ session }: { session: any }) {
   const [rejectingRecipeId, setRejectingRecipeId] = useState<number | null>(null);
   const [rejectCategory, setRejectCategory] = useState("");
   const [rejectNote, setRejectNote] = useState("");
+
+  // TER-358: seed library
+  const [seedMode, setSeedMode] = useState<"targets" | "named">("targets");
+  const [seedTargetText, setSeedTargetText] = useState(DEFAULT_SEED_TARGETS);
+  const [seedCount, setSeedCount] = useState(5);
+  const [seedNameInput, setSeedNameInput] = useState("");
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<{ generated: number; saved: number; skipped: number; failed: number; results: Array<{ label: string; saved: boolean; reason?: string }> } | null>(null);
 
   // TER-266: qualified users list
   const [qualifiedUsers, setQualifiedUsers] = useState<Array<{ qualification_number: number; qualified_at: string; email: string | null; name: string | null }>>([]);
@@ -3529,6 +3580,37 @@ function CatalogView({ session }: { session: any }) {
       alert(`Reject failed: ${e?.message ?? "Unknown error"}`);
     }
     setReviewingRecipeId(null);
+  };
+
+  const handleSeedLibrary = async () => {
+    const token = session?.access_token ?? "";
+    if (!token) return;
+    setSeeding(true);
+    setSeedResult(null);
+    try {
+      let body: any;
+      if (seedMode === "targets") {
+        const targets = parseSeedTargets(seedTargetText);
+        if (targets.length === 0) { alert("No valid targets found. Use format: Cuisine - Dish name (one per line)."); setSeeding(false); return; }
+        body = { mode: "targets", targets, count: seedCount };
+      } else {
+        const name = seedNameInput.trim();
+        if (!name) { alert("Enter a recipe name."); setSeeding(false); return; }
+        body = { mode: "named", name };
+      }
+      const r = await fetch("/api/admin/seed-library", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+      setSeedResult(data);
+      if (data.saved > 0) await loadPendingRecipes();
+    } catch (e: any) {
+      alert(`Seed failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setSeeding(false);
   };
 
   const handleApprove = async (subId: string) => {
@@ -3740,6 +3822,84 @@ function CatalogView({ session }: { session: any }) {
           })}
         </div>
       )}
+      {/* ── Seed library (TER-358) ── */}
+      <div style={{ ...s.card, borderColor: "var(--c-primary)", marginBottom: 4 }}>
+        <h3 style={{ ...s.cardTitle, margin: "0 0 12px", color: "var(--c-primary)" }}>Seed library</h3>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button
+            onClick={() => { setSeedMode("targets"); setSeedResult(null); }}
+            style={{ ...s.ghostBtn, ...(seedMode === "targets" ? { background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none" } : {}) }}
+          >
+            Dish targets
+          </button>
+          <button
+            onClick={() => { setSeedMode("named"); setSeedResult(null); }}
+            style={{ ...s.ghostBtn, ...(seedMode === "named" ? { background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none" } : {}) }}
+          >
+            Named recipe
+          </button>
+        </div>
+        {seedMode === "targets" && (
+          <div>
+            <label style={{ ...s.fieldLabel, marginBottom: 6 }}>Target list (Cuisine - Dish name, one per line)</label>
+            <textarea
+              value={seedTargetText}
+              onChange={e => setSeedTargetText(e.target.value)}
+              rows={8}
+              style={{ width: "100%", fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-2)", color: "var(--c-text)", fontFamily: "monospace", boxSizing: "border-box" as const, resize: "vertical" as const }}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+              <label style={{ fontSize: 13, color: "var(--c-text-muted)" }}>Generate</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={seedCount}
+                onChange={e => setSeedCount(Math.min(20, Math.max(1, Number(e.target.value))))}
+                style={{ width: 60, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--c-border)", fontSize: 13, background: "var(--c-surface)", color: "var(--c-text)" }}
+              />
+              <span style={{ fontSize: 13, color: "var(--c-text-muted)" }}>
+                of {parseSeedTargets(seedTargetText).length} targets (servings=4, lands pending)
+              </span>
+            </div>
+          </div>
+        )}
+        {seedMode === "named" && (
+          <div>
+            <label style={{ ...s.fieldLabel, marginBottom: 6 }}>Recipe name</label>
+            <input
+              type="text"
+              value={seedNameInput}
+              onChange={e => setSeedNameInput(e.target.value)}
+              placeholder="e.g. Chicken pot pie"
+              style={{ ...s.input, width: "100%", boxSizing: "border-box" as const, marginBottom: 6 }}
+            />
+            <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--c-text-muted)" }}>
+              Generates one original recipe at servings=4, lands pending for review.
+            </p>
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+          <button onClick={handleSeedLibrary} style={s.primaryBtn} disabled={seeding}>
+            {seeding ? "Generating…" : seedMode === "named" ? "Seed 1 recipe" : `Seed ${seedCount} recipe${seedCount !== 1 ? "s" : ""}`}
+          </button>
+          {seedResult && (
+            <span style={{ fontSize: 12.5, color: "var(--c-text-muted)" }}>
+              {seedResult.saved} saved · {seedResult.skipped} skipped (soft) · {seedResult.failed} failed
+            </span>
+          )}
+        </div>
+        {seedResult && seedResult.results.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            {seedResult.results.map((r, i) => (
+              <div key={i} style={{ fontSize: 12, color: r.saved ? "var(--c-primary)" : "var(--c-text-muted)", padding: "2px 0", display: "flex", gap: 6, alignItems: "center" }}>
+                <span style={{ fontWeight: 700 }}>{r.saved ? "✓" : "✗"}</span>
+                <span>{r.label}{r.reason ? ` — ${r.reason}` : ""}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {/* ── Pending recipes (TER-357) ── */}
       {(recipesLoading || pendingRecipes.length > 0) && (() => {
         const recipe = pendingRecipes[recipeIdx];
