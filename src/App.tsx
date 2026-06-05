@@ -980,6 +980,8 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         <a href="/terms.html" style={{ color: "var(--c-text-muted)" }}>Terms</a>
         {" · "}
         <a href="/privacy.html" style={{ color: "var(--c-text-muted)" }}>Privacy</a>
+        <br />
+        ALLDEEZMeals is an independent service and is not affiliated with, endorsed by, or sponsored by ALDI. ALDI is a trademark of its respective owner.
       </footer>
     </div>
     {printSource === "current" && acceptedMealsForPrint.length > 0 && (
