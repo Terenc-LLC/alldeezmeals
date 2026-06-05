@@ -1,10 +1,12 @@
 // TER-304: Recipe library P1 — save generated originals to the global recipe_library.
+// TER-335: Validation gate — hard failures → 422; soft-only → 200 saved:false; pass → 200 saved:true.
 // Authenticated, service-role. Mirrors api/ingest-order.ts auth pattern.
 // user_id is validated but NOT stored — recipe_library is a global, unattributed pool.
 
 import { createHash } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { isApproved } from "./_approved.js";
+import { validateRecipe } from "./_validateRecipe.js";
 
 // Separate from normalizeIngName (src/lib/normalize.ts) and normalized_product (ingest-order.ts).
 // Deterministic: lowercase, strip punctuation, collapse whitespace.
@@ -73,16 +75,39 @@ export default async function handler(req: any, res: any) {
 
   const { name, cuisine, servings, difficulty, estKcalPerServing, steps, ingredients, model } = body;
 
-  if (!name || !Array.isArray(ingredients) || !Array.isArray(steps)) {
-    res.status(400).json({ error: "Missing required fields" });
+  const svc = createClient(supabaseUrl, serviceRoleKey);
+
+  // Validate before any upsert.
+  const validation = validateRecipe(body);
+
+  // Best-effort log failures (hard or soft) — never let logging errors change the response.
+  if (validation.hardFailures.length > 0 || validation.softFailures.length > 0) {
+    try {
+      await svc.from("recipe_validation_failures").insert({
+        recipe_json:    body,
+        hard_failures:  validation.hardFailures,
+        soft_failures:  validation.softFailures,
+        source:         "insert",
+      });
+    } catch (logErr: any) {
+      console.error("recipe_validation_failures insert failed:", logErr?.message);
+    }
+  }
+
+  if (!validation.ok) {
+    res.status(422).json({ ok: false, hardFailures: validation.hardFailures });
+    return;
+  }
+
+  if (validation.softFailures.length > 0) {
+    // Soft-only: do not upsert to keep the pool clean.
+    res.status(200).json({ ok: true, saved: false, softFailures: validation.softFailures });
     return;
   }
 
   const contentHash = computeContentHash(name, ingredients, steps);
   const normalizedRecipe =
     `${normalizeRecipeName(name)}|${(cuisine ?? "").toLowerCase().trim()}`;
-
-  const svc = createClient(supabaseUrl, serviceRoleKey);
 
   const { error } = await svc.from("recipe_library").upsert(
     {
@@ -112,5 +137,5 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  res.status(200).json({ ok: true });
+  res.status(200).json({ ok: true, saved: true });
 }
