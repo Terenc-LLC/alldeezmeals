@@ -1984,7 +1984,6 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
   const [newAlwaysHave, setNewAlwaysHave] = useState("");
   const [addName, setAddName] = useState("");
   const [addQty, setAddQty] = useState("");
-  const [qualToast, setQualToast] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Array<{ normalized_name: string | null; upc: string | null; last_price_cents: number | null }>>([]);
 
   useEffect(() => {
@@ -2017,22 +2016,6 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     const addLines = weekAdditions.map((it: any) => `- ${it.name}${it.qty ? ` — ${it.qty}` : ""}`);
     const text = `${preamble}\n\n${[...lines, ...addLines].join("\n")}`;
     try { await navigator.clipboard.writeText(text); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
-    if (acceptedCount >= 5 && session?.access_token) {
-      try {
-        const r = await fetch("/api/qualify", {
-          method: "POST",
-          headers: { authorization: `Bearer ${session.access_token}` },
-        });
-        if (r.ok) {
-          const d = await r.json();
-          if (d.qualified && !d.alreadyQualified) {
-            setQualificationNumber(d.number);
-            setQualToast(`You're in — qualification #${d.number} of 50.`);
-            setTimeout(() => setQualToast(null), 7000);
-          }
-        }
-      } catch { /* never block or revert the copy on failure */ }
-    }
   };
   const markOrdered = async () => {
     if (!window.confirm("Archive this plan and start next week?\n\nYour meals, grocery list, and This Week box will be cleared. Setup, staples, and preferences are kept.")) return;
@@ -2102,14 +2085,6 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
             {copiedCart ? "Copied!" : "Instacart (AI)"}
           </button>
         </div>
-
-        {/* Qualification toast */}
-        {qualToast && (
-          <div style={{ background: "var(--c-success-bg)", color: "var(--c-success-text)", borderRadius: 8, padding: "10px 14px", marginBottom: "var(--space-4)", fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-            <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
-            {qualToast}
-          </div>
-        )}
 
         {/* Always Have sunken panel */}
         <div style={s.lvSunken}>
@@ -3320,6 +3295,11 @@ function CatalogView({ session }: { session: any }) {
   const [qualCounter, setQualCounter] = useState<number>(0);
   const [qualLoading, setQualLoading] = useState(false);
 
+  // TER-355: admin-grant qualification
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantResult, setGrantResult] = useState<string | null>(null);
+  const [granting, setGranting] = useState(false);
+
   useEffect(() => { loadItems(); loadSubmissions(); loadPendingUsers(); loadQualifiedUsers(); }, []);
 
   const loadItems = async () => {
@@ -3373,6 +3353,36 @@ function CatalogView({ session }: { session: any }) {
       setQualCounter(data.counter ?? 0);
     } catch { /* ignore */ }
     setQualLoading(false);
+  };
+
+  const handleGrantQualification = async () => {
+    const email = grantEmail.trim();
+    if (!email) return;
+    const token = session?.access_token ?? "";
+    setGranting(true);
+    setGrantResult(null);
+    try {
+      const r = await fetch("/api/admin/grant-qualification", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setGrantResult(d.error ?? `Error ${r.status}`);
+      } else if (d.alreadyQualified) {
+        setGrantResult(`Already qualified — #${d.number} of 50`);
+      } else if (d.capReached) {
+        setGrantResult("Cap reached (50 of 50)");
+      } else {
+        setGrantResult(`Qualified! #${d.number} of 50`);
+        setGrantEmail("");
+        await loadQualifiedUsers();
+      }
+    } catch (e: any) {
+      setGrantResult(e?.message ?? "Unknown error");
+    }
+    setGranting(false);
   };
 
   const handleApproveUser = async (userId: string) => {
@@ -3534,7 +3544,7 @@ function CatalogView({ session }: { session: any }) {
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      {/* ── Qualified users (TER-266) ── */}
+      {/* ── Qualified users (TER-355) ── */}
       <div style={{ ...s.card, borderColor: "var(--c-success-bg)", marginBottom: 4 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <h3 style={{ ...s.cardTitle, margin: 0, color: "var(--c-success-text)" }}>
@@ -3544,6 +3554,22 @@ function CatalogView({ session }: { session: any }) {
             <RefreshCw size={13} /> Refresh
           </button>
         </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
+          <input
+            type="email"
+            placeholder="user@example.com"
+            value={grantEmail}
+            onChange={e => { setGrantEmail(e.target.value); setGrantResult(null); }}
+            onKeyDown={e => { if (e.key === "Enter") handleGrantQualification(); }}
+            style={{ flex: 1, fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-text)" }}
+          />
+          <button onClick={handleGrantQualification} style={{ ...s.primaryBtn, opacity: granting || !grantEmail.trim() ? 0.5 : 1 }} disabled={granting || !grantEmail.trim()}>
+            {granting ? "…" : "Mark qualified"}
+          </button>
+        </div>
+        {grantResult && (
+          <p style={{ fontSize: 12.5, color: "var(--c-text-muted)", margin: "0 0 8px" }}>{grantResult}</p>
+        )}
         {!qualLoading && qualifiedUsers.length === 0 && (
           <p style={s.empty}>No qualified users yet.</p>
         )}
