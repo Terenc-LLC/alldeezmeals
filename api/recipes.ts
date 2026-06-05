@@ -109,6 +109,11 @@ export default async function handler(req: any, res: any) {
   const normalizedRecipe =
     `${normalizeRecipeName(name)}|${(cuisine ?? "").toLowerCase().trim()}`;
 
+  // Originals land pending (active=false) until human approval.
+  // Rescaled variants (base_recipe_id set) inherit parent approval.
+  const baseRecipeId = body.base_recipe_id ?? null;
+  const isVariant = baseRecipeId !== null;
+
   const { error } = await svc.from("recipe_library").upsert(
     {
       content_hash:      contentHash,
@@ -121,9 +126,10 @@ export default async function handler(req: any, res: any) {
       nutrition:         estKcalPerServing ? { kcalPerServing: estKcalPerServing } : null,
       difficulty:        typeof difficulty === "number" ? difficulty : null,
       servings:          typeof servings === "number" ? servings : null,
-      base_recipe_id:    null,
+      base_recipe_id:    baseRecipeId,
       times_reused:      0,
-      active:            true,
+      active:            isVariant,
+      review_status:     isVariant ? "approved" : "pending",
       source:            "generated",
       model:             model ?? "claude-sonnet-4-6",
       recipe_json:       body,
