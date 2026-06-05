@@ -153,6 +153,7 @@ export default function App() {
   /* ---- Supabase auth ---- */
   const [session, setSession] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [qualificationNumber, setQualificationNumber] = useState<number | null>(null);
   const [approvedStatus, setApprovedStatus] = useState<boolean | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const prevUserId = useRef<string | null>(null);
@@ -175,7 +176,7 @@ export default function App() {
     let cancelled = false;
     fetch("/api/me", { headers: { authorization: `Bearer ${session.access_token}` } })
       .then((r) => (r.ok ? r.json() : { isAdmin: false }))
-      .then((d) => { if (!cancelled) setIsAdmin(!!d.isAdmin); })
+      .then((d) => { if (!cancelled) { setIsAdmin(!!d.isAdmin); setQualificationNumber(d.qualification_number ?? null); } })
       .catch(() => { if (!cancelled) setIsAdmin(false); });
     return () => { cancelled = true; };
   }, [session?.access_token]);
@@ -961,7 +962,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
             acceptedCount={acceptedCount} slotCount={days.length} location={location}
             onMarkOrdered={handleMarkOrdered} alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave}
-            session={session} />
+            session={session} qualificationNumber={qualificationNumber} setQualificationNumber={setQualificationNumber} />
         )}
         {tab === "rotation" && (
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} recipeStars={recipeStars} setRecipeStars={setRecipeStars} />
@@ -1780,13 +1781,14 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave, session }: any) {
+function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
   const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [newAlwaysHave, setNewAlwaysHave] = useState("");
+  const [qualToast, setQualToast] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Array<{ normalized_name: string | null; upc: string | null; last_price_cents: number | null }>>([]);
 
   useEffect(() => {
@@ -1806,6 +1808,22 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     const { preamble, lines } = buildInstacartHandoff(groceryList, catalog);
     const text = `${preamble}\n\n${lines.join("\n")}`;
     try { await navigator.clipboard.writeText(text); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
+    if (acceptedCount >= 5 && session?.access_token) {
+      try {
+        const r = await fetch("/api/qualify", {
+          method: "POST",
+          headers: { authorization: `Bearer ${session.access_token}` },
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.qualified && !d.alreadyQualified) {
+            setQualificationNumber(d.number);
+            setQualToast(`You're in — qualification #${d.number} of 50.`);
+            setTimeout(() => setQualToast(null), 7000);
+          }
+        }
+      } catch { /* never block or revert the copy on failure */ }
+    }
   };
   const markOrdered = async () => {
     if (!window.confirm("Archive this plan and start next week?\n\nYour meals, grocery list, and This Week box will be cleared. Setup, staples, and preferences are kept.")) return;
@@ -1875,6 +1893,14 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
             {copiedCart ? "Copied!" : "Instacart (AI)"}
           </button>
         </div>
+
+        {/* Qualification toast */}
+        {qualToast && (
+          <div style={{ background: "var(--c-success-bg)", color: "var(--c-success-text)", borderRadius: 8, padding: "10px 14px", marginBottom: "var(--space-4)", fontSize: 13.5, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+            {qualToast}
+          </div>
+        )}
 
         {/* Always Have sunken panel */}
         <div style={s.lvSunken}>
@@ -3008,7 +3034,12 @@ function CatalogView({ session }: { session: any }) {
   const [usersLoading, setUsersLoading] = useState(false);
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
 
-  useEffect(() => { loadItems(); loadSubmissions(); loadPendingUsers(); }, []);
+  // TER-266: qualified users list
+  const [qualifiedUsers, setQualifiedUsers] = useState<Array<{ qualification_number: number; qualified_at: string; email: string | null; name: string | null }>>([]);
+  const [qualCounter, setQualCounter] = useState<number>(0);
+  const [qualLoading, setQualLoading] = useState(false);
+
+  useEffect(() => { loadItems(); loadSubmissions(); loadPendingUsers(); loadQualifiedUsers(); }, []);
 
   const loadItems = async () => {
     setLoading(true);
@@ -3047,6 +3078,20 @@ function CatalogView({ session }: { session: any }) {
       setPendingUsers(data.users ?? []);
     } catch { /* ignore */ }
     setUsersLoading(false);
+  };
+
+  const loadQualifiedUsers = async () => {
+    const token = session?.access_token ?? "";
+    if (!token) return;
+    setQualLoading(true);
+    try {
+      const r = await fetch("/api/admin/list-qualified", { headers: { authorization: `Bearer ${token}` } });
+      if (!r.ok) { setQualLoading(false); return; }
+      const data = await r.json();
+      setQualifiedUsers(data.users ?? []);
+      setQualCounter(data.counter ?? 0);
+    } catch { /* ignore */ }
+    setQualLoading(false);
   };
 
   const handleApproveUser = async (userId: string) => {
@@ -3208,6 +3253,28 @@ function CatalogView({ session }: { session: any }) {
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
+      {/* ── Qualified users (TER-266) ── */}
+      <div style={{ ...s.card, borderColor: "var(--c-success-bg)", marginBottom: 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <h3 style={{ ...s.cardTitle, margin: 0, color: "var(--c-success-text)" }}>
+            Qualified: {qualLoading ? "…" : `${qualCounter} / 50`}
+          </h3>
+          <button onClick={loadQualifiedUsers} style={s.ghostBtn} disabled={qualLoading}>
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
+        {!qualLoading && qualifiedUsers.length === 0 && (
+          <p style={s.empty}>No qualified users yet.</p>
+        )}
+        {qualifiedUsers.map(u => (
+          <div key={u.qualification_number} style={{ ...s.dayBlock, marginBottom: 6, padding: "8px 12px" }}>
+            <span style={{ fontWeight: 600, fontSize: 13, color: "var(--c-success-text)", marginRight: 8 }}>#{u.qualification_number}</span>
+            <span style={{ fontSize: 13, color: "var(--c-text)" }}>{u.name ?? "—"}</span>
+            <span style={{ fontSize: 12.5, color: "var(--c-text-muted)", margin: "0 8px" }}>{u.email ?? "—"}</span>
+            <span style={{ fontSize: 11.5, color: "var(--c-text-muted)" }}>{new Date(u.qualified_at).toLocaleDateString()}</span>
+          </div>
+        ))}
+      </div>
       {/* ── Pending user approvals (TER-238) ── */}
       {(usersLoading || pendingUsers.length > 0) && (
         <div style={{ ...s.card, borderColor: "var(--c-warning-bg)", marginBottom: 4 }}>
