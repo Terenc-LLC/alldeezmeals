@@ -3283,6 +3283,29 @@ type PendingUser = {
   requested_at: string;
 };
 
+type PendingRecipe = {
+  id: number;
+  name: string;
+  cuisine: string | null;
+  difficulty: number | null;
+  servings: number | null;
+  ingredients: any[];
+  steps: any[];
+  source: string;
+  model: string | null;
+  created_at: string;
+};
+
+const REJECT_CATEGORIES: { value: string; label: string }[] = [
+  { value: "not_original", label: "Not original" },
+  { value: "bad_instructions", label: "Bad instructions" },
+  { value: "implausible_ingredients", label: "Implausible ingredients" },
+  { value: "duplicate", label: "Duplicate" },
+  { value: "unappetizing", label: "Unappetizing" },
+  { value: "format_error", label: "Format error" },
+  { value: "other", label: "Other" },
+];
+
 function CatalogView({ session }: { session: any }) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3304,6 +3327,15 @@ function CatalogView({ session }: { session: any }) {
   const [usersLoading, setUsersLoading] = useState(false);
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
 
+  // TER-357: pending recipe review queue
+  const [pendingRecipes, setPendingRecipes] = useState<PendingRecipe[]>([]);
+  const [recipesLoading, setRecipesLoading] = useState(false);
+  const [recipeIdx, setRecipeIdx] = useState(0);
+  const [reviewingRecipeId, setReviewingRecipeId] = useState<number | null>(null);
+  const [rejectingRecipeId, setRejectingRecipeId] = useState<number | null>(null);
+  const [rejectCategory, setRejectCategory] = useState("");
+  const [rejectNote, setRejectNote] = useState("");
+
   // TER-266: qualified users list
   const [qualifiedUsers, setQualifiedUsers] = useState<Array<{ qualification_number: number; qualified_at: string; email: string | null; name: string | null }>>([]);
   const [qualCounter, setQualCounter] = useState<number>(0);
@@ -3314,7 +3346,7 @@ function CatalogView({ session }: { session: any }) {
   const [grantResult, setGrantResult] = useState<string | null>(null);
   const [granting, setGranting] = useState(false);
 
-  useEffect(() => { loadItems(); loadSubmissions(); loadPendingUsers(); loadQualifiedUsers(); }, []);
+  useEffect(() => { loadItems(); loadSubmissions(); loadPendingUsers(); loadQualifiedUsers(); loadPendingRecipes(); }, []);
 
   const loadItems = async () => {
     setLoading(true);
@@ -3435,6 +3467,68 @@ function CatalogView({ session }: { session: any }) {
       alert(`Reject failed: ${e?.message ?? "Unknown error"}`);
     }
     setApprovingUserId(null);
+  };
+
+  const loadPendingRecipes = async () => {
+    const token = session?.access_token ?? "";
+    if (!token) return;
+    setRecipesLoading(true);
+    try {
+      const r = await fetch("/api/admin/list-pending-recipes?limit=50", { headers: { authorization: `Bearer ${token}` } });
+      if (!r.ok) { setRecipesLoading(false); return; }
+      const data = await r.json();
+      setPendingRecipes(data.recipes ?? []);
+      setRecipeIdx(0);
+    } catch { /* ignore */ }
+    setRecipesLoading(false);
+  };
+
+  const handleApproveRecipe = async (id: number) => {
+    const token = session?.access_token ?? "";
+    setReviewingRecipeId(id);
+    try {
+      const r = await fetch("/api/admin/review-recipe", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id, decision: "approve" }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+      setPendingRecipes(p => {
+        const next = p.filter(rx => rx.id !== id);
+        setRecipeIdx(i => Math.min(i, Math.max(0, next.length - 1)));
+        return next;
+      });
+    } catch (e: any) {
+      alert(`Approve failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setReviewingRecipeId(null);
+  };
+
+  const handleRejectRecipe = async (id: number, category: string, note: string) => {
+    if (!category) { alert("Select a rejection category first."); return; }
+    const token = session?.access_token ?? "";
+    setReviewingRecipeId(id);
+    try {
+      const r = await fetch("/api/admin/review-recipe", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id, decision: "reject", category, reason: note || undefined }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+      setRejectingRecipeId(null);
+      setRejectCategory("");
+      setRejectNote("");
+      setPendingRecipes(p => {
+        const next = p.filter(rx => rx.id !== id);
+        setRecipeIdx(i => Math.min(i, Math.max(0, next.length - 1)));
+        return next;
+      });
+    } catch (e: any) {
+      alert(`Reject failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setReviewingRecipeId(null);
   };
 
   const handleApprove = async (subId: string) => {
@@ -3646,6 +3740,106 @@ function CatalogView({ session }: { session: any }) {
           })}
         </div>
       )}
+      {/* ── Pending recipes (TER-357) ── */}
+      {(recipesLoading || pendingRecipes.length > 0) && (() => {
+        const recipe = pendingRecipes[recipeIdx];
+        const isBusy = recipe != null && reviewingRecipeId === recipe.id;
+        const isRejecting = recipe != null && rejectingRecipeId === recipe.id;
+        return (
+          <div style={{ ...s.card, borderColor: "var(--c-info-bg, #bfdbfe)", marginBottom: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h3 style={{ ...s.cardTitle, margin: 0, color: "var(--c-info-text, #1e40af)" }}>
+                Pending recipes ({recipesLoading ? "…" : pendingRecipes.length})
+              </h3>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {pendingRecipes.length > 1 && (
+                  <>
+                    <button onClick={() => setRecipeIdx(i => Math.max(0, i - 1))} style={s.ghostBtn} disabled={recipeIdx === 0}>←</button>
+                    <span style={{ fontSize: 12, color: "var(--c-text-muted)" }}>{recipeIdx + 1} / {pendingRecipes.length}</span>
+                    <button onClick={() => setRecipeIdx(i => Math.min(pendingRecipes.length - 1, i + 1))} style={s.ghostBtn} disabled={recipeIdx === pendingRecipes.length - 1}>→</button>
+                  </>
+                )}
+                <button onClick={loadPendingRecipes} style={s.ghostBtn} disabled={recipesLoading}><RefreshCw size={13} /> Refresh</button>
+              </div>
+            </div>
+            {recipesLoading && <p style={s.empty}>Loading…</p>}
+            {!recipesLoading && !recipe && <p style={s.empty}>No pending recipes.</p>}
+            {recipe && (
+              <div style={{ ...s.dayBlock, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" as const }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: "var(--c-text)", marginBottom: 2 }}>{recipe.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--c-text-muted)", marginBottom: 6 }}>
+                      {[recipe.cuisine, recipe.servings != null && `${recipe.servings} srv`, recipe.difficulty != null && `diff ${recipe.difficulty}`, recipe.model].filter(Boolean).join(" · ")}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--c-text)", marginBottom: 4, fontWeight: 600 }}>Ingredients</div>
+                    <ul style={{ margin: "0 0 8px", paddingLeft: 18, fontSize: 12.5, color: "var(--c-text-muted)" }}>
+                      {(recipe.ingredients ?? []).map((ing: any, i: number) => (
+                        <li key={i}>{ing.qty != null ? `${ing.qty}${ing.unit ? " " + ing.unit : ""} ` : ""}{ing.name}</li>
+                      ))}
+                    </ul>
+                    <div style={{ fontSize: 12.5, color: "var(--c-text)", marginBottom: 4, fontWeight: 600 }}>Steps</div>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "var(--c-text-muted)" }}>
+                      {(recipe.steps ?? []).map((step: any, i: number) => (
+                        <li key={i} style={{ marginBottom: 3 }}>{String(step)}</li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, flexShrink: 0, alignItems: "flex-end" }}>
+                    <button onClick={() => handleApproveRecipe(recipe.id)} style={s.primaryBtn} disabled={isBusy}>
+                      {isBusy && !isRejecting ? "…" : "Approve"}
+                    </button>
+                    <button
+                      onClick={() => { setRejectingRecipeId(isRejecting ? null : recipe.id); setRejectCategory(""); setRejectNote(""); }}
+                      style={s.iconBtn}
+                      disabled={isBusy}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+                {isRejecting && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--c-border)" }}>
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: 12, color: "var(--c-text-muted)", display: "block", marginBottom: 4 }}>
+                        Category <span style={{ color: "var(--c-danger, #ef4444)" }}>*</span>
+                      </label>
+                      <select
+                        value={rejectCategory}
+                        onChange={e => setRejectCategory(e.target.value)}
+                        style={{ fontSize: 13, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-text)", width: "100%" }}
+                      >
+                        <option value="">— select —</option>
+                        {REJECT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 10 }}>
+                      <label style={{ fontSize: 12, color: "var(--c-text-muted)", display: "block", marginBottom: 4 }}>Note (optional)</label>
+                      <textarea
+                        value={rejectNote}
+                        onChange={e => setRejectNote(e.target.value)}
+                        rows={2}
+                        style={{ fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-text)", width: "100%", resize: "vertical" as const, boxSizing: "border-box" as const }}
+                        placeholder="Optional explanation…"
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => handleRejectRecipe(recipe.id, rejectCategory, rejectNote)}
+                        style={{ ...s.iconBtn, opacity: !rejectCategory || isBusy ? 0.5 : 1 }}
+                        disabled={!rejectCategory || isBusy}
+                      >
+                        {isBusy ? "…" : "Confirm reject"}
+                      </button>
+                      <button onClick={() => setRejectingRecipeId(null)} style={s.ghostBtn} disabled={isBusy}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {/* ── Pending submissions (admin review queue) ── */}
       {(subsLoading || submissions.length > 0) && (
         <div style={{ ...s.card, borderColor: "var(--c-border)", marginBottom: 4 }}>
