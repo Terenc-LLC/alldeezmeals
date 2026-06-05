@@ -70,6 +70,28 @@ const CEILINGS: Record<IngCategory, { ml: number | null; g: number | null }> = {
 
 const STAPLES = new Set(["salt", "pepper", "oil", "water", "butter"]);
 
+// TER-340: conservative lexicon of meaningful food terms that must appear in the ingredient
+// list if referenced in steps. Singular stems; substring-matched so plurals hit too.
+// Deliberately excludes ambiguous staple-collision terms (salt, pepper, oil).
+const STEP_LEXICON: readonly string[] = [
+  // proteins
+  "chicken", "beef", "pork", "turkey", "sausage", "bacon", "ham", "shrimp", "fish", "salmon", "tuna",
+  // starches / vehicles
+  "rice", "pasta", "noodle", "tortilla", "bread", "bun", "roll", "potato",
+  // legumes / egg
+  "bean", "lentil", "chickpea", "egg",
+  // core produce
+  "onion", "garlic", "tomato",
+];
+
+// Terms exempt from step_ingredient_missing (pantry staples / dried spices the model may
+// mention in steps without fully listing them).
+const STEP_STAPLE_ALLOWLIST = new Set([
+  "salt", "pepper", "oil", "butter", "water", "sugar", "flour",
+  "garlic powder", "onion powder", "paprika", "cumin", "chili powder",
+  "cayenne", "oregano", "basil", "thyme", "cinnamon",
+]);
+
 export function validateRecipe(recipe: any): ValidationResult {
   const hardFailures: string[] = [];
   const softFailures: string[] = [];
@@ -181,6 +203,24 @@ export function validateRecipe(recipe: any): ValidationResult {
             softFailures.push(`qty_implausible: ingredient "${ingName}" quantity exceeds the per-serving ceiling`);
           }
         }
+      }
+    }
+  }
+
+  // HARD: step_ingredient_missing — lexicon term used in steps but absent from ingredient list
+  if (ingsValid && stepsValid) {
+    const normalizedIngNames = (ingredients as any[]).map((ing) =>
+      normalize(String(ing.name ?? ""))
+    );
+    const normalizedStepText = normalize((steps as string[]).join(" "));
+
+    for (const term of STEP_LEXICON) {
+      if (STEP_STAPLE_ALLOWLIST.has(term)) continue;
+      if (!normalizedStepText.includes(term)) continue;
+      if (!normalizedIngNames.some((n) => n.includes(term))) {
+        hardFailures.push(
+          `step_ingredient_missing: "${term}" used in steps but not in ingredients`
+        );
       }
     }
   }
