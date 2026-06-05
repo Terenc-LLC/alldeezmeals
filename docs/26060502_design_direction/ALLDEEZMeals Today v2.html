@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ALLDEEZMeals — Today v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+<style>
+/* ── Design tokens (warm-market, PJS override) ──────────────────── */
+:root {
+  --c-primary:#2B8C7E; --c-primary-hover:#236F64; --c-accent:#F2856B;
+  --c-accent-hover:#E37152; --c-bg:#FBF7F1; --c-surface:#FFFFFF;
+  --c-surface-2:#F4F1E9; --c-text:#1A3A34; --c-text-muted:#7C8A80;
+  --c-border:#E6DDD0; --c-on-primary:#FFFFFF;
+  --c-success-bg:#E6F1EC; --c-success-text:#136B58;
+  --c-pill-bg:#F2856B; --c-pill-text:#5E281A;
+  --c-danger:#A8453C; --c-danger-bg:#F6E7E4;
+  --c-warning:#8A6D3B; --c-warning-bg:#F3EAD6;
+  --c-primary-tint:#E4F0EC; --c-shadow:26 58 52;
+
+  --font-serif:'Plus Jakarta Sans',-apple-system,sans-serif;
+  --font-sans:'Plus Jakarta Sans',-apple-system,sans-serif;
+
+  --t-display-size:28px; --t-display-lh:32px; --t-display-w:600;
+  --t-h1-size:22px;      --t-h1-lh:28px;      --t-h1-w:700;
+  --t-h2-size:19px;      --t-h2-lh:25px;      --t-h2-w:600;
+  --t-h3-size:16px;      --t-h3-lh:22px;      --t-h3-w:600;
+  --t-bodylg-size:16px;  --t-bodylg-lh:24px;  --t-bodylg-w:400;
+  --t-body-size:15px;    --t-body-lh:22px;    --t-body-w:400;
+  --t-bodysm-size:13px;  --t-bodysm-lh:18px;  --t-bodysm-w:400;
+  --t-label-size:12px;   --t-label-lh:16px;   --t-label-w:700; --t-label-tracking:0.05em;
+  --t-caption-size:11px; --t-caption-lh:14px; --t-caption-w:600;
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px;
+
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-pill:999px;
+
+  --elev-0:none;
+  --elev-1:0 1px 2px rgba(var(--c-shadow)/.06),0 1px 3px rgba(var(--c-shadow)/.05);
+  --elev-2:0 4px 14px rgba(var(--c-shadow)/.09),0 2px 6px rgba(var(--c-shadow)/.05);
+  --elev-primary:0 2px 8px rgba(43,140,126,.28);
+  --tap-min:44px; --focus-ring:0 0 0 3px rgba(43,140,126,.30);
+}
+/* ── Base ── */
+.wm { font-family:var(--font-sans); color:var(--c-text); background:var(--c-bg);
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+.wm *,.wm *::before,.wm *::after { box-sizing:border-box; }
+.wm-h1  { font-family:var(--font-sans); font-size:var(--t-h1-size); line-height:var(--t-h1-lh); font-weight:var(--t-h1-w); letter-spacing:-0.01em; margin:0; }
+.wm-h2  { font-family:var(--font-sans); font-size:var(--t-h2-size); line-height:var(--t-h2-lh); font-weight:var(--t-h2-w); letter-spacing:-0.01em; margin:0; }
+.wm-h3  { font-family:var(--font-sans); font-size:var(--t-h3-size); line-height:var(--t-h3-lh); font-weight:var(--t-h3-w); margin:0; }
+.wm-bodylg { font-family:var(--font-sans); font-size:var(--t-bodylg-size); line-height:var(--t-bodylg-lh); font-weight:var(--t-bodylg-w); margin:0; }
+.wm-body   { font-family:var(--font-sans); font-size:var(--t-body-size);   line-height:var(--t-body-lh);   font-weight:var(--t-body-w);   margin:0; }
+.wm-bodysm { font-family:var(--font-sans); font-size:var(--t-bodysm-size); line-height:var(--t-bodysm-lh); font-weight:var(--t-bodysm-w); margin:0; }
+.wm-label  { font-family:var(--font-sans); font-size:var(--t-label-size);  line-height:var(--t-label-lh);  font-weight:var(--t-label-w); letter-spacing:var(--t-label-tracking); text-transform:uppercase; margin:0; }
+.wm-caption{ font-family:var(--font-sans); font-size:var(--t-caption-size);line-height:var(--t-caption-lh);font-weight:var(--t-caption-w); margin:0; }
+.wm-muted  { color:var(--c-text-muted); }
+/* ── Surfaces ── */
+.wm-card   { background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius-lg); box-shadow:var(--elev-1); padding:var(--space-4); }
+.wm-sunken { background:var(--c-surface-2); border:1px solid var(--c-border); border-radius:var(--radius-md); padding:var(--space-3); }
+/* ── Buttons ── */
+.wm-btn { font-family:var(--font-sans); font-weight:700; font-size:var(--t-body-size);
+  display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2);
+  min-height:var(--tap-min); padding:0 var(--space-4); border-radius:var(--radius-md);
+  border:1px solid transparent; cursor:pointer;
+  transition:background .15s,box-shadow .15s,border-color .15s,transform .05s; white-space:nowrap; }
+.wm-btn:active { transform:translateY(1px); }
+.wm-btn:focus-visible { outline:none; box-shadow:var(--focus-ring); }
+.wm-btn--primary   { background:var(--c-primary); color:var(--c-on-primary); box-shadow:var(--elev-primary); }
+.wm-btn--primary:hover { background:var(--c-primary-hover); }
+.wm-btn--secondary { background:var(--c-surface); color:var(--c-primary); border-color:var(--c-border); }
+.wm-btn--secondary:hover { background:var(--c-surface-2); border-color:var(--c-primary); }
+.wm-btn--ghost  { background:transparent; color:var(--c-text-muted); border-color:var(--c-border); }
+.wm-btn--ghost:hover { background:var(--c-surface-2); color:var(--c-text); }
+.wm-btn--block  { width:100%; }
+.wm-btn--sm { min-height:36px; font-size:var(--t-bodysm-size); padding:0 var(--space-3); border-radius:var(--radius-sm); }
+/* ── Tags ── */
+.wm-tag { display:inline-flex; align-items:center; gap:var(--space-1); font-family:var(--font-sans); font-weight:600;
+  font-size:var(--t-caption-size); line-height:1; padding:5px 10px; border-radius:var(--radius-pill);
+  background:var(--c-surface-2); color:var(--c-text-muted); }
+.wm-tag--cuisine { background:var(--c-accent); color:var(--c-pill-text); font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
+.wm-tag--effort  { background:var(--c-accent); color:var(--c-pill-text); font-weight:700; }
+.wm-tag--est     { background:var(--c-warning-bg); color:var(--c-warning); font-weight:700; }
+.wm-tag--primary { background:var(--c-primary); color:var(--c-on-primary); font-weight:700; }
+/* ── Checkbox ── */
+.wm-check { flex:0 0 auto; width:24px; height:24px; border-radius:var(--radius-sm); border:2px solid var(--c-border);
+  background:var(--c-surface); cursor:pointer; display:grid; place-items:center;
+  transition:background .12s,border-color .12s; }
+.wm-check[data-checked="true"] { background:var(--c-primary); border-color:var(--c-primary); }
+/* ── Divider ── */
+.wm-divider { height:1px; background:var(--c-border); border:0; margin:var(--space-4) 0; }
+
+/* ── Page ── */
+html,body { margin:0; }
+body { background:var(--c-bg); font-family:var(--font-sans); color:var(--c-text); -webkit-font-smoothing:antialiased; }
+.page { max-width:980px; margin:0 auto; padding:36px 24px 80px; }
+.page-title { font-size:22px; font-weight:700; letter-spacing:-0.01em; margin:0; }
+.sec-label { font-size:12px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--c-text-muted); margin:32px 0 10px; }
+/* Device frame */
+.frame { border:1px solid var(--c-border); border-radius:18px; overflow:hidden;
+  box-shadow:0 8px 32px rgba(26,58,52,.12); background:var(--c-surface);
+  display:flex; flex-direction:column; }
+.frame--mobile { max-width:390px; height:720px; }
+.frame--tablet { max-width:820px; height:680px; }
+/* Nav */
+.navtab { font-family:var(--font-sans); font-size:13px; font-weight:600; border:none;
+  background:transparent; color:var(--c-text-muted); padding:8px 12px; border-radius:9px;
+  cursor:pointer; white-space:nowrap; }
+.navtab[data-active="true"] { background:var(--c-surface); color:var(--c-primary); font-weight:700; box-shadow:0 1px 3px rgba(26,58,52,.12); }
+/* Spec callout */
+.spec-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:var(--space-4); margin-top:var(--space-4); }
+.spec-card { background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius-lg);
+  padding:var(--space-4); }
+.spec-card h4 { font-size:13px; font-weight:700; margin:0 0 var(--space-3); color:var(--c-text); }
+.spec-row { display:flex; gap:var(--space-2); align-items:baseline; padding:4px 0; border-bottom:1px solid var(--c-surface-2); font-size:12px; }
+.spec-row:last-child { border-bottom:none; }
+.spec-key { flex:1; color:var(--c-text-muted); font-family:monospace; font-size:11px; }
+.spec-val { color:var(--c-text); font-weight:600; font-family:monospace; font-size:11px; text-align:right; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="frames/today-v2.jsx"></script>
+
+<script type="text/babel">
+const PJS = "'Plus Jakarta Sans', sans-serif";
+
+function DPlateIcon({ size = 40 }) {
+  const g = size * 0.60;
+  return (
+    <div style={{ width: size, height: size, borderRadius: size * 0.27, background: "var(--c-primary)",
+      display: "grid", placeItems: "center", flexShrink: 0 }}>
+      <span style={{ position: "relative", display: "inline-block", fontFamily: PJS,
+        fontWeight: 800, fontSize: g, color: "#fff", lineHeight: 1 }}>
+        D
+        <span style={{ position: "absolute", left: "57%", top: "53%",
+          transform: "translate(-50%,-50%)", width: g * 0.2, height: g * 0.2,
+          borderRadius: "50%", background: "var(--c-accent)" }} />
+      </span>
+    </div>
+  );
+}
+
+function Wordmark({ size = 21 }) {
+  return (
+    <span style={{ fontFamily: PJS, fontWeight: 800, fontSize: size,
+      letterSpacing: "-0.01em", color: "var(--c-text)", lineHeight: 1, whiteSpace: "nowrap" }}>
+      ALLDEEZ<span style={{ color: "var(--c-primary)" }}>Meals</span>
+    </span>
+  );
+}
+
+function AppHeader({ active = "Today" }) {
+  const tab = (label) => (
+    <button key={label} className="navtab" data-active={label === active}>{label}</button>
+  );
+  return (
+    <div style={{ background: "var(--c-surface)", borderBottom: "1px solid var(--c-border)", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px" }}>
+        <DPlateIcon size={40} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Wordmark size={20} />
+          <div className="wm-caption wm-muted" style={{ marginTop: 2 }}>A week of dinners, planned in minutes</div>
+        </div>
+      </div>
+      <div style={{ padding: "0 12px 10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, background: "var(--c-surface-2)",
+          borderRadius: 12, padding: 5, overflowX: "auto" }}>
+          {tab("Today")}
+          <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "3px 8px 3px 10px",
+            border: "1px solid", borderColor: "var(--c-border)", borderRadius: 9,
+            background: "rgba(43,140,126,0.05)", flexShrink: 0 }}>
+            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase",
+              color: "var(--c-text-muted)", marginRight: 3 }}>Planning</span>
+            {tab("Setup")}{tab("Meals")}
+          </div>
+          {tab("Shopping List")}{tab("Recipe Box")}{tab("Receipt")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div className="page">
+      <p className="wm-label wm-muted" style={{ marginBottom: 6 }}>Design pass v2</p>
+      <h1 className="page-title">Today — cook mode</h1>
+      <p className="wm-bodysm wm-muted" style={{ marginTop: 6, maxWidth: 560 }}>
+        Redesigned for the kitchen: provenance note, two-group GATHER with pantry badges,
+        full-width cook progress. Showing Mon, Jun 8 — Southwest Chicken Salad, which reuses
+        Saturday's chicken to illustrate the "prepared earlier" group.
+        Interact: check ingredients, tap steps, mark as made, rate.
+      </p>
+
+      {/* ── Mobile 390px ── */}
+      <div className="sec-label">Mobile · 390 px</div>
+      <div className="frame frame--mobile">
+        <AppHeader active="Today" />
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <TodayCookV2 wide={false} />
+        </div>
+      </div>
+
+      {/* ── Tablet wide layout ── */}
+      <div className="sec-label">Tablet · two-column layout</div>
+      <div className="frame frame--tablet">
+        <AppHeader active="Today" />
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <TodayCookV2 wide={true} />
+        </div>
+      </div>
+
+      {/* ── Token spec ── */}
+      <div className="sec-label">Token specs — new component patterns</div>
+      <div className="spec-grid">
+
+        <div className="spec-card">
+          <h4>Provenance note</h4>
+          <div className="spec-row"><span className="spec-key">background</span><span className="spec-val">--c-surface</span></div>
+          <div className="spec-row"><span className="spec-key">border</span><span className="spec-val">1px --c-border</span></div>
+          <div className="spec-row"><span className="spec-key">borderLeft</span><span className="spec-val">3px --c-primary</span></div>
+          <div className="spec-row"><span className="spec-key">borderRadius</span><span className="spec-val">--radius-sm</span></div>
+          <div className="spec-row"><span className="spec-key">padding</span><span className="spec-val">--space-3 --space-4</span></div>
+          <div className="spec-row"><span className="spec-key">icon color</span><span className="spec-val">--c-primary</span></div>
+          <div className="spec-row"><span className="spec-key">label weight</span><span className="spec-val">700 (inline strong)</span></div>
+          <div className="spec-row"><span className="spec-key">body</span><span className="spec-val">--t-bodysm-*, --c-text</span></div>
+        </div>
+
+        <div className="spec-card">
+          <h4>GATHER — "Prepared earlier" group header</h4>
+          <div className="spec-row"><span className="spec-key">background</span><span className="spec-val">--c-primary-tint</span></div>
+          <div className="spec-row"><span className="spec-key">padding</span><span className="spec-val">--space-2 --space-3</span></div>
+          <div className="spec-row"><span className="spec-key">borderRadius</span><span className="spec-val">--radius-md --radius-md 0 0</span></div>
+          <div className="spec-row"><span className="spec-key">label color</span><span className="spec-val">--c-primary</span></div>
+          <div className="spec-row"><span className="spec-key">label style</span><span className="spec-val">--t-label-* (uppercase)</span></div>
+          <div className="spec-row"><span className="spec-key">icon badge</span><span className="spec-val">16px circle, --c-primary bg</span></div>
+        </div>
+
+        <div className="spec-card">
+          <h4>GATHER — "Prepared earlier" group body</h4>
+          <div className="spec-row"><span className="spec-key">background</span><span className="spec-val">--c-primary-tint @ 30%</span></div>
+          <div className="spec-row"><span className="spec-key">border</span><span className="spec-val">1px --c-primary @ 18%</span></div>
+          <div className="spec-row"><span className="spec-key">borderTop</span><span className="spec-val">none</span></div>
+          <div className="spec-row"><span className="spec-key">borderRadius</span><span className="spec-val">0 0 --radius-md --radius-md</span></div>
+          <div className="spec-row"><span className="spec-key">row padding</span><span className="spec-val">--space-2 --space-3</span></div>
+          <div className="spec-row"><span className="spec-key">source note color</span><span className="spec-val">--c-primary @ 75%</span></div>
+        </div>
+
+        <div className="spec-card">
+          <h4>Pantry badge (inline in ingredient row)</h4>
+          <div className="spec-row"><span className="spec-key">background</span><span className="spec-val">--c-warning-bg</span></div>
+          <div className="spec-row"><span className="spec-key">color</span><span className="spec-val">--c-warning</span></div>
+          <div className="spec-row"><span className="spec-key">fontSize</span><span className="spec-val">10px</span></div>
+          <div className="spec-row"><span className="spec-key">fontWeight</span><span className="spec-val">600</span></div>
+          <div className="spec-row"><span className="spec-key">padding</span><span className="spec-val">2px 6px</span></div>
+          <div className="spec-row"><span className="spec-key">borderRadius</span><span className="spec-val">--radius-pill</span></div>
+          <div className="spec-row"><span className="spec-key">text</span><span className="spec-val">"pantry" (lowercase)</span></div>
+          <div className="spec-row"><span className="spec-key">visibility</span><span className="spec-val">hidden when row is checked</span></div>
+        </div>
+
+        <div className="spec-card">
+          <h4>Ingredient progress count</h4>
+          <div className="spec-row"><span className="spec-key">position</span><span className="spec-val">right of "GATHER" label</span></div>
+          <div className="spec-row"><span className="spec-key">style</span><span className="spec-val">--t-caption-*, --c-text-muted</span></div>
+          <div className="spec-row"><span className="spec-key">scope</span><span className="spec-val">spans both groups combined</span></div>
+          <div className="spec-row"><span className="spec-key">format</span><span className="spec-val">{`"{n} of {total} gathered"`}</span></div>
+        </div>
+
+        <div className="spec-card">
+          <h4>Cook — progress bar (full width)</h4>
+          <div className="spec-row"><span className="spec-key">height</span><span className="spec-val">5px</span></div>
+          <div className="spec-row"><span className="spec-key">track bg</span><span className="spec-val">--c-surface-2</span></div>
+          <div className="spec-row"><span className="spec-key">fill bg</span><span className="spec-val">--c-primary</span></div>
+          <div className="spec-row"><span className="spec-key">borderRadius</span><span className="spec-val">4px</span></div>
+          <div className="spec-row"><span className="spec-key">flex</span><span className="spec-val">flex:1 (full width next to label)</span></div>
+          <div className="spec-row"><span className="spec-key">transition</span><span className="spec-val">width .2s</span></div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#FBF7F1"/>
+  <rect x="10" y="10" width="80" height="80" rx="10" fill="#FFFFFF" stroke="#E6DDD0" stroke-width="1"/>
+  <rect x="20" y="20" width="60" height="8" rx="4" fill="#2B8C7E" opacity=".15"/>
+  <rect x="20" y="34" width="45" height="5" rx="2.5" fill="#1A3A34"/>
+  <rect x="20" y="44" width="30" height="4" rx="2" fill="#7C8A80"/>
+  <rect x="20" y="55" width="60" height="1" fill="#E6DDD0"/>
+  <rect x="20" y="62" width="10" height="10" rx="2" fill="#E4F0EC" stroke="#2B8C7E" stroke-width="1"/>
+  <rect x="35" y="65" width="25" height="4" rx="2" fill="#1A3A34"/>
+  <rect x="20" y="78" width="60" height="8" rx="4" fill="#2B8C7E"/>
+</svg>
+</template>
+</body>
+</html>
