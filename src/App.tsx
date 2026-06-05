@@ -449,13 +449,16 @@ export default function App() {
         "content-type": "application/json",
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ prompt, max_tokens: 2000 }),
+      body: JSON.stringify({ prompt, max_tokens: 5000 }),
     });
     const data = await r.json();
     if (!r.ok) {
       // Anthropic errors arrive as { type, error: { type, message } }
       const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
       throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    }
+    if (data.stop_reason === "max_tokens") {
+      throw Object.assign(new Error("Response truncated by token limit"), { truncated: true });
     }
     const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
     const obj = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim());
@@ -562,7 +565,7 @@ ${prior}
 Each ingredient requires: recipeAmount {qty, unit} (the cooking amount used in the recipe), purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen"), purchaseQty (integer ≥ 1, whole packages rounded UP to cover recipeAmount — usually 1).
 
 Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. ORIGINALITY: write original recipes — original cooking directions and descriptions in your own words; do not copy text from published recipes. (Quantities/ingredient lists are fine; the written steps/description must be original.) SPECIFIC NAME: set "name" to a distinctive, specific dish name (e.g. "Ginger-Soy Chicken Stir Fry with Peppers"), NOT a generic category ("Chicken Stir Fry"). Exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"steps":["step 1","step 2","..."],"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}]}`;
+{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -622,7 +625,17 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
         }
       }
 
-      const data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
+      let data: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
+          break;
+        } catch (e: any) {
+          const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape";
+          if (!retryable) throw e;
+          if (attempt === 2) throw new Error("Couldn't generate this recipe — try again.");
+        }
+      }
       if (dietaryAvoid.length) data.dietaryAvoid = dietaryAvoid;
       setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null, kcalInfo: null } }));
       // Kick off nutrition resolution in background (non-blocking).
