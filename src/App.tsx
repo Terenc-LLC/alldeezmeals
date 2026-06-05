@@ -883,6 +883,7 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
             <div>
               <h1 style={s.h1}><span style={{ color: "var(--c-text)" }}>ALLDEEZ</span><span style={{ color: "var(--c-primary)" }}>Meals</span></h1>
               <p style={s.sub}>A week of dinners, planned in minutes.</p>
+              <span style={s.betaBadge}>Beta · Free during beta</span>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -3792,6 +3793,7 @@ const sans  = "'Plus Jakarta Sans', -apple-system, sans-serif";
 const s: Record<string, any> = {
   shell: { fontFamily: "var(--font-sans)", background: "var(--c-bg)", minHeight: "100%", color: "var(--c-text)", padding: "var(--space-5)", maxWidth: 780, margin: "0 auto" },
   header: { marginBottom: 18 }, logoRow: { display: "flex", alignItems: "center", gap: 12 },
+  betaBadge: { display: "inline-block", fontSize: 10.5, fontWeight: 600, color: "var(--c-text-muted)", background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: 10, padding: "2px 8px", marginTop: 4 },
   h1: { fontFamily: serif, fontSize: 23, fontWeight: 800, margin: 0, letterSpacing: "-.01em" },
   sub: { margin: "2px 0 0", fontSize: 12.5, color: "var(--c-text-muted)" },
   tabs: { display: "flex", gap: 5, marginBottom: 18, background: "var(--c-surface-2)", padding: 5, borderRadius: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" },
