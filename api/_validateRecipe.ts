@@ -70,6 +70,30 @@ const CEILINGS: Record<IngCategory, { ml: number | null; g: number | null }> = {
 
 const STAPLES = new Set(["salt", "pepper", "oil", "water", "butter"]);
 
+// TER-340: conservative lexicon of meaningful food terms that must appear in the ingredient
+// list if referenced in steps. Singular stems matched as whole words (with optional s/es
+// plural) so "ham" doesn't hit "graham", "bun" doesn't hit "bunch", etc.
+// "roll" excluded: it's a ubiquitous cooking verb ("roll it snugly", "roll the dough").
+// Deliberately excludes ambiguous staple-collision terms (salt, pepper, oil).
+const STEP_LEXICON: readonly string[] = [
+  // proteins
+  "chicken", "beef", "pork", "turkey", "sausage", "bacon", "ham", "shrimp", "fish", "salmon", "tuna",
+  // starches / vehicles
+  "rice", "pasta", "noodle", "tortilla", "bread", "bun", "potato",
+  // legumes / egg
+  "bean", "lentil", "chickpea", "egg",
+  // core produce
+  "onion", "garlic", "tomato",
+];
+
+// Safety-net exemptions — disjoint from STEP_LEXICON by design (lexicon already excludes
+// salt/pepper/oil), but kept as a guard against future lexicon additions.
+const STEP_STAPLE_ALLOWLIST = new Set([
+  "salt", "pepper", "oil", "butter", "water", "sugar", "flour",
+  "garlic powder", "onion powder", "paprika", "cumin", "chili powder",
+  "cayenne", "oregano", "basil", "thyme", "cinnamon",
+]);
+
 export function validateRecipe(recipe: any): ValidationResult {
   const hardFailures: string[] = [];
   const softFailures: string[] = [];
@@ -181,6 +205,27 @@ export function validateRecipe(recipe: any): ValidationResult {
             softFailures.push(`qty_implausible: ingredient "${ingName}" quantity exceeds the per-serving ceiling`);
           }
         }
+      }
+    }
+  }
+
+  // HARD: step_ingredient_missing — lexicon term used in steps but absent from ingredient list.
+  // Whole-word regex (singular + optional s/es plural) prevents false positives like
+  // "bun"⊂"bunch", "ham"⊂"graham", "bread"⊂"breading", "egg"⊂"eggplant".
+  if (ingsValid && stepsValid) {
+    const normalizedIngNames = (ingredients as any[]).map((ing) =>
+      normalize(String(ing.name ?? ""))
+    );
+    const normalizedStepText = normalize((steps as string[]).join(" "));
+
+    for (const term of STEP_LEXICON) {
+      if (STEP_STAPLE_ALLOWLIST.has(term)) continue;
+      const wordRe = new RegExp(`\\b${term}(s|es)?\\b`);
+      if (!wordRe.test(normalizedStepText)) continue;
+      if (!normalizedIngNames.some((n) => wordRe.test(n))) {
+        hardFailures.push(
+          `step_ingredient_missing: "${term}" used in steps but not in ingredients`
+        );
       }
     }
   }
