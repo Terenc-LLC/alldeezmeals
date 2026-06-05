@@ -1602,9 +1602,8 @@ function TocStatusPill({ m, isPinned, isSkipped }: { m: any; isPinned: boolean; 
 }
 
 function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onAllAccepted, acceptedCount }: any) {
-  const [expandedId, setExpandedId] = useState<string | null>(() =>
-    days.find((d: any) => meals[d.id])?.id ?? days[0]?.id ?? null
-  );
+  const firstMealIdx = days.findIndex((d: any) => meals[d.id]);
+  const [activeMealIdx, setActiveMealIdx] = useState<number>(firstMealIdx >= 0 ? firstMealIdx : 0);
 
   if (!days.some((d: any) => meals[d.id])) {
     return (
@@ -1617,157 +1616,341 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
     );
   }
 
+  const total = days.length;
+  const safeIdx = Math.min(activeMealIdx, total - 1);
+  const activeDay = days[safeIdx];
+  const m = meals[activeDay?.id];
+  const date = dateFor(safeIdx);
+  const fx = forecast[date];
+  const w = fx ? wx(fx.code) : null;
+  const isPinned = !!activeDay?.pinnedRecipe;
+  const isSkipped = !!activeDay?.skip;
+  const isLiked = m?.data && liked.includes(m.data.name);
+
   return (
-    <div style={{ display: "grid", gap: 4 }}>
-      {days.map((day: any, i: number) => {
-        const m = meals[day.id];
-        const date = dateFor(i);
-        const fx = forecast[date];
-        const w = fx ? wx(fx.code) : null;
-        const isExpanded = expandedId === day.id;
-        const isLiked = m?.data && liked.includes(m.data.name);
-        const isPinned = !!day.pinnedRecipe;
-        const isSkipped = !!day.skip;
-
-        return (
-          <div key={day.id} style={{ ...s.tocRow, ...(isExpanded ? s.tocRowActive : {}), ...(isSkipped ? { opacity: 0.65 } : {}) }}>
-            {/* Compact TOC row — always visible */}
-            <button
-              onClick={() => setExpandedId(isExpanded ? null : day.id)}
-              style={s.tocSummary}
-              aria-expanded={isExpanded}
-            >
-              <div style={s.tocLeft}>
-                <span style={s.tocDate}>
-                  {weekdayLabel(date)}{" · "}{day.people} ppl{fx ? ` · ${w!.e} ${fx.hi}F` : ""}
-                </span>
-                <span style={{ ...s.tocMealName, fontStyle: isSkipped ? "italic" : undefined }}>
-                  {isSkipped ? "Skipped — no dinner" : (m?.data?.name ?? (m?.status === "loading" ? "Generating…" : "Not yet generated"))}
-                </span>
-              </div>
-              <TocStatusPill m={m} isPinned={isPinned} isSkipped={isSkipped} />
+    <div style={{ display: "grid", gap: "var(--space-3)" }}>
+      {/* Day-rail navigator */}
+      <div style={{ display: "flex", gap: "var(--space-1)" }}>
+        {days.map((day: any, i: number) => {
+          const dm = meals[day.id];
+          const isActive = i === safeIdx;
+          const isAcc = dm?.status === "accepted";
+          const isPinn = !!day.pinnedRecipe;
+          const isSkip = !!day.skip;
+          const dDate = dateFor(i);
+          const wd = parseISO(dDate).toLocaleDateString(undefined, { weekday: "short" });
+          return (
+            <button key={day.id} onClick={() => setActiveMealIdx(i)} style={{
+              flex: "1 1 0", padding: "6px 2px 4px", borderRadius: "var(--radius-sm)", border: "none",
+              background: isActive ? "var(--c-primary)" : "var(--c-surface-2)",
+              color: isActive ? "var(--c-on-primary)" : "var(--c-text-muted)",
+              fontSize: 11, fontWeight: 700, fontFamily: "var(--font-sans)",
+              cursor: "pointer", transition: "background .15s", textAlign: "center" as const,
+              opacity: isSkip ? 0.5 : 1, lineHeight: 1.2,
+            }}>
+              {wd}
+              {(isAcc || isPinn) && !isActive && (
+                <span style={{ display: "block", fontSize: 8, marginTop: 2 }}>✓</span>
+              )}
             </button>
+          );
+        })}
+      </div>
 
-            {/* Expanded detail panel */}
-            {isExpanded && (
-              <div style={s.tocDetail}>
-                {isSkipped && <p style={{ ...s.empty, fontStyle: "italic" }}>This day is marked as skip — no dinner will be generated or added to the grocery list.</p>}
-                {!isSkipped && !m && <p style={s.empty}>Run "Generate meal plan" from Setup.</p>}
-                {m?.status === "loading" && (
-                  <p style={{ ...s.empty, display: "flex", gap: 8, alignItems: "center" }}>
-                    <RefreshCw size={15} className="spin" /> Thinking up a dish...
-                  </p>
+      {/* Single meal card */}
+      <div style={{
+        background: "var(--c-surface)", border: "1px solid var(--c-primary)",
+        borderRadius: 12, boxShadow: "0 0 0 1px var(--c-primary)", overflow: "hidden",
+      }}>
+        {/* Card header: context + accepted badge + compact prev/next */}
+        <div style={{
+          padding: "var(--space-3) var(--space-4)", borderBottom: "1px solid var(--c-border)",
+          display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" as const,
+        }}>
+          <span style={{
+            fontSize: "var(--t-caption-size)", fontWeight: 600, textTransform: "uppercase" as const,
+            letterSpacing: ".04em", color: "var(--c-text-muted)", flex: 1, lineHeight: 1.4,
+          }}>
+            {weekdayLabel(date)}{" · "}{activeDay?.people} ppl{fx ? ` · ${w!.e} ${fx.hi}°F` : ""}
+          </span>
+          {m?.status === "accepted" && !isPinned && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              background: "var(--c-success-bg)", color: "var(--c-success-text)",
+              fontWeight: 700, padding: "4px 9px", borderRadius: 20, fontSize: 11, whiteSpace: "nowrap" as const,
+            }}>
+              <Check size={11} strokeWidth={2.6} /> Accepted
+            </span>
+          )}
+          {isPinned && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              background: "var(--c-primary)", color: "var(--c-on-primary)",
+              fontWeight: 700, padding: "4px 9px", borderRadius: 20, fontSize: 11, whiteSpace: "nowrap" as const,
+            }}>
+              📌 Pinned
+            </span>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <button
+              onClick={() => setActiveMealIdx(prev => Math.max(0, prev - 1))}
+              disabled={safeIdx === 0}
+              className="btn-ghost btn--sm"
+              style={{ padding: "0 6px", minHeight: 30, opacity: safeIdx === 0 ? 0.3 : 1 }}
+              aria-label="Previous meal"
+            ><ChevronLeft size={14} /></button>
+            <span style={{
+              fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)",
+              minWidth: 32, textAlign: "center" as const,
+            }}>{safeIdx + 1}/{total}</span>
+            <button
+              onClick={() => setActiveMealIdx(prev => Math.min(total - 1, prev + 1))}
+              disabled={safeIdx === total - 1}
+              className="btn-ghost btn--sm"
+              style={{ padding: "0 6px", minHeight: 30, opacity: safeIdx === total - 1 ? 0.3 : 1 }}
+              aria-label="Next meal"
+            ><ChevronRight size={14} /></button>
+          </div>
+        </div>
+
+        {/* Card body */}
+        <div style={{ padding: "var(--space-4)" }}>
+          {isSkipped && (
+            <p style={{ ...s.empty, fontStyle: "italic" }}>
+              This day is marked as skip — no dinner will be generated or added to the grocery list.
+            </p>
+          )}
+          {!isSkipped && !m && <p style={s.empty}>Run "Generate meal plan" from Setup.</p>}
+          {m?.status === "loading" && (
+            <p style={{ ...s.empty, display: "flex", gap: 8, alignItems: "center" }}>
+              <RefreshCw size={15} className="spin" /> Thinking up a dish...
+            </p>
+          )}
+          {m?.status === "error" && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: "var(--c-danger)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+                <AlertCircle size={15} /> {m.error}
+              </span>
+              <button onClick={() => onReject(activeDay, safeIdx)} style={s.ghostBtn}>
+                <RefreshCw size={14} /> Retry
+              </button>
+            </div>
+          )}
+          {m?.data && (m.status === "ready" || m.status === "accepted") && (
+            <>
+              {/* Recipe identity */}
+              {m.data.cuisine && <span style={s.cuisineTag}>{m.data.cuisine}</span>}
+              <h2 style={{
+                fontSize: 21, lineHeight: "27px", fontWeight: 700, letterSpacing: "-0.01em",
+                fontFamily: "var(--font-sans)", margin: "var(--space-3) 0 var(--space-2)",
+              }}>{m.data.name}</h2>
+              <p style={{
+                fontSize: "var(--t-bodysm-size)", lineHeight: "20px",
+                color: "var(--c-text-muted)", margin: "0 0 var(--space-4)",
+              }}>{m.data.description}</p>
+
+              {/* Meta row: Clock · Flame · Users + effort badge */}
+              <div style={{
+                display: "flex", flexWrap: "wrap" as const, gap: "var(--space-3)", alignItems: "center",
+                paddingBottom: "var(--space-4)", borderBottom: "1px solid var(--c-border)",
+              }}>
+                {(m.data.prepMinutes != null || m.data.cookMinutes != null) && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
+                    <Clock size={14} color="var(--c-primary)" />
+                    {[
+                      m.data.prepMinutes != null ? `Prep ${m.data.prepMinutes}` : null,
+                      m.data.cookMinutes != null ? `Cook ${m.data.cookMinutes} min` : null,
+                    ].filter(Boolean).join(" · ")}
+                  </span>
                 )}
-                {m?.status === "error" && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ color: "var(--c-danger)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
-                      <AlertCircle size={15} /> {m.error}
-                    </span>
-                    <button onClick={() => onReject(day, i)} style={s.ghostBtn}><RefreshCw size={14} /> Retry</button>
-                  </div>
+                {m.kcalInfo && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
+                    <Flame size={14} color="var(--c-primary)" />
+                    ~{m.kcalInfo.kcalPerServing} kcal
+                    {m.kcalInfo.tier === "estimate" && (
+                      <span style={{ background: "var(--c-warning-bg)", color: "var(--c-warning)", fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: "var(--radius-pill)", lineHeight: 1 }}>Est.</span>
+                    )}
+                  </span>
                 )}
-                {m?.data && (m.status === "ready" || m.status === "accepted") && (
-                  <>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                      <div style={{ flex: 1 }}>
-                        <h3 style={s.mealName}>{m.data.name}</h3>
-                        <p style={s.mealDesc}>{m.data.cuisine ? <span style={s.cuisineTag}>{m.data.cuisine}</span> : null} {m.data.description}</p>
-                      </div>
-                      {m.status === "accepted" && !isPinned && <span style={s.acceptedPill}><Check size={13} /> Accepted</span>}
-                      {isPinned && <span style={s.acceptedPill}>📌 Pinned</span>}
-                    </div>
-                    {m.data.reuseNote && <div style={s.reuseNote}><Repeat size={13} /> {m.data.reuseNote}</div>}
-                    {m.data.dietaryAvoid?.length > 0 && (
-                      <div style={s.reuseNote}>{dietaryDisclaimer(m.data.dietaryAvoid)}</div>
-                    )}
-                    {(m.data.prepMinutes != null || m.data.cookMinutes != null) && (
-                      <div style={s.timeLine}>
-                        {m.data.prepMinutes != null && `Prep: ${m.data.prepMinutes} min`}
-                        {m.data.prepMinutes != null && m.data.cookMinutes != null && " · "}
-                        {m.data.cookMinutes != null && `Cook: ${m.data.cookMinutes} min`}
-                        {" · "}Serves: {m.data.servings}
-                      </div>
-                    )}
-                    {m.kcalInfo && <KcalBadge kcalPerServing={m.kcalInfo.kcalPerServing} tier={m.kcalInfo.tier} />}
-                    {m.data.difficulty != null && <DifficultyBadge difficulty={m.data.difficulty} />}
-                    <div style={s.tagWrap}>
-                      {m.data.ingredients.map((ing: any, idx: number) => {
-                        const rStr = fmtRecipeQty(ing);
-                        const pStr = ing.purchaseSize || "";
-                        const showBuyNote = pStr && pStr !== rStr;
-                        return (
-                          <span key={idx} style={s.tag}>
-                            {ing.name}{rStr ? ` — ${rStr}` : ""}
-                            {showBuyNote && <span style={{ fontSize: 10, color: "var(--c-text-muted)", marginLeft: 3 }}>· buy: {pStr}</span>}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    {m.data.steps?.length > 0 && (
-                      <ol style={s.stepsList}>
-                        {m.data.steps.map((step: string, si: number) => (
-                          <li key={si} style={s.stepItem}>{step}</li>
+                {m.data.servings && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
+                    <Users size={14} color="var(--c-primary)" />
+                    Serves {m.data.servings}
+                  </span>
+                )}
+                {m.data.difficulty != null && (
+                  <span style={{ ...s.rcEffortBadge, marginLeft: "auto" }}>
+                    <span style={{ letterSpacing: 1 }}>{"●".repeat(m.data.difficulty) + "○".repeat(Math.max(0, 5 - m.data.difficulty))}</span>
+                    {" "}{DIFFICULTY_LABELS[m.data.difficulty] ?? ""}
+                  </span>
+                )}
+              </div>
+
+              {/* Reuse/pantry block — new structured fields if present, else fallback to legacy string */}
+              {(m.data.reuseNotes?.length > 0 || m.data.pantryNote) ? (
+                <div style={{
+                  background: "var(--c-warning-bg)", border: "1px solid rgba(138,109,59,0.18)",
+                  borderRadius: "var(--radius-sm)", padding: "var(--space-3) var(--space-4)",
+                  margin: "var(--space-4) 0", display: "grid", gap: "var(--space-2)",
+                }}>
+                  {m.data.reuseNotes?.length > 0 && (
+                    <div>
+                      <p style={{
+                        fontSize: "var(--t-label-size)", fontWeight: 700,
+                        letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const,
+                        color: "var(--c-warning)", margin: "0 0 var(--space-2)",
+                      }}>Reuses this week</p>
+                      <div style={{ display: "grid", gap: "var(--space-1)" }}>
+                        {m.data.reuseNotes.map((note: string, ni: number) => (
+                          <div key={ni} style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-start" }}>
+                            <span style={{ fontSize: 13, lineHeight: "18px", color: "var(--c-warning)", flexShrink: 0, marginTop: 1 }}>↺</span>
+                            <span style={{ fontSize: "var(--t-bodysm-size)", lineHeight: "18px", color: "var(--c-text)" }}>{note}</span>
+                          </div>
                         ))}
-                      </ol>
-                    )}
-                    {!isPinned && (
-                      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-                        {m.status !== "accepted" && (
-                          <button onClick={() => onAccept(day.id)} style={s.acceptBtn}><Check size={15} /> Accept</button>
-                        )}
-                        <button onClick={() => onReject(day, i)} style={s.rejectBtn}>
-                          <RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}
-                        </button>
-                        <div style={{ flex: 1 }} />
-                        <button
-                          onClick={() => onThumbUp(day)}
-                          style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }}
-                          title="Like"
-                        ><ThumbsUp size={15} /></button>
-                        <button
-                          onClick={() => onThumbDown(day, i)}
-                          style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
-                          title="Dislike (avoid + swap)"
-                        ><ThumbsDown size={15} /></button>
-                        <button onClick={() => onAddRotation(day)} style={s.rotateBtn} title="Save to Recipe Box">
-                          <Star size={14} /> Recipe Box
-                        </button>
                       </div>
-                    )}
-                    {isPinned && (
-                      <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 10, fontStyle: "italic" }}>
-                        Pinned in Setup — unpin there to enable generation or swapping.
-                      </p>
-                    )}
-                  </>
-                )}
+                    </div>
+                  )}
+                  {m.data.pantryNote && (
+                    <p style={{
+                      fontSize: "var(--t-bodysm-size)", color: "var(--c-text-muted)", margin: 0,
+                      paddingTop: m.data.reuseNotes?.length > 0 ? "var(--space-1)" : 0,
+                      borderTop: m.data.reuseNotes?.length > 0 ? "1px solid rgba(138,109,59,0.14)" : "none",
+                    }}>
+                      <strong style={{ fontWeight: 700, color: "var(--c-warning)" }}>Pantry: </strong>{m.data.pantryNote}
+                    </p>
+                  )}
+                </div>
+              ) : m.data.reuseNote ? (
+                <div style={{ ...s.reuseNote, margin: "var(--space-4) 0" }}>
+                  <Repeat size={13} /> {m.data.reuseNote}
+                </div>
+              ) : null}
 
-                {/* Prev / Next navigation */}
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}>
+              {m.data.dietaryAvoid?.length > 0 && (
+                <div style={{ ...s.reuseNote, marginBottom: "var(--space-3)" }}>
+                  {dietaryDisclaimer(m.data.dietaryAvoid)}
+                </div>
+              )}
+
+              {/* Ingredients — 3-column rows: name / qty / purchase badge */}
+              {m.data.ingredients?.length > 0 && (
+                <div style={{ marginTop: "var(--space-4)" }}>
+                  <p style={{ ...s.typeLabel, color: "var(--c-text-muted)", margin: "0 0 var(--space-3)" }}>
+                    Ingredients · {m.data.ingredients.length}
+                  </p>
+                  <div>
+                    {m.data.ingredients.map((ing: any, idx: number) => {
+                      const rStr = fmtRecipeQty(ing);
+                      const purchaseType = ing.purchaseType ?? (ing.source === "reused" ? "reuse" : ing.source);
+                      const purchaseNote = ing.purchaseNote ?? ing.purchaseSize;
+                      const notLast = idx < m.data.ingredients.length - 1;
+                      const nsMap: Record<string, { badge: boolean; color: string; bg?: string }> = {
+                        buy:    { badge: false, color: "var(--c-text-muted)" },
+                        reuse:  { badge: true,  color: "var(--c-success-text)", bg: "var(--c-success-bg)" },
+                        staple: { badge: true,  color: "var(--c-warning)",      bg: "var(--c-warning-bg)" },
+                      };
+                      const ns = nsMap[purchaseType] ?? { badge: false, color: "var(--c-text-muted)" };
+                      return (
+                        <div key={idx} style={{
+                          display: "flex", alignItems: "baseline", gap: "var(--space-2)",
+                          padding: "9px 0",
+                          borderBottom: notLast ? "1px solid var(--c-surface-2)" : "none",
+                        }}>
+                          <span style={{ flex: 1, fontWeight: 600, fontSize: "var(--t-body-size)", color: "var(--c-text)" }}>{ing.name}</span>
+                          <span style={{ flexShrink: 0, fontSize: "var(--t-caption-size)", color: "var(--c-text-muted)", textAlign: "right" as const, minWidth: 58 }}>{rStr}</span>
+                          {purchaseNote && (
+                            ns.badge ? (
+                              <span style={{
+                                flexShrink: 0, fontSize: 10, fontWeight: 600, lineHeight: 1,
+                                color: ns.color, background: ns.bg,
+                                padding: "2px 6px", borderRadius: "var(--radius-pill)", whiteSpace: "nowrap" as const,
+                              }}>{purchaseNote}</span>
+                            ) : (
+                              <span style={{ flexShrink: 0, fontSize: "var(--t-caption-size)", color: "var(--c-text-muted)", whiteSpace: "nowrap" as const }}>{purchaseNote}</span>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Steps — numbered-badge grid */}
+              {m.data.steps?.length > 0 && (
+                <div>
+                  <hr style={{ height: 1, background: "var(--c-border)", border: "none", margin: "var(--space-4) 0" }} />
+                  <p style={{ ...s.typeLabel, color: "var(--c-text-muted)", margin: "0 0 var(--space-4)" }}>
+                    How to make it
+                  </p>
+                  <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "var(--space-4)" }}>
+                    {m.data.steps.map((step: string, si: number) => (
+                      <li key={si} style={{ display: "flex", gap: "var(--space-3)", alignItems: "flex-start" }}>
+                        <span style={{
+                          flexShrink: 0, width: 26, height: 26, marginTop: 1,
+                          borderRadius: "var(--radius-pill)",
+                          background: "var(--c-primary-tint)", color: "var(--c-primary)",
+                          display: "grid", placeItems: "center", fontWeight: 700, fontSize: 12,
+                        }}>{si + 1}</span>
+                        <span style={{ fontSize: "var(--t-body-size)", lineHeight: "22px", color: "var(--c-text)", paddingTop: 3 }}>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              {/* Actions row */}
+              {!isPinned && (
+                <div style={{
+                  marginTop: "var(--space-5)", paddingTop: "var(--space-4)",
+                  borderTop: "1px solid var(--c-border)",
+                  display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" as const,
+                }}>
+                  {m.status !== "accepted" && (
+                    <button onClick={() => onAccept(activeDay.id)} style={s.acceptBtn}>
+                      <Check size={15} /> Accept
+                    </button>
+                  )}
+                  <button onClick={() => onReject(activeDay, safeIdx)} style={s.rejectBtn}>
+                    <RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}
+                  </button>
+                  <div style={{ flex: 1 }} />
                   <button
-                    onClick={() => { const prev = days[i - 1]; if (prev) setExpandedId(prev.id); }}
-                    className="btn-ghost btn--sm"
-                    style={{ visibility: i === 0 ? "hidden" : "visible" }}
-                  >
-                    ← Prev
+                    onClick={() => onThumbUp(activeDay)}
+                    style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }}
+                    title="Like"
+                  ><ThumbsUp size={15} /></button>
+                  <button
+                    onClick={() => onThumbDown(activeDay, safeIdx)}
+                    style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
+                    title="Dislike (avoid + swap)"
+                  ><ThumbsDown size={15} /></button>
+                  <button onClick={() => onAddRotation(activeDay)} style={s.rotateBtn} title="Save to Recipe Box">
+                    <Star size={14} /> Recipe Box
                   </button>
                   <button
-                    onClick={() => { const next = days[i + 1]; if (next) setExpandedId(next.id); }}
+                    onClick={() => setActiveMealIdx(prev => Math.min(total - 1, prev + 1))}
+                    disabled={safeIdx === total - 1}
                     className="btn-ghost btn--sm"
-                    style={{ visibility: i === days.length - 1 ? "hidden" : "visible" }}
+                    style={{ opacity: safeIdx === total - 1 ? 0.4 : 1 }}
                   >
-                    Next →
+                    {safeIdx === total - 1 ? "All reviewed ✓" : `Next: ${weekdayLabel(dateFor(safeIdx + 1)).split(",")[0]} →`}
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
+              )}
+              {isPinned && (
+                <p style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 10, fontStyle: "italic" }}>
+                  Pinned in Setup — unpin there to enable generation or swapping.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       {/* All meals accepted gate */}
       {acceptedCount > 0 && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" as const, marginTop: 8 }}>
           <button onClick={onAllAccepted} className="btn-primary">
             <CalendarDays size={15} /> Save to This Week
           </button>
