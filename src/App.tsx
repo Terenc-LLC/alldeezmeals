@@ -3881,7 +3881,7 @@ function CatalogView({ session }: { session: any }) {
                     <div style={{ fontSize: 12.5, color: "var(--c-text)", marginBottom: 4, fontWeight: 600 }}>Ingredients</div>
                     <ul style={{ margin: "0 0 8px", paddingLeft: 18, fontSize: 12.5, color: "var(--c-text-muted)" }}>
                       {(recipe.ingredients ?? []).map((ing: any, i: number) => (
-                        <li key={i}>{ing.qty != null ? `${ing.qty}${ing.unit ? " " + ing.unit : ""} ` : ""}{ing.name}</li>
+                        <li key={i}>{ing.recipeAmount?.qty != null ? `${ing.recipeAmount.qty}${ing.recipeAmount.unit ? " " + ing.recipeAmount.unit : ""} ` : ""}{ing.name}{ing.source && ing.source !== "buy" ? <span style={{ color: "var(--c-text-muted)", fontStyle: "italic" }}>{" "}({ing.source})</span> : null}</li>
                       ))}
                     </ul>
                     <div style={{ fontSize: 12.5, color: "var(--c-text)", marginBottom: 4, fontWeight: 600 }}>Steps</div>
