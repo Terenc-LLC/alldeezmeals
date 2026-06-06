@@ -139,6 +139,75 @@ function useIsMobile(): boolean {
   return isMobile;
 }
 
+// TER-358: extracted so buildSeedPrompt can share the exact same output contract as buildPrompt.
+function recipeOutputContract(servings: number): string {
+  return `Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0. For source:"staple" omit or zero purchaseSize/purchaseQty. preparedEarlier (boolean, default false): set to true ONLY if this ingredient was actually prepped/cooked in an EARLIER meal this week and is being reused in that prepared form (e.g. shredded chicken poached Monday, onions diced earlier). A whole/raw item pulled from a shared pack is NOT preparedEarlier (e.g. half an onion from the already-purchased bag → preparedEarlier:false). This field is independent of source.
+
+Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. ORIGINALITY: write original recipes — original cooking directions and descriptions in your own words; do not copy text from published recipes. (Quantities/ingredient lists are fine; the written steps/description must be original.) SPECIFIC NAME: set "name" to a distinctive, specific dish name (e.g. "Ginger-Soy Chicken Stir Fry with Peppers"), NOT a generic category ("Chicken Stir Fry"). Exactly:
+{"name":"","description":"one short sentence","cuisine":"","servings":${servings},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","provenance":"","reuseNotes":[],"pantryNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
+}
+
+async function generateRecipeFromPrompt(prompt: string, token: string): Promise<any> {
+  const r = await fetch("/api/generate", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ prompt, max_tokens: 5000 }),
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  if (data.stop_reason === "max_tokens") {
+    throw Object.assign(new Error("Response truncated by token limit"), { truncated: true });
+  }
+  const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
+  const obj = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim());
+  if (!obj.name || !Array.isArray(obj.ingredients)) throw new Error("bad shape");
+  obj.prepMinutes = typeof obj.prepMinutes === "number" ? Math.round(obj.prepMinutes) : null;
+  obj.cookMinutes = typeof obj.cookMinutes === "number" ? Math.round(obj.cookMinutes) : null;
+  obj.estKcalPerServing = typeof obj.estKcalPerServing === "number" && obj.estKcalPerServing > 0 ? Math.round(obj.estKcalPerServing) : null;
+  obj.difficulty = typeof obj.difficulty === "number"
+    ? Math.min(5, Math.max(0, Math.round(obj.difficulty)))
+    : null;
+  obj.steps = Array.isArray(obj.steps) ? obj.steps.map(String).filter(Boolean) : [];
+  obj.ingredients = obj.ingredients.map((i: any) => {
+    const name = String(i.name || "").trim();
+    const category = CATEGORIES.includes(i.category) ? i.category : "Other";
+    const recipeAmount = (i.recipeAmount && typeof i.recipeAmount === "object")
+      ? { qty: Number(i.recipeAmount.qty) || 0, unit: String(i.recipeAmount.unit || "").trim() }
+      : { qty: Number(i.qty) || 0, unit: String(i.unit || "").trim() };
+    let purchaseSize: string;
+    let purchaseQty: number;
+    if (i.purchaseSize && i.purchaseQty != null) {
+      purchaseSize = String(i.purchaseSize).trim();
+      purchaseQty = Math.max(1, Math.ceil(Number(i.purchaseQty) || 0));
+    } else {
+      purchaseSize = recipeAmount.unit
+        ? `${recipeAmount.qty} ${recipeAmount.unit}`.trim()
+        : String(recipeAmount.qty);
+      purchaseQty = 1;
+    }
+    const source: "buy" | "reused" | "staple" =
+      i.source === "reused" ? "reused" : i.source === "staple" ? "staple" : "buy";
+    const preparedEarlier: boolean = i.preparedEarlier === true;
+    return { name, recipeAmount, purchaseSize, purchaseQty, category, source, preparedEarlier };
+  }).filter((i: any) => i.name);
+  obj.provenance = typeof obj.provenance === "string" ? obj.provenance : "";
+  obj.reuseNotes = Array.isArray(obj.reuseNotes) ? obj.reuseNotes.filter((s: any) => typeof s === "string") : [];
+  obj.pantryNote = typeof obj.pantryNote === "string" ? obj.pantryNote : "";
+  return obj;
+}
+
+function buildSeedPrompt(target: string, servings = 4): string {
+  return `You are creating ONE original dinner recipe for a family that shops at ALDI. Dish to create: ${target}. Use mainstream, affordable ALDI ingredients; include EVERY ingredient (mains, reused, staples) each with a "source". Write an ORIGINAL recipe — original steps and wording in your own words; do NOT reproduce any specific published recipe. Set "name" to a specific, distinctive dish name.
+
+` + recipeOutputContract(servings);
+}
+
 /* ====================================================================== */
 export default function App() {
   // TER-325: capture referral code from /<CODE> path before auth loads
@@ -454,62 +523,7 @@ export default function App() {
   const setEveryonePeople = (n: number) => { setDefaultPeople(n); setDays((p) => p.map((d) => ({ ...d, people: n }))); };
 
   /* ---- meal generation (via /api/generate proxy) ---- */
-  const callClaude = async (prompt: string) => {
-    const token = session?.access_token ?? "";
-    const r = await fetch("/api/generate", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ prompt, max_tokens: 5000 }),
-    });
-    const data = await r.json();
-    if (!r.ok) {
-      // Anthropic errors arrive as { type, error: { type, message } }
-      const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
-      throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
-    }
-    if (data.stop_reason === "max_tokens") {
-      throw Object.assign(new Error("Response truncated by token limit"), { truncated: true });
-    }
-    const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
-    const obj = JSON.parse(text.replace(/```json/gi, "").replace(/```/g, "").trim());
-    if (!obj.name || !Array.isArray(obj.ingredients)) throw new Error("bad shape");
-    obj.prepMinutes = typeof obj.prepMinutes === "number" ? Math.round(obj.prepMinutes) : null;
-    obj.cookMinutes = typeof obj.cookMinutes === "number" ? Math.round(obj.cookMinutes) : null;
-    obj.estKcalPerServing = typeof obj.estKcalPerServing === "number" && obj.estKcalPerServing > 0 ? Math.round(obj.estKcalPerServing) : null;
-    obj.difficulty = typeof obj.difficulty === "number"
-      ? Math.min(5, Math.max(0, Math.round(obj.difficulty)))
-      : null;
-    obj.steps = Array.isArray(obj.steps) ? obj.steps.map(String).filter(Boolean) : [];
-    obj.ingredients = obj.ingredients.map((i: any) => {
-      const name = String(i.name || "").trim();
-      const category = CATEGORIES.includes(i.category) ? i.category : "Other";
-      const recipeAmount = (i.recipeAmount && typeof i.recipeAmount === "object")
-        ? { qty: Number(i.recipeAmount.qty) || 0, unit: String(i.recipeAmount.unit || "").trim() }
-        : { qty: Number(i.qty) || 0, unit: String(i.unit || "").trim() };
-      let purchaseSize: string;
-      let purchaseQty: number;
-      if (i.purchaseSize && i.purchaseQty != null) {
-        purchaseSize = String(i.purchaseSize).trim();
-        purchaseQty = Math.max(1, Math.ceil(Number(i.purchaseQty) || 0));
-      } else {
-        purchaseSize = recipeAmount.unit
-          ? `${recipeAmount.qty} ${recipeAmount.unit}`.trim()
-          : String(recipeAmount.qty);
-        purchaseQty = 1;
-      }
-      const source: "buy" | "reused" | "staple" =
-        i.source === "reused" ? "reused" : i.source === "staple" ? "staple" : "buy";
-      const preparedEarlier: boolean = i.preparedEarlier === true;
-      return { name, recipeAmount, purchaseSize, purchaseQty, category, source, preparedEarlier };
-    }).filter((i: any) => i.name);
-    obj.provenance = typeof obj.provenance === "string" ? obj.provenance : "";
-    obj.reuseNotes = Array.isArray(obj.reuseNotes) ? obj.reuseNotes.filter((s: any) => typeof s === "string") : [];
-    obj.pantryNote = typeof obj.pantryNote === "string" ? obj.pantryNote : "";
-    return obj;
-  };
+  const callClaude = async (prompt: string) => generateRecipeFromPrompt(prompt, session?.access_token ?? "");
 
   const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], reject?: string) => {
     const fx = forecast[dateISO];
@@ -590,10 +604,7 @@ ${reject ? `\nThe user REJECTED "${reject}". Propose a clearly DIFFERENT dinner 
 Dinners already planned this week (with purchased ingredients):
 ${prior}
 
-Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0. For source:"staple" omit or zero purchaseSize/purchaseQty. preparedEarlier (boolean, default false): set to true ONLY if this ingredient was actually prepped/cooked in an EARLIER meal this week and is being reused in that prepared form (e.g. shredded chicken poached Monday, onions diced earlier). A whole/raw item pulled from a shared pack is NOT preparedEarlier (e.g. half an onion from the already-purchased bag → preparedEarlier:false). This field is independent of source.
-
-Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. ORIGINALITY: write original recipes — original cooking directions and descriptions in your own words; do not copy text from published recipes. (Quantities/ingredient lists are fine; the written steps/description must be original.) SPECIFIC NAME: set "name" to a distinctive, specific dish name (e.g. "Ginger-Soy Chicken Stir Fry with Peppers"), NOT a generic category ("Chicken Stir Fry"). Exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${day.people},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","provenance":"","reuseNotes":[],"pantryNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
+${recipeOutputContract(day.people)}`;
   };
 
   const committedData = (excludeId?: string) => days
@@ -3336,6 +3347,12 @@ function CatalogView({ session }: { session: any }) {
   const [rejectCategory, setRejectCategory] = useState("");
   const [rejectNote, setRejectNote] = useState("");
 
+  // TER-358: seed library
+  const [seedTargets, setSeedTargets] = useState("");
+  const [seedCount, setSeedCount] = useState(5);
+  const [seeding, setSeeding] = useState(false);
+  const [seedLog, setSeedLog] = useState<Array<{ target: string; ok: boolean; reason?: string }>>([]);
+
   // TER-266: qualified users list
   const [qualifiedUsers, setQualifiedUsers] = useState<Array<{ qualification_number: number; qualified_at: string; email: string | null; name: string | null }>>([]);
   const [qualCounter, setQualCounter] = useState<number>(0);
@@ -3529,6 +3546,48 @@ function CatalogView({ session }: { session: any }) {
       alert(`Reject failed: ${e?.message ?? "Unknown error"}`);
     }
     setReviewingRecipeId(null);
+  };
+
+  const handleSeedLibrary = async () => {
+    const token = session?.access_token ?? "";
+    if (!token) return;
+    const targets = seedTargets.split("\n").map(l => l.trim()).filter(Boolean).slice(0, seedCount);
+    if (!targets.length) { alert("Enter at least one dish target (one per line)."); return; }
+    setSeeding(true);
+    setSeedLog([]);
+    for (const target of targets) {
+      let recipe: any = null;
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            recipe = await generateRecipeFromPrompt(buildSeedPrompt(target, 4), token);
+            break;
+          } catch (e: any) {
+            const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape";
+            if (!retryable || attempt === 2) throw e;
+          }
+        }
+        const vr = await fetch("/api/recipes", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify(recipe),
+        });
+        const vd = await vr.json();
+        if (vr.status === 422) {
+          setSeedLog(l => [...l, { target, ok: false, reason: `hard fail: ${vd.hardFailures?.[0] ?? ""}` }]);
+        } else if (vr.ok && vd.saved === false) {
+          setSeedLog(l => [...l, { target, ok: false, reason: `soft fail: ${vd.softFailures?.[0] ?? ""}` }]);
+        } else if (!vr.ok) {
+          setSeedLog(l => [...l, { target, ok: false, reason: `HTTP ${vr.status}` }]);
+        } else {
+          setSeedLog(l => [...l, { target, ok: true }]);
+        }
+      } catch (e: any) {
+        setSeedLog(l => [...l, { target, ok: false, reason: e?.message ?? "error" }]);
+      }
+    }
+    setSeeding(false);
+    await loadPendingRecipes();
   };
 
   const handleApprove = async (subId: string) => {
@@ -3740,6 +3799,53 @@ function CatalogView({ session }: { session: any }) {
           })}
         </div>
       )}
+      {/* ── Seed library (TER-358) ── */}
+      <div style={{ ...s.card, borderColor: "var(--c-primary)", marginBottom: 4 }}>
+        <h3 style={{ ...s.cardTitle, margin: "0 0 10px", color: "var(--c-primary)" }}>Seed library</h3>
+        <label style={{ ...s.fieldLabel, marginBottom: 4 }}>Dish targets — one per line (e.g. "Italian – Tuscan white-bean skillet")</label>
+        <textarea
+          value={seedTargets}
+          onChange={e => setSeedTargets(e.target.value)}
+          rows={6}
+          placeholder={"Italian – Tuscan white-bean and sausage skillet\nMexican – Chicken enchiladas verde\nAsian – Beef and broccoli stir-fry"}
+          style={{ width: "100%", fontSize: 12.5, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-2)", color: "var(--c-text)", fontFamily: "monospace", boxSizing: "border-box" as const, resize: "vertical" as const }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+          <label style={{ fontSize: 13, color: "var(--c-text-muted)" }}>Generate up to</label>
+          <input
+            type="number" min={1} max={20} value={seedCount}
+            onChange={e => setSeedCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+            style={{ width: 55, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--c-border)", fontSize: 13, background: "var(--c-surface)", color: "var(--c-text)" }}
+          />
+          <span style={{ fontSize: 13, color: "var(--c-text-muted)" }}>
+            of {seedTargets.split("\n").filter(l => l.trim()).length} targets · servings=4 · lands pending
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+          <button
+            onClick={handleSeedLibrary}
+            style={s.primaryBtn}
+            disabled={seeding || !seedTargets.trim()}
+          >
+            {seeding ? "Seeding…" : `Seed ${Math.min(seedCount, seedTargets.split("\n").filter(l => l.trim()).length || 0)} recipe(s)`}
+          </button>
+          {seedLog.length > 0 && !seeding && (
+            <span style={{ fontSize: 12.5, color: "var(--c-text-muted)" }}>
+              {seedLog.filter(r => r.ok).length} saved · {seedLog.filter(r => !r.ok).length} skipped/failed
+            </span>
+          )}
+        </div>
+        {seedLog.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            {seedLog.map((r, i) => (
+              <div key={i} style={{ fontSize: 12, color: r.ok ? "var(--c-primary)" : "var(--c-text-muted)", padding: "2px 0", display: "flex", gap: 6 }}>
+                <span style={{ fontWeight: 700 }}>{r.ok ? "✓" : "✗"}</span>
+                <span>{r.target}{r.reason ? ` — ${r.reason}` : ""}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {/* ── Pending recipes (TER-357) ── */}
       {(recipesLoading || pendingRecipes.length > 0) && (() => {
         const recipe = pendingRecipes[recipeIdx];
