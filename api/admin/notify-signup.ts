@@ -21,6 +21,7 @@ export default async function handler(req: any, res: any) {
   const name = record.name ?? "(no name)";
   const nearest_aldi = record.nearest_aldi ?? "(not provided)";
   const reason = record.reason ?? "(not provided)";
+  const signup_source = record.signup_source ?? "(not provided)";
   const first_name = record.first_name || String(record.name ?? "").split(" ")[0] || "there";
   const requested_at = record.requested_at
     ? new Date(record.requested_at).toLocaleString("en-US", { timeZone: "UTC" }) + " UTC"
@@ -53,6 +54,7 @@ export default async function handler(req: any, res: any) {
   <tr><th align="left">Email</th><td>${htmlEscape(email)}</td></tr>
   <tr><th align="left">Nearest ALDI</th><td>${htmlEscape(nearest_aldi)}</td></tr>
   <tr><th align="left">Reason</th><td>${htmlEscape(reason)}</td></tr>
+  <tr><th align="left">Signup source</th><td>${htmlEscape(signup_source)}</td></tr>
   <tr><th align="left">Requested at</th><td>${htmlEscape(requested_at)}</td></tr>
 </table>
 <p><a href="https://alldeezmeals.com">Go to ALLDEEZMeals admin queue</a></p>

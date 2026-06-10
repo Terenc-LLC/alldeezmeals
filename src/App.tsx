@@ -1175,6 +1175,7 @@ function SignInView() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [signupSource] = useState<string | null>(() => new URLSearchParams(window.location.search).get("src"));
 
   const handleSignIn = async () => {
     const addr = email.trim();
@@ -1206,6 +1207,7 @@ function SignInView() {
           nearest_aldi: nearestAldi.trim(),
           reason: reason.trim(),
           ...(referredBy ? { referred_by: referredBy } : {}),
+          ...(signupSource ? { signup_source: signupSource } : {}),
         },
       },
     });
