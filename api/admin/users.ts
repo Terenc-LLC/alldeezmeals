@@ -13,7 +13,7 @@ export default async function handler(req: any, res: any) {
   const svc = createClient(url, svcKey);
 
   const [profilesRes, userStateRes, llmRes, qualsRes, feedbackRes] = await Promise.all([
-    svc.from("profiles").select("id, email, first_name, last_name, approved, signup_source, created_at").order("created_at", { ascending: false }),
+    svc.from("profiles").select("id, email, first_name, last_name, approved, signup_source, requested_at").order("requested_at", { ascending: false }),
     svc.from("user_state").select("user_id, updated_at"),
     svc.from("llm_usage").select("user_id").eq("feature", "generate"),
     svc.from("qualifications").select("user_id, qualification_number"),
@@ -41,7 +41,7 @@ export default async function handler(req: any, res: any) {
     last_name: (p.last_name ?? null) as string | null,
     approved: (p.approved ?? false) as boolean,
     signup_source: (p.signup_source ?? null) as string | null,
-    created_at: p.created_at as string,
+    created_at: p.requested_at as string,
     last_active: (userStateMap.get(p.id) ?? null) as string | null,
     plan_count: planCountMap.get(p.id) ?? 0,
     feedback_count: feedbackCountMap.get(p.id) ?? 0,
