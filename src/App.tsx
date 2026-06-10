@@ -3294,6 +3294,21 @@ type PendingUser = {
   requested_at: string;
 };
 
+type AdminUser = {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  approved: boolean;
+  signup_source: string | null;
+  created_at: string;
+  last_active: string | null;
+  plan_count: number;
+  feedback_count: number;
+  qualified: boolean;
+  qualification_slot: number | null;
+};
+
 type PendingRecipe = {
   id: number;
   name: string;
@@ -3333,9 +3348,12 @@ function CatalogView({ session }: { session: any }) {
   const [subRowsExpanded, setSubRowsExpanded] = useState<Record<string, boolean>>({});
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
-  // TER-238: pending user approvals queue
-  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
-  const [usersLoading, setUsersLoading] = useState(false);
+  // TER-368: unified user table
+  const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
+  const [allUsersLoading, setAllUsersLoading] = useState(false);
+  const [allUsersSortCol, setAllUsersSortCol] = useState<"created_at" | "last_active" | "plan_count">("created_at");
+  const [allUsersSortDir, setAllUsersSortDir] = useState<"asc" | "desc">("desc");
+  const [allUsersFilter, setAllUsersFilter] = useState<"all" | "pending" | "approved" | "qualified">("all");
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
 
   // TER-357: pending recipe review queue
@@ -3363,7 +3381,7 @@ function CatalogView({ session }: { session: any }) {
   const [grantResult, setGrantResult] = useState<string | null>(null);
   const [granting, setGranting] = useState(false);
 
-  useEffect(() => { loadItems(); loadSubmissions(); loadPendingUsers(); loadQualifiedUsers(); loadPendingRecipes(); }, []);
+  useEffect(() => { loadItems(); loadSubmissions(); loadAllUsers(); loadQualifiedUsers(); loadPendingRecipes(); }, []);
 
   const loadItems = async () => {
     setLoading(true);
@@ -3391,17 +3409,17 @@ function CatalogView({ session }: { session: any }) {
     setSubsLoading(false);
   };
 
-  const loadPendingUsers = async () => {
+  const loadAllUsers = async () => {
     const token = session?.access_token ?? "";
     if (!token) return;
-    setUsersLoading(true);
+    setAllUsersLoading(true);
     try {
-      const r = await fetch("/api/admin/list-pending-users", { headers: { authorization: `Bearer ${token}` } });
-      if (!r.ok) { setUsersLoading(false); return; }
+      const r = await fetch("/api/admin/users", { headers: { authorization: `Bearer ${token}` } });
+      if (!r.ok) { setAllUsersLoading(false); return; }
       const data = await r.json();
-      setPendingUsers(data.users ?? []);
+      setAllUsers(data.users ?? []);
     } catch { /* ignore */ }
-    setUsersLoading(false);
+    setAllUsersLoading(false);
   };
 
   const loadQualifiedUsers = async () => {
@@ -3460,7 +3478,7 @@ function CatalogView({ session }: { session: any }) {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
-      setPendingUsers(p => p.filter(u => u.id !== userId));
+      setAllUsers(p => p.map(u => u.id === userId ? { ...u, approved: true } : u));
     } catch (e: any) {
       alert(`Approve failed: ${e?.message ?? "Unknown error"}`);
     }
@@ -3479,9 +3497,32 @@ function CatalogView({ session }: { session: any }) {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
-      setPendingUsers(p => p.filter(u => u.id !== userId));
+      setAllUsers(p => p.filter(u => u.id !== userId));
     } catch (e: any) {
       alert(`Reject failed: ${e?.message ?? "Unknown error"}`);
+    }
+    setApprovingUserId(null);
+  };
+
+  const handleGrantQualForUser = async (userId: string, email: string) => {
+    const token = session?.access_token ?? "";
+    setApprovingUserId(userId);
+    try {
+      const r = await fetch("/api/admin/grant-qualification", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email }),
+      });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error ?? `Error ${r.status}`); }
+      else if (d.alreadyQualified) { alert(`Already qualified — #${d.number} of 50`); }
+      else if (d.capReached) { alert("Cap reached (50 of 50)"); }
+      else {
+        setAllUsers(p => p.map(u => u.id === userId ? { ...u, qualified: true, qualification_slot: d.number } : u));
+        await loadQualifiedUsers();
+      }
+    } catch (e: any) {
+      alert(`Grant qual failed: ${e?.message ?? "Unknown error"}`);
     }
     setApprovingUserId(null);
   };
@@ -3749,56 +3790,128 @@ function CatalogView({ session }: { session: any }) {
           </div>
         ))}
       </div>
-      {/* ── Pending user approvals (TER-238) ── */}
-      {(usersLoading || pendingUsers.length > 0) && (
-        <div style={{ ...s.card, borderColor: "var(--c-warning-bg)", marginBottom: 4 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <h3 style={{ ...s.cardTitle, margin: 0, color: "var(--c-warning)" }}>
-              Pending users ({usersLoading ? "…" : pendingUsers.length})
-            </h3>
-            <button onClick={loadPendingUsers} style={s.ghostBtn} disabled={usersLoading}>
-              <RefreshCw size={13} /> Refresh
-            </button>
-          </div>
-          {!usersLoading && pendingUsers.length === 0 && (
-            <p style={s.empty}>No pending users.</p>
-          )}
-          {pendingUsers.map(user => {
-            const isBusy = approvingUserId === user.id;
-            return (
-              <div key={user.id} style={{ ...s.dayBlock, marginBottom: 8, padding: "10px 12px", borderColor: "var(--c-warning-bg)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" as const }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--c-text)" }}>{user.name ?? "—"}</div>
-                    <div style={{ fontSize: 12.5, color: "var(--c-text-muted)", marginTop: 1 }}>{user.email ?? "—"}</div>
-                    {user.nearest_aldi && <div style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 2 }}>📍 {user.nearest_aldi}</div>}
-                    {user.reason && <div style={{ fontSize: 12, color: "var(--c-text-muted)", marginTop: 2, fontStyle: "italic" }}>"{user.reason}"</div>}
-                    <div style={{ fontSize: 11, color: "var(--c-text-muted)", marginTop: 3 }}>
-                      {new Date(user.requested_at).toLocaleString()}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                    <button
-                      onClick={() => handleApproveUser(user.id)}
-                      style={s.primaryBtn}
-                      disabled={isBusy}
-                    >
-                      {isBusy ? "…" : "Approve"}
-                    </button>
-                    <button
-                      onClick={() => handleRejectUser(user.id, user.email)}
-                      style={s.iconBtn}
-                      disabled={isBusy}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {/* ── Users (TER-368) ── */}
+      <div style={{ ...s.card, marginBottom: 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <h3 style={{ ...s.cardTitle, margin: 0 }}>
+            Users ({allUsersLoading ? "…" : allUsers.length})
+          </h3>
+          <button onClick={loadAllUsers} style={s.ghostBtn} disabled={allUsersLoading}>
+            <RefreshCw size={13} /> Refresh
+          </button>
         </div>
-      )}
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          {(["all", "pending", "approved", "qualified"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setAllUsersFilter(f)}
+              style={{ ...s.ghostBtn, fontWeight: allUsersFilter === f ? 700 : 400, borderColor: allUsersFilter === f ? "var(--c-primary)" : "var(--c-border)" }}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+        {allUsersLoading && <p style={s.empty}>Loading…</p>}
+        {!allUsersLoading && allUsers.length === 0 && <p style={s.empty}>No users.</p>}
+        {!allUsersLoading && allUsers.length > 0 && (() => {
+          const visibleUsers = allUsers.filter(u => {
+            if (allUsersFilter === "pending") return !u.approved;
+            if (allUsersFilter === "approved") return u.approved;
+            if (allUsersFilter === "qualified") return u.qualified;
+            return true;
+          });
+          const sortedUsers = [...visibleUsers].sort((a, b) => {
+            let av: any, bv: any;
+            if (allUsersSortCol === "last_active") { av = a.last_active ?? ""; bv = b.last_active ?? ""; }
+            else if (allUsersSortCol === "plan_count") { av = a.plan_count; bv = b.plan_count; }
+            else { av = a.created_at; bv = b.created_at; }
+            if (av < bv) return allUsersSortDir === "asc" ? -1 : 1;
+            if (av > bv) return allUsersSortDir === "asc" ? 1 : -1;
+            return 0;
+          });
+          const toggleSort = (col: typeof allUsersSortCol) => {
+            if (allUsersSortCol === col) setAllUsersSortDir(d => d === "asc" ? "desc" : "asc");
+            else { setAllUsersSortCol(col); setAllUsersSortDir("desc"); }
+          };
+          const sortArrow = (col: typeof allUsersSortCol) => allUsersSortCol === col ? (allUsersSortDir === "asc" ? " ↑" : " ↓") : "";
+          const fmtDate = (iso: string | null) => iso
+            ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+            : "—";
+          const thStyle = (clickable?: boolean): React.CSSProperties => ({
+            textAlign: "left", padding: "6px 8px", fontWeight: 600, color: "var(--c-text-muted)",
+            whiteSpace: "nowrap", ...(clickable ? { cursor: "pointer", userSelect: "none" } : {}),
+          });
+          return (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, background: "var(--c-surface-raised)" }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid var(--c-border)" }}>
+                    <th style={thStyle()}>Name</th>
+                    <th style={thStyle()}>Email</th>
+                    <th style={thStyle()}>Status</th>
+                    <th style={thStyle()}>Qualified</th>
+                    <th style={thStyle(true)} onClick={() => toggleSort("created_at")}>Signed up{sortArrow("created_at")}</th>
+                    <th style={thStyle(true)} onClick={() => toggleSort("last_active")}>Last active{sortArrow("last_active")}</th>
+                    <th style={thStyle(true)} onClick={() => toggleSort("plan_count")}>Plans{sortArrow("plan_count")}</th>
+                    <th style={thStyle()}>Feedback</th>
+                    <th style={thStyle()}>Source</th>
+                    <th style={thStyle()}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedUsers.map(user => {
+                    const isBusy = approvingUserId === user.id;
+                    const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ") || "—";
+                    return (
+                      <tr key={user.id} style={{ borderBottom: "1px solid var(--c-border)", background: !user.approved ? "color-mix(in srgb, var(--c-warning-bg) 30%, transparent)" : "transparent" }}>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text)", whiteSpace: "nowrap" }}>{displayName}</td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text-muted)" }}>{user.email}</td>
+                        <td style={{ padding: "7px 8px" }}>
+                          {user.approved
+                            ? <span style={{ background: "var(--c-success-bg)", color: "var(--c-success-text)", borderRadius: 4, padding: "2px 7px", fontSize: 11.5, fontWeight: 600 }}>Approved</span>
+                            : <span style={{ background: "var(--c-warning-bg)", color: "var(--c-warning)", borderRadius: 4, padding: "2px 7px", fontSize: 11.5, fontWeight: 600 }}>Pending</span>
+                          }
+                        </td>
+                        <td style={{ padding: "7px 8px" }}>
+                          {user.qualified
+                            ? <span style={{ background: "var(--c-success-bg)", color: "var(--c-success-text)", borderRadius: 4, padding: "2px 7px", fontSize: 11.5, fontWeight: 600 }}>#{user.qualification_slot}</span>
+                            : <span style={{ color: "var(--c-text-muted)" }}>—</span>
+                          }
+                        </td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text-muted)", whiteSpace: "nowrap" }}>{fmtDate(user.created_at)}</td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text-muted)", whiteSpace: "nowrap" }}>{fmtDate(user.last_active)}</td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text)", textAlign: "center" }}>{user.plan_count}</td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text)", textAlign: "center" }}>{user.feedback_count}</td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text-muted)" }}>{user.signup_source ?? "—"}</td>
+                        <td style={{ padding: "7px 8px" }}>
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" as const }}>
+                            {!user.approved && (
+                              <>
+                                <button onClick={() => handleApproveUser(user.id)} style={{ ...s.primaryBtn, padding: "3px 8px", fontSize: 11.5 }} disabled={isBusy}>
+                                  {isBusy ? "…" : "Approve"}
+                                </button>
+                                <button onClick={() => handleRejectUser(user.id, user.email)} style={{ ...s.iconBtn, padding: "3px 8px", fontSize: 11.5 }} disabled={isBusy}>
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {user.approved && !user.qualified && (
+                              <button onClick={() => handleGrantQualForUser(user.id, user.email)} style={{ ...s.ghostBtn, padding: "3px 8px", fontSize: 11.5 }} disabled={isBusy}>
+                                {isBusy ? "…" : "Grant Qual"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {sortedUsers.length === 0 && <p style={s.empty}>No users match this filter.</p>}
+            </div>
+          );
+        })()}
+      </div>
       {/* ── Seed library (TER-358) ── */}
       <div style={{ ...s.card, borderColor: "var(--c-primary)", marginBottom: 4 }}>
         <h3 style={{ ...s.cardTitle, margin: "0 0 10px", color: "var(--c-primary)" }}>Seed library</h3>
