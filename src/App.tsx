@@ -11,6 +11,7 @@ import { normalizeIngName } from "./lib/normalize";
 import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/nutritionResolve";
 import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
+import { checkRecipe, avoidPromptBlock, mergeTerms } from "./lib/avoidGuard";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -122,12 +123,18 @@ function detectDietaryTerms(note: string): string[] {
     ["shellfish",["shellfish", "shrimp", "crab", "lobster"]],
     ["fish",     ["fish"]],
     ["sesame",   ["sesame"]],
+    // TER-401: common non-allergen restrictions the audit showed going unacknowledged
+    ["pork",     ["pork"]],
+    ["beef",     ["beef", "red meat"]],
+    ["alcohol",  ["alcohol", "booze", "wine", "beer"]],
   ];
   return TERMS.filter(([, triggers]) => triggers.some(hasAvoid)).map(([canonical]) => canonical);
 }
 
+// TER-401: rendered from the structured term list, never from an LLM echo —
+// every restriction is always named. Keep the "verify every label" sentence verbatim.
 function dietaryDisclaimer(items: string[]): string {
-  return `Generated to avoid: ${items.join(", ")} per your note. Verify every ingredient and package label yourself — not an allergen-safety guarantee.`;
+  return `Generated to avoid: ${items.join(", ")}. Verify every ingredient and package label yourself — not an allergen-safety guarantee.`;
 }
 
 function useIsMobile(): boolean {
@@ -309,6 +316,9 @@ export default function App() {
   const [rotation, setRotation] = useState<any[]>([]);
   const [liked, setLiked] = useState<string[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
+  // TER-401: structured week-level allergy/avoid TERMS (ingredients). Distinct
+  // from `avoid` above, which is TER-317 novelty exclusions (dish NAMES).
+  const [avoidTerms, setAvoidTerms] = useState<string[]>([]);
   const [recipeStars, setRecipeStars] = useState<Record<string, number>>({});
   const [currentWeek, setCurrentWeek] = useState<any>(null);
   const [cookProgress, setCookProgress] = useState<Record<string, { gathered: number[]; done: number[]; servings: number; made: boolean }>>({});
@@ -369,6 +379,7 @@ export default function App() {
         setRotation(d.rotation ?? []);
         setLiked(d.liked ?? []);
         setAvoid(d.avoid ?? []);
+        setAvoidTerms(d.avoidTerms ?? []);
         if (d.recipeStars) setRecipeStars(d.recipeStars);
         setCurrentWeek(d.currentWeek ?? null);
         if (d.cookProgress) setCookProgress(d.cookProgress);
@@ -412,6 +423,7 @@ export default function App() {
           if (d.rotation !== undefined) setRotation(d.rotation);
           if (d.liked !== undefined) setLiked(d.liked);
           if (d.avoid !== undefined) setAvoid(d.avoid);
+          if (d.avoidTerms !== undefined) setAvoidTerms(d.avoidTerms);
           if (d.recipeStars !== undefined) setRecipeStars(d.recipeStars);
           if (d.currentWeek !== undefined) setCurrentWeek(d.currentWeek);
           if (d.cookProgress !== undefined) setCookProgress(d.cookProgress);
@@ -447,7 +459,7 @@ export default function App() {
     if (!loaded) return;
     const payload = {
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
-      checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress,
+      checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     if (!session) return;
@@ -462,7 +474,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, recipeStars, currentWeek, cookProgress, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -516,7 +528,7 @@ export default function App() {
   /* ---- meal generation (via /api/generate proxy) ---- */
   const callClaude = async (prompt: string) => generateRecipeFromPrompt(prompt, session?.access_token ?? "");
 
-  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], reject?: string) => {
+  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], reject?: string, violatedTerms: string[] = []) => {
     const fx = forecast[dateISO];
     const band = tempBand(fx?.hi);
     const wlabel = fx ? `Forecast for ${weekdayLabel(dateISO)}: high ${fx.hi}F, low ${fx.lo}F, ${wx(fx.code).l}.` : `Date: ${weekdayLabel(dateISO)} (no forecast available).`;
@@ -575,7 +587,9 @@ export default function App() {
     if (loves.length) prefLines.push(`The family LIKED these before (lean toward this style, keep variety): ${loves.slice(0, 12).join(", ")}.`);
     if (avoid.length) prefLines.push(`AVOID these (disliked): ${avoid.slice(0, 12).join(", ")}.`);
 
-    const dietary = detectDietaryTerms(day.note ?? "");
+    // TER-401: structured week-level avoid terms + per-day note-detected terms,
+    // injected with severe-restriction framing into EVERY generation prompt.
+    const avoidBlock = avoidPromptBlock(avoidTerms, detectDietaryTerms(day.note ?? ""), violatedTerms);
 
     return `You are a practical weekly dinner planner for a family that shops at ALDI. Generate ONE dinner only (breakfast and lunch are covered by staples).
 
@@ -585,7 +599,7 @@ ${tempGuide}
 ${cuisineGuide}
 ${effortGuide}
 ${day.note ? `Extra request: ${day.note}` : ""}
-${dietary.length ? `DIETARY CONSTRAINT (best-effort): the diner must avoid ${dietary.join(", ")}. Do not use these ingredients or obvious derivatives. This is a best-effort accommodation, not an allergen guarantee.` : ""}
+${avoidBlock}
 ${prefLines.join("\n")}
 
 ${eff}
@@ -609,11 +623,13 @@ ${recipeOutputContract(day.people)}`;
   const generateOne = async (day: any, idx: number, committed: any[], reject?: string) => {
     setMeals((m) => ({ ...m, [day.id]: { status: "loading", data: null, error: null, kcalInfo: null } }));
     try {
-      const dietaryAvoid = detectDietaryTerms(day.note ?? "");
+      // TER-401: structured week-level avoid terms + per-day note-detected terms.
+      const allAvoid = mergeTerms(avoidTerms, detectDietaryTerms(day.note ?? ""));
       const tok = session?.access_token ?? "";
 
-      // Attempt library reuse when safe: authenticated, no dietary constraints, not a pinned day.
-      if (tok && dietaryAvoid.length === 0 && !day.pinnedRecipe) {
+      // Attempt library reuse when safe: authenticated, no dietary constraints
+      // (per-day note OR week-level avoid list — TER-317/TER-401), not a pinned day.
+      if (tok && allAvoid.length === 0 && !day.pinnedRecipe) {
         try {
           const lvl = EFFORT_LEVELS.find((l) => l.key === (day.effort ?? "any"));
           const effortMin = (lvl && lvl.key !== "any") ? lvl.min : null;
@@ -641,6 +657,10 @@ ${recipeOutputContract(day.people)}`;
               // TER-400: banked recipes carry provenance/reuseNotes from their ORIGINAL week
               // (TER-317 serve-as-is) — strip week-specific claims before entering this week.
               const reusedData = stripBankedProvenance(rj.recipe);
+              // TER-401 defense-in-depth: a served recipe that trips the avoid guard
+              // falls through to fresh generation (unreachable while the gate above
+              // requires an empty avoid list, but guards any future gate change).
+              if (checkRecipe(reusedData, allAvoid).length > 0) throw new Error("reuse violates avoid list");
               setMeals((m) => ({ ...m, [day.id]: { status: "ready", data: reusedData, error: null, kcalInfo: null } }));
               resolveNutrition(reusedData, tok).then((kcalInfo: NutritionResult) => {
                 setMeals((m) => {
@@ -658,32 +678,52 @@ ${recipeOutputContract(day.people)}`;
       }
 
       let data: any = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          data = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject));
-          // Gate: server validates and saves. Hard fail → retry; transport/5xx → fail open.
-          if (tok) {
-            try {
-              const vr = await fetch("/api/recipes", {
-                method: "POST",
-                headers: { "content-type": "application/json", authorization: `Bearer ${tok}` },
-                body: JSON.stringify(data),
-              });
-              if (vr.status === 422) throw new Error("bad shape");
-              if (!vr.ok) throw new Error(`save error ${vr.status}`);
-            } catch (fe: any) {
-              if (fe?.message === "bad shape") throw fe;
-              console.warn("Recipe save endpoint error — failing open:", fe);
+      let violatedTerms: string[] = [];
+      // TER-401 guard loop: initial attempt + ≤2 avoid-violation retries, each
+      // retry with the violated terms explicitly emphasized in the prompt.
+      for (let guardAttempt = 0; guardAttempt < 3 && !data; guardAttempt++) {
+        let pendingHits: ReturnType<typeof checkRecipe> = [];
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const candidate = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject, violatedTerms));
+            // TER-401 deterministic guard: runs after parse, BEFORE the save gate
+            // and before any meals-state commit — a violating dish must never
+            // render, even transiently.
+            pendingHits = checkRecipe(candidate, allAvoid);
+            if (pendingHits.length) break; // discard candidate; regenerate via guard loop
+            // Gate: server validates and saves. Hard fail → retry; transport/5xx → fail open.
+            if (tok) {
+              try {
+                const vr = await fetch("/api/recipes", {
+                  method: "POST",
+                  headers: { "content-type": "application/json", authorization: `Bearer ${tok}` },
+                  body: JSON.stringify(candidate),
+                });
+                if (vr.status === 422) throw new Error("bad shape");
+                if (!vr.ok) throw new Error(`save error ${vr.status}`);
+              } catch (fe: any) {
+                if (fe?.message === "bad shape") throw fe;
+                console.warn("Recipe save endpoint error — failing open:", fe);
+              }
             }
+            data = candidate;
+            break;
+          } catch (e: any) {
+            const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape";
+            if (!retryable) throw e;
+            if (attempt === 2) throw new Error("Couldn't generate this recipe — try again.");
           }
-          break;
-        } catch (e: any) {
-          const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape";
-          if (!retryable) throw e;
-          if (attempt === 2) throw new Error("Couldn't generate this recipe — try again.");
+        }
+        if (pendingHits.length) {
+          violatedTerms = mergeTerms(violatedTerms, pendingHits.map((h) => h.term));
+          // Max 2 avoid retries, then a visible per-day error — no unbounded LLM
+          // spend, no silent drop, never a committed violation.
+          if (guardAttempt === 2) throw new Error(`Couldn't generate a dish avoiding ${violatedTerms.join(", ")} — try adjusting your avoid list or note, then regenerate.`);
         }
       }
-      if (dietaryAvoid.length) data.dietaryAvoid = dietaryAvoid;
+      // TER-401: banner data comes from the structured term list (week-level
+      // avoid list + note-detected terms), never from an LLM echo.
+      if (allAvoid.length) data.dietaryAvoid = allAvoid;
       setMeals((m) => ({ ...m, [day.id]: { status: "ready", data, error: null, kcalInfo: null } }));
       // Kick off nutrition resolution in background (non-blocking).
       if (tok) {
@@ -960,6 +1000,7 @@ ${recipeOutputContract(day.people)}`;
             efficiency={efficiency} setEfficiency={setEfficiency}
             mixCuisines={mixCuisines} setMixCuisines={setMixCuisines}
             staples={staples} setStaples={setStaples} rotation={rotation}
+            avoidTerms={avoidTerms} setAvoidTerms={setAvoidTerms}
             onGenerate={generateAll} busy={busy} onStartOver={handleStartOver} isMobile={isMobile}
           />
         )}
@@ -1421,9 +1462,17 @@ function PeopleInput({ value, onChange, style }: { value: number; onChange: (n: 
 function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
     defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples,
-    rotation, onGenerate, busy, onStartOver, isMobile } = p;
+    rotation, avoidTerms, setAvoidTerms, onGenerate, busy, onStartOver, isMobile } = p;
   const [showStaples, setShowStaples] = useState(false);
   const [locInput, setLocInput] = useState("");
+  const [avoidInput, setAvoidInput] = useState("");
+
+  // TER-401: comma/Enter-parsed terms, lowercased and deduped.
+  const addAvoidTerms = (raw: string) => {
+    const terms = raw.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (terms.length) setAvoidTerms((prev: string[]) => [...prev, ...terms.filter((t) => !prev.includes(t))]);
+    setAvoidInput("");
+  };
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -1451,6 +1500,29 @@ function SetupView(p: any) {
             onKeyDown={(e) => { if (e.key === "Enter" && locInput.trim()) { geocode(locInput.trim()); setLocInput(""); } }} />
           <span style={s.miniLabel}>{fxStatus === "loading" ? "loading wx..." : fxStatus === "error" ? "wx unavailable" : ""}</span>
         </div>
+      </div>
+
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>Allergies &amp; avoid list</h3>
+        <p style={s.cardSub}>Ingredients to avoid on every day of every week until removed (e.g. pork, peanuts). Every recipe is generated and checked against this list including common derived forms (bacon, peanut oil, …). Verify every ingredient and package label yourself — not an allergen-safety guarantee.</p>
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <input
+            value={avoidInput}
+            onChange={(e) => setAvoidInput(e.target.value)}
+            placeholder="add terms, comma-separated (e.g. pork, peanuts)"
+            style={{ ...s.input, flex: 1, fontSize: 12.5 }}
+            onKeyDown={(e) => { if (e.key === "Enter" && avoidInput.trim()) addAvoidTerms(avoidInput); }}
+          />
+          <button onClick={() => { if (avoidInput.trim()) addAvoidTerms(avoidInput); }} className="btn-ghost btn--sm">
+            <Plus size={14} /> Add
+          </button>
+        </div>
+        <ChipManager
+          items={avoidTerms}
+          onRemove={(x: string) => setAvoidTerms((prev: string[]) => prev.filter((t: string) => t !== x))}
+          empty="No restrictions set."
+          tone="red"
+        />
       </div>
 
       <div style={s.card}>
