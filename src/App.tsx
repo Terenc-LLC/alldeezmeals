@@ -10,6 +10,7 @@ import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
 import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/nutritionResolve";
 import { buildInstacartHandoff } from "./lib/instacart-handoff";
+import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -637,7 +638,9 @@ ${recipeOutputContract(day.people)}`;
           if (rr.ok) {
             const rj = await rr.json();
             if (rj.reuse && rj.recipe) {
-              const reusedData = rj.recipe;
+              // TER-400: banked recipes carry provenance/reuseNotes from their ORIGINAL week
+              // (TER-317 serve-as-is) — strip week-specific claims before entering this week.
+              const reusedData = stripBankedProvenance(rj.recipe);
               setMeals((m) => ({ ...m, [day.id]: { status: "ready", data: reusedData, error: null, kcalInfo: null } }));
               resolveNutrition(reusedData, tok).then((kcalInfo: NutritionResult) => {
                 setMeals((m) => {
@@ -784,7 +787,16 @@ ${recipeOutputContract(day.people)}`;
       if (!agg[key]) agg[key] = { name, qty: 0, unit, category, staple: false, isPurchaseStyle };
       agg[key].qty += qty;
     };
-    days.forEach((d) => { if (!!d.skip) return; const m = meals[d.id]; if (m?.status === "accepted") m.data.ingredients.forEach(pushIngredient); });
+    // TER-400: enforce the reuse/buy-source invariant before aggregating, so an ingredient
+    // marked "reused" in every meal (never bought) is promoted to buy and can't be omitted
+    // from the list or the Instacart handoff. Recomputes on accept and on every list rebuild.
+    const acceptedWeek: any[] = [];
+    days.forEach((d) => { if (!!d.skip) return; const m = meals[d.id]; if (m?.status === "accepted") acceptedWeek.push(m.data); });
+    const { week: repairedWeek, promotions } = repairWeek(acceptedWeek);
+    promotions.forEach((p) => console.warn(
+      `[ingredientFlow] "${p.name}" was reuse-only (days ${p.reusedDays.map((x) => x + 1).join(", ")}) — promoted to buy in "${p.recipeName}" (day ${p.day + 1})`
+    ));
+    repairedWeek.forEach((r) => r.ingredients.forEach(pushIngredient));
     staples.filter((st) => st.enabled).forEach((st) => {
       const k = `${normalizeIngName(st.name)}|${st.unit.toLowerCase()}`;
       if (!agg[k]) agg[k] = { name: st.name, qty: 0, unit: st.unit, category: CATEGORIES.includes(st.category) ? st.category : "Other", staple: false, isPurchaseStyle: false };
