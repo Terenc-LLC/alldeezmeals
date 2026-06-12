@@ -1,8 +1,17 @@
 // Vercel serverless function. Runs on the server, never shipped to the browser.
-// Keeps ANTHROPIC_API_KEY secret. Frontend calls POST /api/generate with { prompt }.
+// Keeps ANTHROPIC_API_KEY secret. Frontend calls POST /api/generate with
+// { prompt, model, max_tokens }. TER-414: model must be an LLM_RATES key,
+// max_tokens is clamped server-side, and a per-user daily quota returns 429.
 
 import { createClient } from "@supabase/supabase-js";
 import { isApproved } from "./_approved.js";
+import {
+  validateModel,
+  clampMaxTokens,
+  parseDailyLimit,
+  isQuotaExceeded,
+  utcDayStartISO,
+} from "../src/lib/generateLimits.js";
 
 // ── LLM cost rate table ($/MTok) ─────────────────────────────────────────────
 // Update this table when Anthropic changes pricing; cost_usd is frozen at write time.
@@ -73,14 +82,38 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-    const {
-      prompt,
-      max_tokens = 1000,
-      model = "claude-sonnet-4-6", // swap to "claude-haiku-4-5-20251001" to cut cost
-    } = body;
+    const { prompt } = body;
 
     if (!prompt) {
       res.status(400).json({ error: "Missing prompt" });
+      return;
+    }
+
+    // TER-414: model allowlist — only LLM_RATES keys pass, so cost logging can
+    // never fall back to mispriced rates. The client must send model explicitly.
+    const model = validateModel(body.model, Object.keys(LLM_RATES));
+    if (!model) {
+      res.status(400).json({ error: "Unsupported model" });
+      return;
+    }
+
+    // TER-414: server-side clamp — the caller cannot buy arbitrary output spend.
+    const max_tokens = clampMaxTokens(body.max_tokens);
+
+    // TER-414: per-user daily quota (abuse control now, free-tier metering point
+    // later). Counts llm_usage rows since 00:00 UTC; count failure fails open.
+    const dailyLimit = parseDailyLimit(process.env.GENERATE_DAILY_LIMIT);
+    let todayCount: number | null = null;
+    if (supabaseService) {
+      const { count, error: countError } = await supabaseService
+        .from("llm_usage")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userData.user.id)
+        .gte("created_at", utcDayStartISO(new Date()));
+      if (!countError) todayCount = count;
+    }
+    if (isQuotaExceeded(todayCount, dailyLimit)) {
+      res.status(429).json({ error: "Daily generation limit reached — resets at midnight UTC." });
       return;
     }
 
