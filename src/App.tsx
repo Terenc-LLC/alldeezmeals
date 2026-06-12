@@ -163,12 +163,19 @@ async function generateRecipeFromPrompt(prompt: string, token: string): Promise<
       "content-type": "application/json",
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ prompt, max_tokens: 5000 }),
+    // TER-414: model is required by the server allowlist; max_tokens is clamped
+    // server-side. Swap to "claude-haiku-4-5-20251001" to cut cost.
+    body: JSON.stringify({ prompt, max_tokens: 5000, model: "claude-sonnet-4-6" }),
   });
   const data = await r.json();
   if (!r.ok) {
     const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    const err: any = new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    // TER-414: 429 = daily quota — must abort the whole run, never feed the
+    // shape/guard retry loops. (4xx errors are already non-retryable: the
+    // retry predicates only match truncation, SyntaxError, and "bad shape".)
+    if (r.status === 429) err.quota = true;
+    throw err;
   }
   if (data.stop_reason === "max_tokens") {
     throw Object.assign(new Error("Response truncated by token limit"), { truncated: true });
@@ -773,6 +780,9 @@ ${recipeOutputContract(day.people)}`;
       return data;
     } catch (e: any) {
       setMeals((m) => ({ ...m, [day.id]: { status: "error", data: null, error: e?.message || "Couldn't generate -- retry.", kcalInfo: null } }));
+      // TER-414: the day shows the server's quota message above; rethrow so
+      // generateAll can halt the remaining days instead of 429ing each one.
+      if (e?.quota) throw e;
       return null;
     }
   };
@@ -791,7 +801,14 @@ ${recipeOutputContract(day.people)}`;
       if (!!day.skip) continue; // skip overrides pin
       if (day.pinnedRecipe) continue;
       if (meals[day.id]?.status === "accepted") continue;
-      const data = await generateOne(day, i, [...committed], undefined, weekAvoid);
+      let data: any = null;
+      try {
+        data = await generateOne(day, i, [...committed], undefined, weekAvoid);
+      } catch {
+        // TER-414: only quota errors propagate out of generateOne — every
+        // remaining day would 429 too, so halt the run here.
+        break;
+      }
       if (data) committed.push(data);
     }
     setBusy(false);
@@ -800,7 +817,9 @@ ${recipeOutputContract(day.people)}`;
   const acceptMeal = (id: string) => setMeals((m) => ({ ...m, [id]: { ...m[id], status: "accepted" } }));
   const rejectMeal = async (day: any, idx: number) => {
     if (day.pinnedRecipe) return;
-    await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name);
+    // TER-414: a quota error rethrows from generateOne after setting the day's
+    // error state — nothing more to do for a single-day action.
+    await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name).catch(() => {});
   };
 
   const resetPlan = () => {
@@ -3176,7 +3195,9 @@ function IngestView({ session }: { session: any }) {
         }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.error?.message ?? `API error ${r.status}`);
+      // TER-414: server-side limit errors (quota 429, model 400) put a plain
+      // string in data.error — surface it instead of a bare status code.
+      if (!r.ok) throw new Error(data?.error?.message ?? data?.error ?? `API error ${r.status}`);
       const text = (data.content || [])
         .filter((b: any) => b.type === "text")
         .map((b: any) => b.text)
@@ -3759,6 +3780,8 @@ function CatalogView({ session }: { session: any }) {
         }
       } catch (e: any) {
         setSeedLog(l => [...l, { target, ok: false, reason: e?.message ?? "error" }]);
+        // TER-414: daily quota hit — every remaining target would 429 too.
+        if (e?.quota) break;
       }
     }
     setSeeding(false);
