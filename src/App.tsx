@@ -12,6 +12,7 @@ import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/
 import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
 import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./lib/avoidGuard";
+import { isValidEmail, sanitizeOtpCode, classifySendError, friendlySendError, friendlyVerifyError, OTP_LENGTH, RESEND_COOLDOWN_S } from "./lib/authHelpers";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -1236,50 +1237,83 @@ function SignInView() {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [unknownEmail, setUnknownEmail] = useState(false); // TER-412: 422 "Signups not allowed" → Request-access pointer, never the raw string
+  const [otpCode, setOtpCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+  const [resendIn, setResendIn] = useState(0);
   const [signupSource] = useState<string | null>(() => new URLSearchParams(window.location.search).get("src"));
 
-  const handleSignIn = async () => {
-    const addr = email.trim();
-    if (!addr) return;
-    setLoading(true);
-    setError("");
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email: addr,
-      options: { shouldCreateUser: false },
-    });
-    setLoading(false);
-    if (err) { setError(err.message); } else { setSent(true); }
-  };
+  const counting = resendIn > 0;
+  useEffect(() => {
+    if (!counting) return;
+    const t = setInterval(() => setResendIn((n) => n - 1), 1000);
+    return () => clearInterval(t);
+  }, [counting]);
 
-  const handleSignUp = async () => {
+  // Shared send for first send and resend; mode picks signup metadata vs gated sign-in.
+  const sendOtpEmail = async (): Promise<boolean> => {
     const addr = email.trim();
-    if (!addr || !firstName.trim() || !lastName.trim()) return;
+    if (!addr) { setError("Enter your email address."); return false; }
+    if (!isValidEmail(addr)) { setError("That doesn't look like a valid email address."); return false; }
+    if (mode === "signup" && (!firstName.trim() || !lastName.trim())) return false;
     setLoading(true);
     setError("");
-    const referredBy = localStorage.getItem("referredBy");
+    setUnknownEmail(false);
+    const referredBy = mode === "signup" ? localStorage.getItem("referredBy") : null;
     const { error: err } = await supabase.auth.signInWithOtp({
       email: addr,
-      options: {
-        shouldCreateUser: true,
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          name: `${firstName.trim()} ${lastName.trim()}`.trim(),
-          nearest_aldi: nearestAldi.trim(),
-          reason: reason.trim(),
-          ...(referredBy ? { referred_by: referredBy } : {}),
-          ...(signupSource ? { signup_source: signupSource } : {}),
-        },
-      },
+      options: mode === "signup"
+        ? {
+            shouldCreateUser: true,
+            data: {
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
+              name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+              nearest_aldi: nearestAldi.trim(),
+              reason: reason.trim(),
+              ...(referredBy ? { referred_by: referredBy } : {}),
+              ...(signupSource ? { signup_source: signupSource } : {}),
+            },
+          }
+        : { shouldCreateUser: false },
     });
     setLoading(false);
-    if (err) { setError(err.message); } else {
-      try { localStorage.removeItem("referredBy"); } catch {}
-      setSent(true);
+    if (err) {
+      if (mode === "signin" && classifySendError(err) === "unknown_email") setUnknownEmail(true);
+      else setError(friendlySendError(err));
+      return false;
     }
+    if (mode === "signup") { try { localStorage.removeItem("referredBy"); } catch {} }
+    setResendIn(RESEND_COOLDOWN_S);
+    return true;
   };
 
-  const switchMode = (m: "signin" | "signup") => { setMode(m); setError(""); setSent(false); };
+  const handleSend = async () => {
+    if (loading) return;
+    if (await sendOtpEmail()) { setSent(true); setOtpCode(""); setVerifyError(""); }
+  };
+
+  const handleResend = async () => {
+    if (resendIn > 0 || loading) return;
+    setVerifyError("");
+    await sendOtpEmail();
+  };
+
+  const handleVerifyCode = async () => {
+    if (otpCode.length !== OTP_LENGTH || verifying) return;
+    setVerifying(true);
+    setVerifyError("");
+    const { error: err } = await supabase.auth.verifyOtp({ email: email.trim(), token: otpCode, type: "email" });
+    setVerifying(false);
+    if (err) { setVerifyError(friendlyVerifyError(err)); setOtpCode(""); }
+    // Success needs nothing here: verifyOtp establishes the session and
+    // onAuthStateChange in App swaps this view out, same as the magic link.
+  };
+
+  const switchMode = (m: "signin" | "signup") => {
+    setMode(m); setError(""); setUnknownEmail(false); setSent(false); setOtpCode(""); setVerifyError("");
+  };
 
   const consentLine = (
     <p style={{ fontSize: 11.5, color: "var(--c-text-muted)", margin: "12px 0 0", textAlign: "center" as const, lineHeight: 1.5 }}>
@@ -1291,14 +1325,45 @@ function SignInView() {
   );
 
   if (sent) {
+    const canVerify = otpCode.length === OTP_LENGTH && !verifying;
     return (
       <div style={{ ...s.card, maxWidth: 360, margin: "48px auto", textAlign: "center" as const }}>
         <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 600, margin: "0 0 8px", color: "var(--c-text)" }}>Check your email</h2>
         <p style={{ fontSize: 13.5, color: "var(--c-text-muted)", margin: 0, lineHeight: 1.55 }}>
-          {mode === "signup"
-            ? <>A sign-in link was sent to <strong>{email.trim()}</strong>. Click it to continue — your account will be pending admin approval once you sign in.</>
-            : <>A sign-in link was sent to <strong>{email.trim()}</strong>. Click it to continue.</>}
+          We sent a sign-in email to <strong>{email.trim()}</strong>. Click the link in it, or enter the 6-digit code below.
+          {mode === "signup" && <> Your account will be pending admin approval once you sign in.</>}
         </p>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={OTP_LENGTH}
+          value={otpCode}
+          onChange={(e) => { setOtpCode(sanitizeOtpCode(e.target.value)); if (verifyError) setVerifyError(""); }}
+          onKeyDown={(e) => e.key === "Enter" && handleVerifyCode()}
+          placeholder="123456"
+          autoFocus
+          style={{ ...s.input, width: "100%", marginTop: 14, textAlign: "center", fontSize: 18, letterSpacing: "0.3em", fontVariantNumeric: "tabular-nums" } as any}
+        />
+        {(verifyError || error) && (
+          <p style={{ color: "var(--c-danger)", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+            <AlertCircle size={14} /> {verifyError || error}
+          </p>
+        )}
+        <button
+          onClick={handleVerifyCode}
+          disabled={!canVerify}
+          style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 10, opacity: canVerify ? 1 : 0.5 }}
+        >
+          {verifying ? <><RefreshCw size={16} className="spin" /> Verifying…</> : "Verify code"}
+        </button>
+        <button
+          onClick={handleResend}
+          disabled={resendIn > 0 || loading}
+          style={{ background: "none", border: "none", marginTop: 12, padding: 4, fontSize: 12.5, fontFamily: sans, color: resendIn > 0 || loading ? "var(--c-text-muted)" : "var(--c-primary)", cursor: resendIn > 0 || loading ? "default" : "pointer" }}
+        >
+          {loading ? "Sending…" : resendIn > 0 ? `Resend email (${resendIn}s)` : "Resend email"}
+        </button>
       </div>
     );
   }
@@ -1370,14 +1435,14 @@ function SignInView() {
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && canSubmit && handleSignUp()}
+              onKeyDown={(e) => e.key === "Enter" && canSubmit && handleSend()}
               style={{ ...s.input, width: "100%", boxSizing: "border-box" } as any}
               placeholder="Tell us a little about yourself"
             />
           </div>
         </div>
         <button
-          onClick={handleSignUp}
+          onClick={handleSend}
           disabled={!canSubmit}
           style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 14, opacity: canSubmit ? 1 : 0.5 }}
         >
@@ -1396,27 +1461,39 @@ function SignInView() {
           New? Request access
         </button>
       </div>
-      <p style={s.cardSub}>Magic link sent to your email</p>
       {error && (
         <p style={{ color: "var(--c-danger)", fontSize: 13, margin: "10px 0 0", display: "flex", alignItems: "center", gap: 5 }}>
           <AlertCircle size={14} /> {error}
         </p>
       )}
+      {unknownEmail && (
+        <p style={{ color: "var(--c-danger)", fontSize: 13, margin: "10px 0 0", lineHeight: 1.5 }}>
+          <AlertCircle size={14} style={{ verticalAlign: -2, marginRight: 5 }} />
+          This email isn't on the beta list yet — tap{" "}
+          <button
+            onClick={() => switchMode("signup")}
+            style={{ background: "none", border: "none", padding: 0, fontFamily: sans, fontSize: 13, fontWeight: 700, color: "var(--c-primary)", cursor: "pointer", textDecoration: "underline" }}
+          >
+            Request access
+          </button>{" "}
+          and we'll approve you shortly.
+        </p>
+      )}
       <input
         type="email"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
+        onChange={(e) => { setEmail(e.target.value); if (error) setError(""); if (unknownEmail) setUnknownEmail(false); }}
+        onKeyDown={(e) => e.key === "Enter" && handleSend()}
         style={{ ...s.input, width: "100%", marginTop: 14, boxSizing: "border-box" } as any}
         placeholder="your@email.com"
         autoFocus
       />
       <button
-        onClick={handleSignIn}
+        onClick={handleSend}
         disabled={!email.trim() || loading}
         style={{ ...s.primaryBtn, width: "100%", justifyContent: "center", marginTop: 10, opacity: email.trim() && !loading ? 1 : 0.5 }}
       >
-        {loading ? <><RefreshCw size={16} className="spin" /> Sending…</> : "Send magic link"}
+        {loading ? <><RefreshCw size={16} className="spin" /> Sending…</> : "Send sign-in email"}
       </button>
       {consentLine}
     </div>
