@@ -4,7 +4,7 @@ import {
   ListChecks, CheckCircle2, AlertCircle, Repeat, Info,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
-  MessageSquare, ChevronLeft, ChevronRight,
+  MessageSquare, ChevronLeft, ChevronRight, Undo2,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
@@ -13,8 +13,9 @@ import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
 import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./lib/avoidGuard";
 import { isValidEmail, sanitizeOtpCode, classifySendError, friendlySendError, friendlyVerifyError, OTP_LENGTH, RESEND_COOLDOWN_S } from "./lib/authHelpers";
-import { addDays, projectCurrentWeek, advanceStartDate, shouldApplyRemoteState } from "./lib/weekState";
+import { addDays, projectCurrentWeek, shouldApplyRemoteState } from "./lib/weekState";
 import { emptyDateModel, mergeWindowIntoDateModel, hydrateWindow, migrateLegacyBlob, type DateModel } from "./lib/dateModel";
+import { listScope } from "./lib/listScope";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -342,6 +343,9 @@ export default function App() {
   const [recipeStars, setRecipeStars] = useState<Record<string, number>>({});
   const [currentWeek, setCurrentWeek] = useState<any>(null);
   const [cookProgress, setCookProgress] = useState<Record<string, { gathered: number[]; done: number[]; servings: number; made: boolean }>>({});
+  // TER-422: session-only memory of the last "mark ordered" stamp set, powering the
+  // "Unmark last order" undo in the list view. Deliberately not persisted.
+  const [lastOrder, setLastOrder] = useState<{ dayIds: string[]; orderedAt: string } | null>(null);
 
   /* ---- pinned-recipe materialization ---- */
   const pinnedSignature = useMemo(
@@ -363,7 +367,9 @@ export default function App() {
           }
         } else if (day.pinnedRecipe) {
           const scaled = scaleRecipeToHeadcount(day.pinnedRecipe, day.people);
-          next = { ...next, [day.id]: { status: "accepted", data: scaled, error: null, kcalInfo: null, pinned: true } };
+          // TER-422: re-materializing a pinned meal must not lose its ordered stamp.
+          const orderedAt = prev[day.id]?.orderedAt;
+          next = { ...next, [day.id]: { status: "accepted", data: scaled, error: null, kcalInfo: null, pinned: true, ...(orderedAt ? { orderedAt } : {}) } };
           changed = true;
         } else if (prev[day.id]?.pinned) {
           const { [day.id]: _removed, ...rest } = next;
@@ -885,30 +891,9 @@ ${recipeOutputContract(day.people)}`;
     await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name).catch(() => {});
   };
 
-  const resetPlan = () => {
-    const pinned: Record<string, any> = {};
-    for (const day of days) {
-      if (day.pinnedRecipe) {
-        pinned[day.id] = { status: "accepted", data: scaleRecipeToHeadcount(day.pinnedRecipe, day.people), error: null, kcalInfo: null, pinned: true };
-      }
-    }
-    setMeals(pinned);
-    // TER-418: clearing the window clears those window dates in the date model too
-    // (Phase A parity with today's behavior — no-clearing UX arrives in Phases C/D).
-    // Applied synchronously: when "mark ordered" advances startDate in the same batch,
-    // the re-hydration effect reads the model before the merge effect would run.
-    dateModelRef.current = mergeWindowIntoDateModel(dateModelRef.current, days, pinned, startDate);
-    setCheckedItems({});
-    setWeekAdditions([]);
-    // TER-388: clearing the plan clears This Week too (the projection effect rebuilds
-    // it from any surviving pinned meals).
-    setCurrentWeek(null);
-  };
-
-  const handleStartOver = () => {
-    if (!window.confirm("Discard this meal plan?\n\nThis permanently deletes the current plan, grocery list, and This Week box. It will NOT be saved to Order history — you won't be able to view or reprint it later.\n\nTo keep it, cancel and use \"Mark ordered & start next week\" instead.\n\n(Your setup, staples, and preferences are kept.)")) return;
-    resetPlan();
-  };
+  // TER-422: resetPlan and "Start over" are gone — there is no bulk-clear path.
+  // Rejecting a meal is the only operation that empties a date; "mark ordered"
+  // stamps meals instead of clearing them (see handleMarkOrdered below).
 
   const thumbUp = (name: string) => { if (name) setLiked((p) => (p.includes(name) ? p : [...p, name])); };
   const thumbDown = async (day: any, idx: number) => {
@@ -922,10 +907,16 @@ ${recipeOutputContract(day.people)}`;
   /* ---- grocery list ---- */
   const acceptedCount = useMemo(() => days.filter((d) => meals[d.id]?.status === "accepted").length, [days, meals]);
 
+  // TER-422: the shopping-list scope — accepted, dated today or later, not yet
+  // stamped ordered. Everything list-shaped (groceryList → listText → Instacart
+  // handoff → the orders snapshot) derives from this set.
+  const todayISO = isoToday();
+  const scopeEntries = useMemo(() => listScope(days, meals, startDate, todayISO), [days, meals, startDate, todayISO]);
+
   // TER-388 (I-2): "This Week" is a projection of the accepted meals, recomputed on
   // every accept/reject/skip/date change — a stale currentWeek is impossible by
   // construction. Guarded by acceptedCount > 0 so generating next week's plan doesn't
-  // blank the box mid-way; explicit clears live in resetPlan.
+  // blank the box mid-way (no bulk-clear path exists since TER-422).
   useEffect(() => {
     if (!loaded || acceptedCount === 0) return;
     setCurrentWeek(projectCurrentWeek(days, meals, startDate, numDays));
@@ -955,10 +946,10 @@ ${recipeOutputContract(day.people)}`;
     };
     // TER-400: enforce the reuse/buy-source invariant before aggregating, so an ingredient
     // marked "reused" in every meal (never bought) is promoted to buy and can't be omitted
-    // from the list or the Instacart handoff. Recomputes on accept and on every list rebuild.
-    const acceptedWeek: any[] = [];
-    days.forEach((d) => { if (!!d.skip) return; const m = meals[d.id]; if (m?.status === "accepted") acceptedWeek.push(m.data); });
-    const { week: repairedWeek, promotions } = repairWeek(acceptedWeek);
+    // from the list or the Instacart handoff. Since TER-422 the repair runs over the list
+    // scope (accepted ∧ date ≥ today ∧ not ordered) — the same set the list aggregates.
+    const scopeWeek: any[] = scopeEntries.map((e) => e.meal.data);
+    const { week: repairedWeek, promotions } = repairWeek(scopeWeek);
     promotions.forEach((p) => console.warn(
       `[ingredientFlow] "${p.name}" was reuse-only (days ${p.reusedDays.map((x) => x + 1).join(", ")}) — promoted to buy in "${p.recipeName}" (day ${p.day + 1})`
     ));
@@ -978,7 +969,7 @@ ${recipeOutputContract(day.people)}`;
     });
     CATEGORIES.forEach((c) => byCat[c].sort((a, b) => a.name.localeCompare(b.name)));
     return byCat;
-  }, [days, meals, staples, pantry, alwaysHave]);
+  }, [scopeEntries, staples, pantry, alwaysHave]);
 
   const totalItems = useMemo(() => Object.values(groceryList).reduce((n, a) => n + a.length, 0), [groceryList]);
 
@@ -1000,12 +991,19 @@ ${recipeOutputContract(day.people)}`;
     return lines.join("\n").trim();
   }, [groceryList]);
 
+  // TER-422: "mark ordered" stamps `orderedAt` on each scope meal instead of clearing
+  // anything. Meals stay on their dates and in every view; the shopping list (scope-
+  // derived) empties on its own. The orders archive row inserts exactly as before;
+  // checked items and manual additions clear because they belong to the completed
+  // trip. No startDate change, no This Week clear, no day-config reset.
   const handleMarkOrdered = async (): Promise<{ error: string | null }> => {
+    const scope = scopeEntries;
+    if (scope.length === 0) return { error: null };
     const snapshot = {
       startDate,
       numDays,
       location,
-      meals: acceptedMealsForPrint.map(({ day, date, meal }: any) => ({
+      meals: scope.map(({ date, meal }) => ({
         day: weekdayLabel(date),
         date,
         mealData: meal.data,
@@ -1021,15 +1019,39 @@ ${recipeOutputContract(day.people)}`;
         console.warn("Failed to archive order:", error);
         return { error: error.message };
       }
-      resetPlan();
-      // TER-388 (I-3): "start next week" actually starts the next week — roll the
-      // plan dates forward; the forecast effect refreshes for the new range.
-      setStartDate(advanceStartDate(startDate));
+      const orderedAt = new Date().toISOString();
+      setMeals((m) => {
+        const next = { ...m };
+        for (const { dayId } of scope) {
+          if (next[dayId]) next[dayId] = { ...next[dayId], orderedAt };
+        }
+        return next;
+      });
+      setCheckedItems({});
+      setWeekAdditions([]);
+      setLastOrder({ dayIds: scope.map((e) => e.dayId), orderedAt });
       return { error: null };
     } catch (e: any) {
       console.warn("Failed to archive order:", e);
       return { error: e?.message || "Network error — plan not archived." };
     }
+  };
+
+  // TER-422: undo for the last stamp set this session — removes `orderedAt` so those
+  // meals re-enter the shopping list. The archived orders row is left alone.
+  const unmarkLastOrder = () => {
+    if (!lastOrder) return;
+    setMeals((m) => {
+      const next = { ...m };
+      for (const dayId of lastOrder.dayIds) {
+        if (next[dayId]?.orderedAt) {
+          const { orderedAt: _removed, ...rest } = next[dayId];
+          next[dayId] = rest;
+        }
+      }
+      return next;
+    });
+    setLastOrder(null);
   };
 
   const isMobile = useIsMobile();
@@ -1129,7 +1151,7 @@ ${recipeOutputContract(day.people)}`;
             mixCuisines={mixCuisines} setMixCuisines={setMixCuisines}
             staples={staples} setStaples={setStaples} rotation={rotation}
             avoidTerms={avoidTerms} setAvoidTerms={setAvoidTerms}
-            onGenerate={generateAll} busy={busy} onStartOver={handleStartOver} isMobile={isMobile}
+            onGenerate={generateAll} busy={busy} isMobile={isMobile}
           />
         )}
         {tab === "plan" && (
@@ -1161,8 +1183,10 @@ ${recipeOutputContract(day.people)}`;
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
             pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
             weekAdditions={weekAdditions} setWeekAdditions={setWeekAdditions}
-            acceptedCount={acceptedCount} slotCount={days.length} location={location}
-            onMarkOrdered={handleMarkOrdered} alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave}
+            slotCount={days.length} location={location}
+            onMarkOrdered={handleMarkOrdered} scopeCount={scopeEntries.length}
+            canUnmark={!!lastOrder} onUnmarkOrder={unmarkLastOrder}
+            alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave}
             session={session} qualificationNumber={qualificationNumber} setQualificationNumber={setQualificationNumber} />
         )}
         {tab === "rotation" && (
@@ -1666,7 +1690,7 @@ function PeopleInput({ value, onChange, style }: { value: number; onChange: (n: 
 function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
     defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples,
-    rotation, avoidTerms, setAvoidTerms, onGenerate, busy, onStartOver, isMobile } = p;
+    rotation, avoidTerms, setAvoidTerms, onGenerate, busy, isMobile } = p;
   const [showStaples, setShowStaples] = useState(false);
   const [locInput, setLocInput] = useState("");
   const [avoidInput, setAvoidInput] = useState("");
@@ -1838,9 +1862,6 @@ function SetupView(p: any) {
 
       <button onClick={handleGenerate} disabled={busy} className="btn-primary btn--block" style={{ opacity: busy ? 0.6 : 1 }}>
         {busy ? <><RefreshCw size={17} className="spin" /> Generating...</> : <><Sparkles size={17} /> Generate meal plan</>}
-      </button>
-      <button onClick={onStartOver} disabled={busy} className="btn-ghost btn--block btn--sm" style={{ opacity: busy ? 0.5 : 1 }}>
-        Start over
       </button>
     </div>
   );
@@ -2221,7 +2242,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, weekAdditions, setWeekAdditions, acceptedCount, slotCount, location, onMarkOrdered, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
+function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, weekAdditions, setWeekAdditions, slotCount, location, onMarkOrdered, scopeCount, canUnmark, onUnmarkOrder, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
   const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
@@ -2264,7 +2285,8 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     try { await navigator.clipboard.writeText(text); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
   };
   const markOrdered = async () => {
-    if (!window.confirm("Archive this plan and start next week?\n\nYour meals, grocery list, and This Week box will be cleared, and the plan dates roll forward one week. Setup, staples, and preferences are kept.")) return;
+    const head = scopeCount === 1 ? "Mark this dinner as ordered?" : `Mark these ${scopeCount} dinners as ordered?`;
+    if (!window.confirm(`${head}\n\nYour meals stay on their dates — the shopping list will clear.`)) return;
     setOrdering(true);
     setOrderError(null);
     const { error } = await onMarkOrdered();
@@ -2316,7 +2338,7 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
         <div style={{ marginBottom: "var(--space-4)" }}>
           <h1 style={{ ...s.typeH1, margin: 0 }}>Grocery list</h1>
           <p style={{ ...s.typeBodySm, color: "var(--c-text-muted)", margin: "2px 0 0" }}>
-            {totalItems} items · {acceptedCount}/{slotCount} dinners + staples
+            {totalItems} items · {scopeCount}/{slotCount} dinners to shop + staples
           </p>
         </div>
 
@@ -2494,17 +2516,22 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
           </div>
         )}
 
-        {/* Archive action */}
+        {/* Mark ordered (TER-422: stamps scope meals; nothing is cleared) */}
         {orderError && <p style={{ color: "var(--c-danger)", fontSize: 12, margin: "8px 0 4px" }}>Could not archive: {orderError}</p>}
         <button
           onClick={markOrdered}
-          disabled={acceptedCount === 0 || ordering}
+          disabled={scopeCount === 0 || ordering}
           className="btn-ghost btn--sm btn--block"
           style={{ marginTop: "var(--space-4)" }}
         >
           {ordering ? <RefreshCw size={14} className="spin" /> : <Archive size={14} />}
-          {ordering ? "Archiving..." : "Mark ordered & start next week"}
+          {ordering ? "Marking..." : "Mark ordered"}
         </button>
+        {canUnmark && (
+          <button onClick={onUnmarkOrder} className="btn-ghost btn--sm btn--block" style={{ marginTop: "var(--space-2)" }}>
+            <Undo2 size={14} /> Unmark last order
+          </button>
+        )}
       </div>
     </div>
   );
