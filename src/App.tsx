@@ -13,6 +13,7 @@ import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
 import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./lib/avoidGuard";
 import { isValidEmail, sanitizeOtpCode, classifySendError, friendlySendError, friendlyVerifyError, OTP_LENGTH, RESEND_COOLDOWN_S } from "./lib/authHelpers";
+import { addDays, projectCurrentWeek, advanceStartDate, shouldApplyRemoteState } from "./lib/weekState";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -44,7 +45,6 @@ const DEFAULT_STAPLES: any[] = [];
 const isoToday = () => toISO(new Date());
 function toISO(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function parseISO(s: string) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
-function addDays(iso: string, n: number) { const d = parseISO(iso); d.setDate(d.getDate() + n); return toISO(d); }
 function weekdayLabel(iso: string) { return parseISO(iso).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }); }
 
 /* ---- WMO weather code -> label/emoji ---- */
@@ -236,6 +236,9 @@ export default function App() {
   const [authLoaded, setAuthLoaded] = useState(false);
   const prevUserId = useRef<string | null>(null);
   const hydrated = useRef(false); // true once this user's Supabase row has been fetched
+  // TER-388: who/when wrote the localStorage blob we booted from, captured before any
+  // re-save can re-stamp it. Used to decide whether the remote row may overwrite it.
+  const bootStamp = useRef<{ savedAt: string | null; savedBy: string | null }>({ savedAt: null, savedBy: null });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -364,7 +367,9 @@ export default function App() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const d = JSON.parse(raw);
+        bootStamp.current = { savedAt: d.savedAt ?? null, savedBy: d.savedBy ?? null };
         setLocation(d.location ?? DEFAULT_LOCATION);
+        if (d.startDate) setStartDate(d.startDate); // TER-388: was saved but never restored
         setNumDays(d.numDays ?? 7);
         setDays(d.days ?? days);
         setForecast(d.forecast ?? {});
@@ -401,14 +406,36 @@ export default function App() {
     hydrated.current = false;
     supabase
       .from("user_state")
-      .select("state")
+      .select("state, updated_at")
       .eq("user_id", userId)
       .maybeSingle()
       .then(({ data, error }) => {
         if (error) { console.warn("user_state fetch failed:", error.message); hydrated.current = true; return; }
         if (data?.state) {
           const d = data.state;
+          // TER-388 (I-1): the remote row lags local saves by the 2 s debounce, so on a
+          // reload it can be staler than what localStorage just restored. Only apply it
+          // when it's newer; otherwise keep local and push it up so the row catches up.
+          const remoteStamp = d.savedAt ?? data.updated_at ?? null;
+          if (!shouldApplyRemoteState({ localSavedAt: bootStamp.current.savedAt, localSavedBy: bootStamp.current.savedBy, remoteStamp, userId })) {
+            try {
+              const raw = localStorage.getItem(STORAGE_KEY);
+              const local = raw ? JSON.parse(raw) : null;
+              if (local && typeof local === "object") {
+                supabase
+                  .from("user_state")
+                  .upsert(
+                    { user_id: userId, state: local, updated_at: new Date().toISOString() },
+                    { onConflict: "user_id" },
+                  )
+                  .then(({ error: pushErr }) => { if (pushErr) console.warn("user_state push failed:", pushErr.message); });
+              }
+            } catch {}
+            hydrated.current = true;
+            return;
+          }
           if (d.location !== undefined) setLocation(d.location);
+          if (d.startDate !== undefined) setStartDate(d.startDate);
           if (d.numDays !== undefined) setNumDays(d.numDays);
           if (d.days !== undefined) setDays(d.days);
           if (d.forecast !== undefined) setForecast(d.forecast);
@@ -459,6 +486,11 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     const payload = {
+      // TER-388: stamp every save so the load path can tell which copy is newer.
+      // Pre-auth boot re-saves keep the boot blob's owner — the UI is auth-gated, so
+      // no edits can happen signed-out, and clobbering savedBy with null would let a
+      // stale remote win on the next reload.
+      savedAt: new Date().toISOString(), savedBy: session?.user?.id ?? bootStamp.current.savedBy,
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
       checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress,
     };
@@ -781,10 +813,13 @@ ${recipeOutputContract(day.people)}`;
     setMeals(pinned);
     setCheckedItems({});
     setWeekAdditions([]);
+    // TER-388: clearing the plan clears This Week too (the projection effect rebuilds
+    // it from any surviving pinned meals).
+    setCurrentWeek(null);
   };
 
   const handleStartOver = () => {
-    if (!window.confirm("Discard this meal plan?\n\nThis permanently deletes the current plan and grocery list. It will NOT be saved to Order history — you won't be able to view or reprint it later.\n\nTo keep it, cancel and use \"Mark ordered & start next week\" instead.\n\n(Your setup, staples, and preferences are kept.)")) return;
+    if (!window.confirm("Discard this meal plan?\n\nThis permanently deletes the current plan, grocery list, and This Week box. It will NOT be saved to Order history — you won't be able to view or reprint it later.\n\nTo keep it, cancel and use \"Mark ordered & start next week\" instead.\n\n(Your setup, staples, and preferences are kept.)")) return;
     resetPlan();
   };
 
@@ -797,22 +832,17 @@ ${recipeOutputContract(day.people)}`;
   };
   const addToRotation = (data: any) => { setRotation((p) => (p.some((r) => r.name === data.name) ? p : [...p, data])); thumbUp(data.name); };
 
-  const commitCurrentWeek = () => {
-    // Build entries: accepted meals + skipped days, sorted by date
-    const acceptedEntries = acceptedMealsForPrint.map(({ day, date, meal }: any) => ({ day, date, meal, skip: false }));
-    const skippedEntries = days
-      .map((d, i) => ({ day: d, date: addDays(startDate, i), meal: null, skip: true }))
-      .filter((e) => !!e.day.skip);
-    const allEntries = [...acceptedEntries, ...skippedEntries].sort((a, b) => a.date.localeCompare(b.date));
-    setCurrentWeek({
-      startDate,
-      numDays,
-      entries: allEntries,
-    });
-  };
-
   /* ---- grocery list ---- */
   const acceptedCount = useMemo(() => days.filter((d) => meals[d.id]?.status === "accepted").length, [days, meals]);
+
+  // TER-388 (I-2): "This Week" is a projection of the accepted meals, recomputed on
+  // every accept/reject/skip/date change — a stale currentWeek is impossible by
+  // construction. Guarded by acceptedCount > 0 so generating next week's plan doesn't
+  // blank the box mid-way; explicit clears live in resetPlan.
+  useEffect(() => {
+    if (!loaded || acceptedCount === 0) return;
+    setCurrentWeek(projectCurrentWeek(days, meals, startDate, numDays));
+  }, [loaded, days, meals, startDate, numDays, acceptedCount]);
 
   const groceryList = useMemo(() => {
     const agg: Record<string, any> = {};
@@ -905,7 +935,9 @@ ${recipeOutputContract(day.people)}`;
         return { error: error.message };
       }
       resetPlan();
-      setCurrentWeek(null);
+      // TER-388 (I-3): "start next week" actually starts the next week — roll the
+      // plan dates forward; the forecast effect refreshes for the new range.
+      setStartDate(advanceStartDate(startDate));
       return { error: null };
     } catch (e: any) {
       console.warn("Failed to archive order:", e);
@@ -1020,7 +1052,7 @@ ${recipeOutputContract(day.people)}`;
             onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
             onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
             liked={liked} onGenerate={() => generateAll()}
-            onAllAccepted={() => { commitCurrentWeek(); setTab("today"); }} acceptedCount={acceptedCount}
+            onAllAccepted={() => setTab("today")} acceptedCount={acceptedCount}
           />
         )}
         {tab === "today" && (
@@ -2090,7 +2122,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
       {acceptedCount > 0 && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" as const, marginTop: 8 }}>
           <button onClick={onAllAccepted} className="btn-primary">
-            <CalendarDays size={15} /> Save to This Week
+            <CalendarDays size={15} /> View This Week
           </button>
           <button onClick={() => window.print()} className="btn-ghost btn--sm">
             <Printer size={14} /> Print recipes
@@ -2145,7 +2177,7 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     try { await navigator.clipboard.writeText(text); setCopiedCart(true); setTimeout(() => setCopiedCart(false), 1800); } catch {}
   };
   const markOrdered = async () => {
-    if (!window.confirm("Archive this plan and start next week?\n\nYour meals, grocery list, and This Week box will be cleared. Setup, staples, and preferences are kept.")) return;
+    if (!window.confirm("Archive this plan and start next week?\n\nYour meals, grocery list, and This Week box will be cleared, and the plan dates roll forward one week. Setup, staples, and preferences are kept.")) return;
     setOrdering(true);
     setOrderError(null);
     const { error } = await onMarkOrdered();
