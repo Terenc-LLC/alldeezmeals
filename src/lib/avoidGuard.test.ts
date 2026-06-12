@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkRecipe, expandAvoidTerm, avoidPromptBlock, mergeTerms } from "./avoidGuard";
+import { checkRecipe, expandAvoidTerm, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./avoidGuard";
 import type { RecipeLike } from "./avoidGuard";
 
 const recipe = (over: Partial<RecipeLike> = {}): RecipeLike => ({
@@ -140,5 +140,28 @@ describe("mergeTerms", () => {
     expect(mergeTerms(["Pork ", "peanuts"], ["pork", "Shellfish"])).toEqual([
       "pork", "peanuts", "shellfish",
     ]);
+  });
+});
+
+describe("parseAvoidInput — uncommitted field text becomes the same terms as Add", () => {
+  it("parses a single typed term", () => {
+    expect(parseAvoidInput("pork")).toEqual(["pork"]);
+  });
+
+  it("splits commas, trims, lowercases, drops empties", () => {
+    expect(parseAvoidInput(" Pork, , Peanuts ,")).toEqual(["pork", "peanuts"]);
+  });
+
+  it("returns [] for blank input", () => {
+    expect(parseAvoidInput("   ")).toEqual([]);
+    expect(parseAvoidInput("")).toEqual([]);
+  });
+
+  it("pending terms reach the prompt block and the guard (the live-test miss)", () => {
+    const pending = parseAvoidInput("pork"); // typed, never confirmed with Add/Enter
+    const weekAvoid = mergeTerms([], pending);
+    expect(avoidPromptBlock(weekAvoid)).toMatch(/\bpork\b/);
+    const hits = checkRecipe(recipe({ ingredients: [{ name: "bacon" }] }), weekAvoid);
+    expect(hits.length).toBeGreaterThan(0);
   });
 });

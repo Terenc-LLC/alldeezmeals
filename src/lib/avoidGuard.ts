@@ -122,6 +122,13 @@ function normText(text: string): string {
   return String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+// Parse raw avoid-field input (comma-separated) into clean lowercase terms.
+// Shared by the Setup chip-add path and the generate-time pending-input commit
+// so both produce identical terms.
+export function parseAvoidInput(raw: string): string[] {
+  return String(raw ?? "").split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+}
+
 // Merge term lists into a normalized, deduped list (order-preserving).
 export function mergeTerms(...lists: string[][]): string[] {
   const out: string[] = [];

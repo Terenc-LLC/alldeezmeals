@@ -11,7 +11,7 @@ import { normalizeIngName } from "./lib/normalize";
 import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/nutritionResolve";
 import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
-import { checkRecipe, avoidPromptBlock, mergeTerms } from "./lib/avoidGuard";
+import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./lib/avoidGuard";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -528,7 +528,7 @@ export default function App() {
   /* ---- meal generation (via /api/generate proxy) ---- */
   const callClaude = async (prompt: string) => generateRecipeFromPrompt(prompt, session?.access_token ?? "");
 
-  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], reject?: string, violatedTerms: string[] = []) => {
+  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], reject?: string, violatedTerms: string[] = [], weekAvoid: string[] = avoidTerms) => {
     const fx = forecast[dateISO];
     const band = tempBand(fx?.hi);
     const wlabel = fx ? `Forecast for ${weekdayLabel(dateISO)}: high ${fx.hi}F, low ${fx.lo}F, ${wx(fx.code).l}.` : `Date: ${weekdayLabel(dateISO)} (no forecast available).`;
@@ -589,7 +589,9 @@ export default function App() {
 
     // TER-401: structured week-level avoid terms + per-day note-detected terms,
     // injected with severe-restriction framing into EVERY generation prompt.
-    const avoidBlock = avoidPromptBlock(avoidTerms, detectDietaryTerms(day.note ?? ""), violatedTerms);
+    // weekAvoid is passed explicitly so a generation run kicked off in the same
+    // event as an avoid-list commit uses the merged list, not stale state.
+    const avoidBlock = avoidPromptBlock(weekAvoid, detectDietaryTerms(day.note ?? ""), violatedTerms);
 
     return `You are a practical weekly dinner planner for a family that shops at ALDI. Generate ONE dinner only (breakfast and lunch are covered by staples).
 
@@ -620,11 +622,11 @@ ${recipeOutputContract(day.people)}`;
 
   const usedCuisinesFrom = (data: any[]) => Array.from(new Set(data.map((m) => m.cuisine).filter(Boolean)));
 
-  const generateOne = async (day: any, idx: number, committed: any[], reject?: string) => {
+  const generateOne = async (day: any, idx: number, committed: any[], reject?: string, weekAvoid: string[] = avoidTerms) => {
     setMeals((m) => ({ ...m, [day.id]: { status: "loading", data: null, error: null, kcalInfo: null } }));
     try {
       // TER-401: structured week-level avoid terms + per-day note-detected terms.
-      const allAvoid = mergeTerms(avoidTerms, detectDietaryTerms(day.note ?? ""));
+      const allAvoid = mergeTerms(weekAvoid, detectDietaryTerms(day.note ?? ""));
       const tok = session?.access_token ?? "";
 
       // Attempt library reuse when safe: authenticated, no dietary constraints
@@ -685,7 +687,7 @@ ${recipeOutputContract(day.people)}`;
         let pendingHits: ReturnType<typeof checkRecipe> = [];
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            const candidate = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject, violatedTerms));
+            const candidate = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject, violatedTerms, weekAvoid));
             // TER-401 deterministic guard: runs after parse, BEFORE the save gate
             // and before any meals-state commit — a violating dish must never
             // render, even transiently.
@@ -742,7 +744,13 @@ ${recipeOutputContract(day.people)}`;
     }
   };
 
-  const generateAll = async () => {
+  // TER-401 addendum: pendingAvoid carries avoid-field text the user typed but
+  // never confirmed with Enter/Add. It is committed to state AND merged into
+  // the list this run uses directly — the setAvoidTerms update won't be visible
+  // to this closure (React batching), so we never read avoidTerms back for it.
+  const generateAll = async (pendingAvoid: string[] = []) => {
+    const weekAvoid = mergeTerms(avoidTerms, pendingAvoid);
+    if (pendingAvoid.length) setAvoidTerms((prev: string[]) => mergeTerms(prev, pendingAvoid));
     setBusy(true); setTab("plan");
     const committed = days.map((d) => meals[d.id]).filter((m) => m && m.status === "accepted").map((m) => m.data);
     for (let i = 0; i < days.length; i++) {
@@ -750,7 +758,7 @@ ${recipeOutputContract(day.people)}`;
       if (!!day.skip) continue; // skip overrides pin
       if (day.pinnedRecipe) continue;
       if (meals[day.id]?.status === "accepted") continue;
-      const data = await generateOne(day, i, [...committed]);
+      const data = await generateOne(day, i, [...committed], undefined, weekAvoid);
       if (data) committed.push(data);
     }
     setBusy(false);
@@ -1010,7 +1018,7 @@ ${recipeOutputContract(day.people)}`;
             onAccept={acceptMeal} onReject={rejectMeal}
             onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
             onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
-            liked={liked} onGenerate={generateAll}
+            liked={liked} onGenerate={() => generateAll()}
             onAllAccepted={() => { commitCurrentWeek(); setTab("today"); }} acceptedCount={acceptedCount}
           />
         )}
@@ -1469,9 +1477,19 @@ function SetupView(p: any) {
 
   // TER-401: comma/Enter-parsed terms, lowercased and deduped.
   const addAvoidTerms = (raw: string) => {
-    const terms = raw.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    const terms = parseAvoidInput(raw);
     if (terms.length) setAvoidTerms((prev: string[]) => [...prev, ...terms.filter((t) => !prev.includes(t))]);
     setAvoidInput("");
+  };
+
+  // TER-401 addendum: typed-but-unconfirmed avoid text must still protect the
+  // generation it precedes. Commit it to the chip list and hand the parsed
+  // terms to generateAll, which merges them into the run's list directly
+  // (the state update can't be read back in the same event — React batching).
+  const handleGenerate = () => {
+    const pending = parseAvoidInput(avoidInput);
+    if (pending.length) addAvoidTerms(avoidInput);
+    onGenerate(pending);
   };
 
   return (
@@ -1512,6 +1530,7 @@ function SetupView(p: any) {
             placeholder="add terms, comma-separated (e.g. pork, peanuts)"
             style={{ ...s.input, flex: 1, fontSize: 12.5 }}
             onKeyDown={(e) => { if (e.key === "Enter" && avoidInput.trim()) addAvoidTerms(avoidInput); }}
+            onBlur={() => { if (avoidInput.trim()) addAvoidTerms(avoidInput); }}
           />
           <button onClick={() => { if (avoidInput.trim()) addAvoidTerms(avoidInput); }} className="btn-ghost btn--sm">
             <Plus size={14} /> Add
@@ -1621,7 +1640,7 @@ function SetupView(p: any) {
         )}
       </div>
 
-      <button onClick={onGenerate} disabled={busy} className="btn-primary btn--block" style={{ opacity: busy ? 0.6 : 1 }}>
+      <button onClick={handleGenerate} disabled={busy} className="btn-primary btn--block" style={{ opacity: busy ? 0.6 : 1 }}>
         {busy ? <><RefreshCw size={17} className="spin" /> Generating...</> : <><Sparkles size={17} /> Generate meal plan</>}
       </button>
       <button onClick={onStartOver} disabled={busy} className="btn-ghost btn--block btn--sm" style={{ opacity: busy ? 0.5 : 1 }}>
