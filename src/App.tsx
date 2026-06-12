@@ -14,6 +14,7 @@ import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
 import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./lib/avoidGuard";
 import { isValidEmail, sanitizeOtpCode, classifySendError, friendlySendError, friendlyVerifyError, OTP_LENGTH, RESEND_COOLDOWN_S } from "./lib/authHelpers";
 import { addDays, projectCurrentWeek, advanceStartDate, shouldApplyRemoteState } from "./lib/weekState";
+import { emptyDateModel, mergeWindowIntoDateModel, hydrateWindow, migrateLegacyBlob, type DateModel } from "./lib/dateModel";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -246,6 +247,14 @@ export default function App() {
   // TER-388: who/when wrote the localStorage blob we booted from, captured before any
   // re-save can re-stamp it. Used to decide whether the remote row may overwrite it.
   const bootStamp = useRef<{ savedAt: string | null; savedBy: string | null }>({ savedAt: null, savedBy: null });
+  // TER-418: the date-keyed canonical model (every date ever planned). A ref, not
+  // state: it's updated synchronously by the loaders and the merge effect below, and
+  // the save effect already re-runs on every change that can alter it.
+  const dateModelRef = useRef<DateModel>(emptyDateModel());
+  // TER-418: which startDate/numDays the current days[]/meals window was built for.
+  // When the live values diverge from this anchor, the window is re-hydrated from the
+  // date model instead of letting meals ride along positionally.
+  const windowAnchor = useRef<{ startDate: string; numDays: number } | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -378,9 +387,23 @@ export default function App() {
         setLocation(d.location ?? DEFAULT_LOCATION);
         if (d.startDate) setStartDate(d.startDate); // TER-388: was saved but never restored
         setNumDays(d.numDays ?? 7);
-        setDays(d.days ?? days);
+        // TER-418: prefer the date model when present; migrate legacy blobs into it.
+        const hasModel = d.mealsByDate && d.dayConfigByDate;
+        const bootStart = d.startDate || isoToday();
+        const bootNum = d.numDays ?? 7;
+        dateModelRef.current = hasModel
+          ? { mealsByDate: d.mealsByDate, dayConfigByDate: d.dayConfigByDate }
+          : migrateLegacyBlob(d);
+        windowAnchor.current = { startDate: bootStart, numDays: bootNum };
+        if (hasModel) {
+          const w = hydrateWindow(d.mealsByDate, d.dayConfigByDate, bootStart, bootNum, () => makeDay(d.defaultPeople ?? 4));
+          setDays(w.days);
+          setMeals(w.meals);
+        } else {
+          setDays(d.days ?? days);
+          setMeals(d.meals ?? {});
+        }
         setForecast(d.forecast ?? {});
-        setMeals(d.meals ?? {});
         setStaples(d.staples ?? DEFAULT_STAPLES);
         setPantry(d.pantry ?? []);
         setAlwaysHave(d.alwaysHave ?? []);
@@ -444,9 +467,23 @@ export default function App() {
           if (d.location !== undefined) setLocation(d.location);
           if (d.startDate !== undefined) setStartDate(d.startDate);
           if (d.numDays !== undefined) setNumDays(d.numDays);
-          if (d.days !== undefined) setDays(d.days);
+          // TER-418: prefer the date model when present; migrate legacy payloads into it.
+          const hasModel = d.mealsByDate && d.dayConfigByDate;
+          const nextStart = d.startDate !== undefined ? d.startDate : startDate;
+          const nextNum = d.numDays !== undefined ? d.numDays : numDays;
+          dateModelRef.current = hasModel
+            ? { mealsByDate: d.mealsByDate, dayConfigByDate: d.dayConfigByDate }
+            : migrateLegacyBlob(d);
+          windowAnchor.current = { startDate: nextStart, numDays: nextNum };
+          if (hasModel) {
+            const w = hydrateWindow(d.mealsByDate, d.dayConfigByDate, nextStart, nextNum, () => makeDay(d.defaultPeople ?? 4));
+            setDays(w.days);
+            setMeals(w.meals);
+          } else {
+            if (d.days !== undefined) setDays(d.days);
+            if (d.meals !== undefined) setMeals(d.meals);
+          }
           if (d.forecast !== undefined) setForecast(d.forecast);
-          if (d.meals !== undefined) setMeals(d.meals);
           if (d.staples !== undefined) setStaples(d.staples);
           if (d.pantry !== undefined) setPantry(d.pantry);
           if (d.alwaysHave !== undefined) setAlwaysHave(d.alwaysHave);
@@ -488,6 +525,29 @@ export default function App() {
       });
   }, [session]); // eslint-disable-line
 
+  // TER-418: keep the date model and the runtime window in sync. Two cases:
+  // (a) days/meals changed inside the current window → merge window state into the
+  //     date model (out-of-window dates are untouchable by construction);
+  // (b) startDate/numDays moved off the anchor → re-hydrate days/meals from the date
+  //     model so meals stay bound to their dates instead of riding along positionally.
+  //     Moving the window off planned dates hides their meals (preserved in the
+  //     model); moving it back restores them. Declared before the save effect so the
+  //     payload always reads a current dateModelRef.
+  useEffect(() => {
+    if (!loaded) return;
+    const anchor = windowAnchor.current;
+    if (anchor && (anchor.startDate !== startDate || anchor.numDays !== numDays)) {
+      const m = dateModelRef.current;
+      const w = hydrateWindow(m.mealsByDate, m.dayConfigByDate, startDate, numDays, () => makeDay(defaultPeople));
+      windowAnchor.current = { startDate, numDays };
+      setDays(w.days);
+      setMeals(w.meals);
+      return;
+    }
+    windowAnchor.current = { startDate, numDays };
+    dateModelRef.current = mergeWindowIntoDateModel(dateModelRef.current, days, meals, startDate);
+  }, [loaded, days, meals, startDate, numDays, defaultPeople]);
+
   // 3. Save to localStorage immediately and to Supabase (debounced 2 s) on every change.
   //    localStorage acts as offline cache; Supabase is the authoritative cross-device store.
   useEffect(() => {
@@ -500,6 +560,9 @@ export default function App() {
       savedAt: new Date().toISOString(), savedBy: session?.user?.id ?? bootStamp.current.savedBy,
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
       checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress,
+      // TER-418: dual-write the date-keyed canonical model alongside the legacy keys.
+      // Rollback-safe: a pre-Phase-A build reading this blob sees the legacy keys above.
+      mealsByDate: dateModelRef.current.mealsByDate, dayConfigByDate: dateModelRef.current.dayConfigByDate,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     if (!session) return;
@@ -830,6 +893,11 @@ ${recipeOutputContract(day.people)}`;
       }
     }
     setMeals(pinned);
+    // TER-418: clearing the window clears those window dates in the date model too
+    // (Phase A parity with today's behavior — no-clearing UX arrives in Phases C/D).
+    // Applied synchronously: when "mark ordered" advances startDate in the same batch,
+    // the re-hydration effect reads the model before the merge effect would run.
+    dateModelRef.current = mergeWindowIntoDateModel(dateModelRef.current, days, pinned, startDate);
     setCheckedItems({});
     setWeekAdditions([]);
     // TER-388: clearing the plan clears This Week too (the projection effect rebuilds
