@@ -44,6 +44,21 @@ describe("mergeWindowIntoDateModel", () => {
     expect(mergeWindowIntoDateModel(model, days, meals, "2026-06-15")).toBe(model);
   });
 
+  // TER-426: this identity is load-bearing — App's liveModel memo re-merges the
+  // window on every render and setDateModel(liveModel) relies on getting the same
+  // reference back to bail out of the state→merge→state cycle. Must hold even
+  // when the model carries dates outside the current window.
+  it("reference bailout holds with out-of-window dates in the model (liveModel loop safety)", () => {
+    const week1Days = [day("a")];
+    const week1Meals = { a: accepted("Tacos") };
+    let model = mergeWindowIntoDateModel(emptyDateModel(), week1Days, week1Meals, "2026-06-15");
+    const week2Days = [day("z")];
+    const week2Meals = { z: accepted("Soup") };
+    model = mergeWindowIntoDateModel(model, week2Days, week2Meals, "2026-06-22");
+    expect(mergeWindowIntoDateModel(model, week2Days, week2Meals, "2026-06-22")).toBe(model);
+    expect(model.mealsByDate["2026-06-15"].data.name).toBe("Tacos"); // week 1 untouched
+  });
+
   it("is a no-op for an empty window or missing startDate", () => {
     const model = emptyDateModel();
     expect(mergeWindowIntoDateModel(model, [], {}, "2026-06-15")).toBe(model);

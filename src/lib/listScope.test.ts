@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { listScope } from "./listScope";
+import { listScope, listScopeFromModel } from "./listScope";
+import { emptyDateModel, mergeWindowIntoDateModel, type DayConfig } from "./dateModel";
 
 const day = (id: string, overrides: Record<string, any> = {}) => ({ id, skip: false, ...overrides });
 const accepted = (name: string, overrides: Record<string, any> = {}) => ({
@@ -73,5 +74,73 @@ describe("listScope", () => {
   it("is empty for a missing startDate or non-array days", () => {
     expect(listScope([day("a")], { a: accepted("Tacos") }, "", TODAY)).toEqual([]);
     expect(listScope(undefined as any, {}, TODAY, TODAY)).toEqual([]);
+  });
+});
+
+/* TER-426 — the model-based form: full forward range, not window-bounded. */
+describe("listScopeFromModel", () => {
+  const fullDay = (id: string, overrides: Record<string, any> = {}): DayConfig => ({
+    id, people: 4, cuisine: "Any", temp: "Auto", effort: "any", note: "", pinnedRecipe: undefined, skip: false, ...overrides,
+  });
+  const model = (mealsByDate: Record<string, any>, dayConfigByDate: Record<string, any> = {}) =>
+    ({ mealsByDate, dayConfigByDate });
+
+  it("includes only accepted meals dated today or later, sorted by date", () => {
+    const m = model({
+      "2026-06-10": accepted("Past"),
+      "2026-06-14": accepted("Sun"),
+      "2026-06-12": accepted("Fri"),
+      "2026-06-13": { status: "ready", data: { name: "Pending" } },
+    });
+    const scope = listScopeFromModel(m, TODAY);
+    expect(scope.map((e) => e.date)).toEqual(["2026-06-12", "2026-06-14"]);
+    expect(scope.map((e) => e.meal.data.name)).toEqual(["Fri", "Sun"]);
+  });
+
+  it("excludes meals stamped orderedAt; legacy meals with no stamp field are included", () => {
+    const m = model({
+      "2026-06-12": accepted("Stamped", { orderedAt: "2026-06-12T18:00:00.000Z" }),
+      "2026-06-13": { status: "accepted", data: { name: "Legacy", ingredients: [] } },
+    });
+    expect(listScopeFromModel(m, TODAY).map((e) => e.meal.data.name)).toEqual(["Legacy"]);
+  });
+
+  it("excludes dates skip-flagged in dayConfigByDate and carries the config id as dayId", () => {
+    const m = model(
+      { "2026-06-12": accepted("Tacos"), "2026-06-13": accepted("Soup") },
+      { "2026-06-12": fullDay("a", { skip: true }), "2026-06-13": fullDay("b") },
+    );
+    const scope = listScopeFromModel(m, TODAY);
+    expect(scope.map((e) => e.dayId)).toEqual(["b"]);
+  });
+
+  // The Phase B acceptance case: plan this week, move the window forward and plan
+  // next week, move it back — BOTH weeks' unshopped forward meals are in scope.
+  it("spans every planned week at once, not just the current window", () => {
+    const week1Days = [fullDay("a"), fullDay("b")];
+    const week1Meals = { a: accepted("Tacos"), b: accepted("Soup") };
+    let m = mergeWindowIntoDateModel(emptyDateModel(), week1Days, week1Meals, "2026-06-12");
+    // window moves +7 and next week gets planned
+    const week2Days = [fullDay("x"), fullDay("y")];
+    const week2Meals = { x: accepted("Curry"), y: accepted("Chili") };
+    m = mergeWindowIntoDateModel(m, week2Days, week2Meals, "2026-06-19");
+    const scope = listScopeFromModel(m, TODAY);
+    expect(scope.map((e) => e.date)).toEqual(["2026-06-12", "2026-06-13", "2026-06-19", "2026-06-20"]);
+    expect(scope.map((e) => e.meal.data.name)).toEqual(["Tacos", "Soup", "Curry", "Chili"]);
+
+    // stamping week 1 leaves week 2 in scope (and vice versa)
+    m = {
+      ...m,
+      mealsByDate: {
+        ...m.mealsByDate,
+        "2026-06-12": { ...m.mealsByDate["2026-06-12"], orderedAt: "2026-06-12T18:00:00.000Z" },
+        "2026-06-13": { ...m.mealsByDate["2026-06-13"], orderedAt: "2026-06-12T18:00:00.000Z" },
+      },
+    };
+    expect(listScopeFromModel(m, TODAY).map((e) => e.meal.data.name)).toEqual(["Curry", "Chili"]);
+  });
+
+  it("is empty for an empty model", () => {
+    expect(listScopeFromModel(emptyDateModel(), TODAY)).toEqual([]);
   });
 });

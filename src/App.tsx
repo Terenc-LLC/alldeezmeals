@@ -15,7 +15,7 @@ import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./li
 import { isValidEmail, sanitizeOtpCode, classifySendError, friendlySendError, friendlyVerifyError, OTP_LENGTH, RESEND_COOLDOWN_S } from "./lib/authHelpers";
 import { addDays, projectCurrentWeek, shouldApplyRemoteState } from "./lib/weekState";
 import { emptyDateModel, mergeWindowIntoDateModel, hydrateWindow, migrateLegacyBlob, type DateModel } from "./lib/dateModel";
-import { listScope } from "./lib/listScope";
+import { listScopeFromModel } from "./lib/listScope";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -248,10 +248,12 @@ export default function App() {
   // TER-388: who/when wrote the localStorage blob we booted from, captured before any
   // re-save can re-stamp it. Used to decide whether the remote row may overwrite it.
   const bootStamp = useRef<{ savedAt: string | null; savedBy: string | null }>({ savedAt: null, savedBy: null });
-  // TER-418: the date-keyed canonical model (every date ever planned). A ref, not
-  // state: it's updated synchronously by the loaders and the merge effect below, and
-  // the save effect already re-runs on every change that can alter it.
-  const dateModelRef = useRef<DateModel>(emptyDateModel());
+  // TER-426 (Phase B): the date-keyed canonical model (every date ever planned),
+  // now reactive state so views can read it. Views go through the `liveModel`
+  // merge below, never this state directly — it lags the window by one commit.
+  // mergeWindowIntoDateModel's reference bailout is what keeps the
+  // state → liveModel → setDateModel cycle from looping.
+  const [dateModel, setDateModel] = useState<DateModel>(emptyDateModel);
   // TER-418: which startDate/numDays the current days[]/meals window was built for.
   // When the live values diverge from this anchor, the window is re-hydrated from the
   // date model instead of letting meals ride along positionally.
@@ -344,8 +346,9 @@ export default function App() {
   const [currentWeek, setCurrentWeek] = useState<any>(null);
   const [cookProgress, setCookProgress] = useState<Record<string, { gathered: number[]; done: number[]; servings: number; made: boolean }>>({});
   // TER-422: session-only memory of the last "mark ordered" stamp set, powering the
-  // "Unmark last order" undo in the list view. Deliberately not persisted.
-  const [lastOrder, setLastOrder] = useState<{ dayIds: string[]; orderedAt: string } | null>(null);
+  // "Unmark last order" undo in the list view. Deliberately not persisted. Keyed by
+  // date (TER-426) since the scope can include dates outside the current window.
+  const [lastOrder, setLastOrder] = useState<{ dates: string[]; orderedAt: string } | null>(null);
 
   /* ---- pinned-recipe materialization ---- */
   const pinnedSignature = useMemo(
@@ -397,9 +400,9 @@ export default function App() {
         const hasModel = d.mealsByDate && d.dayConfigByDate;
         const bootStart = d.startDate || isoToday();
         const bootNum = d.numDays ?? 7;
-        dateModelRef.current = hasModel
+        setDateModel(hasModel
           ? { mealsByDate: d.mealsByDate, dayConfigByDate: d.dayConfigByDate }
-          : migrateLegacyBlob(d);
+          : migrateLegacyBlob(d));
         windowAnchor.current = { startDate: bootStart, numDays: bootNum };
         if (hasModel) {
           const w = hydrateWindow(d.mealsByDate, d.dayConfigByDate, bootStart, bootNum, () => makeDay(d.defaultPeople ?? 4));
@@ -477,9 +480,9 @@ export default function App() {
           const hasModel = d.mealsByDate && d.dayConfigByDate;
           const nextStart = d.startDate !== undefined ? d.startDate : startDate;
           const nextNum = d.numDays !== undefined ? d.numDays : numDays;
-          dateModelRef.current = hasModel
+          setDateModel(hasModel
             ? { mealsByDate: d.mealsByDate, dayConfigByDate: d.dayConfigByDate }
-            : migrateLegacyBlob(d);
+            : migrateLegacyBlob(d));
           windowAnchor.current = { startDate: nextStart, numDays: nextNum };
           if (hasModel) {
             const w = hydrateWindow(d.mealsByDate, d.dayConfigByDate, nextStart, nextNum, () => makeDay(d.defaultPeople ?? 4));
@@ -531,28 +534,43 @@ export default function App() {
       });
   }, [session]); // eslint-disable-line
 
-  // TER-418: keep the date model and the runtime window in sync. Two cases:
-  // (a) days/meals changed inside the current window → merge window state into the
-  //     date model (out-of-window dates are untouchable by construction);
-  // (b) startDate/numDays moved off the anchor → re-hydrate days/meals from the date
-  //     model so meals stay bound to their dates instead of riding along positionally.
-  //     Moving the window off planned dates hides their meals (preserved in the
-  //     model); moving it back restores them. Declared before the save effect so the
-  //     payload always reads a current dateModelRef.
+  // TER-426: the persisted model overlaid with the current window, computed
+  // in-render so views are never one render behind a just-accepted meal. While
+  // the window is off its anchor (re-hydration pending in the sync effect
+  // below), merging would mis-bind the old window's meals onto the new dates —
+  // return the persisted model untouched for that one commit instead.
+  const liveModel = useMemo(() => {
+    if (!loaded) return dateModel;
+    const anchor = windowAnchor.current;
+    if (anchor && (anchor.startDate !== startDate || anchor.numDays !== numDays)) return dateModel;
+    return mergeWindowIntoDateModel(dateModel, days, meals, startDate);
+  }, [loaded, dateModel, days, meals, startDate, numDays]);
+
+  // TER-418/TER-426: keep the date model and the runtime window in sync. Two cases:
+  // (a) days/meals changed inside the current window → persist `liveModel` (the
+  //     merged overlay). The merge's reference bailout makes this loop-safe:
+  //     once the model has absorbed the window, liveModel === dateModel and the
+  //     setState bails out of the re-render;
+  // (b) startDate/numDays moved off the anchor → fold any not-yet-persisted window
+  //     edits into the model under the OLD anchor, then re-hydrate days/meals for
+  //     the new window so meals stay bound to their dates instead of riding along
+  //     positionally. Moving the window off planned dates hides their meals
+  //     (preserved in the model); moving it back restores them.
   useEffect(() => {
     if (!loaded) return;
     const anchor = windowAnchor.current;
     if (anchor && (anchor.startDate !== startDate || anchor.numDays !== numDays)) {
-      const m = dateModelRef.current;
+      const m = mergeWindowIntoDateModel(dateModel, days, meals, anchor.startDate);
       const w = hydrateWindow(m.mealsByDate, m.dayConfigByDate, startDate, numDays, () => makeDay(defaultPeople));
       windowAnchor.current = { startDate, numDays };
+      if (m !== dateModel) setDateModel(m);
       setDays(w.days);
       setMeals(w.meals);
       return;
     }
     windowAnchor.current = { startDate, numDays };
-    dateModelRef.current = mergeWindowIntoDateModel(dateModelRef.current, days, meals, startDate);
-  }, [loaded, days, meals, startDate, numDays, defaultPeople]);
+    setDateModel(liveModel);
+  }, [loaded, dateModel, liveModel, days, meals, startDate, numDays, defaultPeople]);
 
   // 3. Save to localStorage immediately and to Supabase (debounced 2 s) on every change.
   //    localStorage acts as offline cache; Supabase is the authoritative cross-device store.
@@ -567,8 +585,10 @@ export default function App() {
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
       checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress,
       // TER-418: dual-write the date-keyed canonical model alongside the legacy keys.
-      // Rollback-safe: a pre-Phase-A build reading this blob sees the legacy keys above.
-      mealsByDate: dateModelRef.current.mealsByDate, dayConfigByDate: dateModelRef.current.dayConfigByDate,
+      // Rollback-safe: a pre-Phase-A build reading this blob sees the legacy keys above
+      // (incl. currentWeek, which nothing in this build reads anymore — TER-426).
+      // liveModel (not dateModel) so the payload always carries the current window.
+      mealsByDate: liveModel.mealsByDate, dayConfigByDate: liveModel.dayConfigByDate,
     };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch {}
     if (!session) return;
@@ -583,7 +603,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress, liveModel, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -907,11 +927,13 @@ ${recipeOutputContract(day.people)}`;
   /* ---- grocery list ---- */
   const acceptedCount = useMemo(() => days.filter((d) => meals[d.id]?.status === "accepted").length, [days, meals]);
 
-  // TER-422: the shopping-list scope — accepted, dated today or later, not yet
-  // stamped ordered. Everything list-shaped (groceryList → listText → Instacart
-  // handoff → the orders snapshot) derives from this set.
+  // TER-422/TER-426: the shopping-list scope — accepted, dated today or later, not
+  // yet stamped ordered, across the FULL forward range of the date model (every
+  // planned week at once, not just the current window). Everything list-shaped
+  // (groceryList → listText → Instacart handoff → the orders snapshot) derives
+  // from this set.
   const todayISO = isoToday();
-  const scopeEntries = useMemo(() => listScope(days, meals, startDate, todayISO), [days, meals, startDate, todayISO]);
+  const scopeEntries = useMemo(() => listScopeFromModel(liveModel, todayISO), [liveModel, todayISO]);
 
   // TER-388 (I-2): "This Week" is a projection of the accepted meals, recomputed on
   // every accept/reject/skip/date change — a stale currentWeek is impossible by
@@ -1020,16 +1042,29 @@ ${recipeOutputContract(day.people)}`;
         return { error: error.message };
       }
       const orderedAt = new Date().toISOString();
+      // TER-426: the scope spans the full forward range, so stamp both stores —
+      // in-window dates through `meals` (the model re-merges them next commit),
+      // out-of-window dates directly in the model (their only home).
+      const windowDayIdByDate = new Map<string, string>(days.map((d, i) => [addDays(startDate, i), d.id]));
       setMeals((m) => {
         const next = { ...m };
-        for (const { dayId } of scope) {
-          if (next[dayId]) next[dayId] = { ...next[dayId], orderedAt };
+        for (const { date } of scope) {
+          const dayId = windowDayIdByDate.get(date);
+          if (dayId && next[dayId]) next[dayId] = { ...next[dayId], orderedAt };
         }
         return next;
       });
+      setDateModel((prev) => {
+        const mealsByDate = { ...prev.mealsByDate };
+        let changed = false;
+        for (const { date } of scope) {
+          if (mealsByDate[date]) { mealsByDate[date] = { ...mealsByDate[date], orderedAt }; changed = true; }
+        }
+        return changed ? { ...prev, mealsByDate } : prev;
+      });
       setCheckedItems({});
       setWeekAdditions([]);
-      setLastOrder({ dayIds: scope.map((e) => e.dayId), orderedAt });
+      setLastOrder({ dates: scope.map((e) => e.date), orderedAt });
       return { error: null };
     } catch (e: any) {
       console.warn("Failed to archive order:", e);
@@ -1039,17 +1074,32 @@ ${recipeOutputContract(day.people)}`;
 
   // TER-422: undo for the last stamp set this session — removes `orderedAt` so those
   // meals re-enter the shopping list. The archived orders row is left alone.
+  // Unstamps both stores, mirroring handleMarkOrdered (TER-426).
   const unmarkLastOrder = () => {
     if (!lastOrder) return;
+    const windowDayIdByDate = new Map<string, string>(days.map((d, i) => [addDays(startDate, i), d.id]));
     setMeals((m) => {
       const next = { ...m };
-      for (const dayId of lastOrder.dayIds) {
-        if (next[dayId]?.orderedAt) {
+      for (const date of lastOrder.dates) {
+        const dayId = windowDayIdByDate.get(date);
+        if (dayId && next[dayId]?.orderedAt) {
           const { orderedAt: _removed, ...rest } = next[dayId];
           next[dayId] = rest;
         }
       }
       return next;
+    });
+    setDateModel((prev) => {
+      const mealsByDate = { ...prev.mealsByDate };
+      let changed = false;
+      for (const date of lastOrder.dates) {
+        if (mealsByDate[date]?.orderedAt) {
+          const { orderedAt: _removed, ...rest } = mealsByDate[date];
+          mealsByDate[date] = rest;
+          changed = true;
+        }
+      }
+      return changed ? { ...prev, mealsByDate } : prev;
     });
     setLastOrder(null);
   };
@@ -1166,7 +1216,9 @@ ${recipeOutputContract(day.people)}`;
         )}
         {tab === "today" && (
           <TodayCook
-            currentWeek={currentWeek}
+            mealsByDate={liveModel.mealsByDate}
+            dayConfigByDate={liveModel.dayConfigByDate}
+            onGoPlan={() => setTab("plan")}
             forecast={forecast}
             isMobile={isMobile}
             cookProgress={cookProgress}
@@ -2833,37 +2885,29 @@ function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid,
     </div>
   );
 }
-/* ============================ Today / Cook Mode (TER-329) ============================ */
+/* ============================ Today / Cook Mode (TER-329, rolling dates TER-426) ============================ */
 function TodayCook({
-  currentWeek, forecast, isMobile,
+  mealsByDate, dayConfigByDate, onGoPlan, forecast, isMobile,
   cookProgress, setCookProgress,
   recipeStars, setRecipeStars,
   liked, setLiked, avoid, setAvoid,
   pantry, alwaysHave,
 }: any) {
   const today = isoToday();
-  const entries: any[] = currentWeek?.entries ?? [];
-  const cookableEntries = entries.filter((e: any) => !e.skip);
-
-  const [activeDate, setActiveDate] = useState(() => {
-    if (!cookableEntries.length) return today;
-    return cookableEntries.find((e: any) => e.date === today)?.date ?? cookableEntries[0].date;
-  });
+  // TER-426: rolling date navigation — starts at today, unbounded both directions.
+  // Forward through everything planned, backward through history.
+  const [activeDate, setActiveDate] = useState(today);
   const [hoverStar, setHoverStar] = useState(0);
 
-  if (!currentWeek || !entries.length) {
-    return (
-      <div style={{ padding: "var(--space-7)", textAlign: "center" as const }}>
-        <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", lineHeight: "var(--t-body-lh)" }}>
-          No plan for this week yet — head to Planning to generate dinners.
-        </p>
-      </div>
-    );
-  }
+  // Dates with an accepted dinner, sorted — drives the "next dinner" jumps.
+  const plannedDates: string[] = Object.keys(mealsByDate)
+    .filter((d) => mealsByDate[d]?.status === "accepted" && !dayConfigByDate[d]?.skip)
+    .sort();
+  const nextPlanned = plannedDates.find((d) => d > activeDate);
 
-  const activeIdx = Math.max(0, entries.findIndex((e: any) => e.date === activeDate));
-  const activeEntry = entries[activeIdx];
-  const meal = activeEntry?.meal;
+  const meal = !dayConfigByDate[activeDate]?.skip && mealsByDate[activeDate]?.status === "accepted"
+    ? mealsByDate[activeDate]
+    : null;
   const data = meal?.data;
 
   const defaultProg = { gathered: [] as number[], done: [] as number[], servings: data?.servings ?? 2, made: false };
@@ -2911,89 +2955,53 @@ function TodayCook({
   const diffLabel = difficulty != null ? (DIFFICULTY_LABELS[difficulty] ?? "") : "";
   const kcal = meal?.kcalInfo?.kcalPerServing ?? null;
 
-  const nextCookable = cookableEntries.find((e: any) => e.date > activeDate);
-
   const footerBase: React.CSSProperties = { position: "sticky", bottom: 0, background: "var(--c-surface)", borderTop: "1px solid var(--c-border)", padding: "var(--space-4) var(--space-5)", boxShadow: "0 -2px 10px rgba(26,58,52,.05)" };
 
   return (
     <div style={{ minHeight: "100%", background: "var(--c-bg)", display: "flex", flexDirection: "column" }}>
-      {/* ── DAY BAR ── */}
+      {/* ── DATE NAV (TER-426: rolling, unbounded) ── */}
       <div style={{ background: "var(--c-surface)", borderBottom: "1px solid var(--c-border)", padding: "var(--space-4) var(--space-5)", boxShadow: "var(--elev-1)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
-          <div>
-            <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", color: "var(--c-primary)", margin: 0 }}>{dayLabel}</p>
-            <h1 style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-h1-size)", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: "var(--t-h1-lh)", color: "var(--c-text)", margin: "2px 0 0", whiteSpace: "nowrap" }}>{weekdayLabel(activeDate)}</h1>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0 }}>
-            {wxDay && fxDay && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-pill)", padding: "7px 11px", fontSize: "var(--t-bodysm-size)", fontFamily: "var(--font-sans)", color: "var(--c-text)" }}>
-                <span style={{ fontSize: 14 }}>{wxDay.e}</span>{fxDay.hi}°F
-              </span>
-            )}
-            <button onClick={() => window.print()} className="btn-ghost btn--sm" aria-label="Print recipes" style={{ padding: "0 var(--space-2)", minHeight: 34 }}>
-              <Printer size={15} />
-            </button>
-          </div>
-        </div>
-        {/* prev / rail / next */}
-        <div style={{ display: "flex", alignItems: "stretch", gap: "var(--space-2)" }}>
-          <button onClick={() => { const prev = entries[activeIdx - 1]; if (prev) setActiveDate(prev.date); }} disabled={activeIdx === 0}
-            aria-label="Previous day" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "0 8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+          <button onClick={() => setActiveDate(addDays(activeDate, -1))}
+            aria-label="Previous day" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "10px 8px", flexShrink: 0 }}>
             <ChevronLeft size={18} strokeWidth={2.2} />
           </button>
-          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-            <div style={{ display: "flex", gap: 3, overflow: "hidden" }}>
-              {entries.map((entry: any) => {
-                const isActive = entry.date === activeDate;
-                const isPast = entry.date < today;
-                const isToday = entry.date === today;
-                const d = parseISO(entry.date);
-                const wd = d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3);
-                const dayNum = d.getDate();
-                const entryFx = forecast[entry.date];
-                const entryWx = entryFx ? wx(entryFx.code) : null;
-                return (
-                  <button key={entry.date} onClick={() => { if (!entry.skip) setActiveDate(entry.date); }} disabled={entry.skip}
-                    style={{
-                      flex: "1 1 0", minWidth: 0, cursor: entry.skip ? "default" : "pointer",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-                      padding: "7px 2px 6px", borderRadius: "var(--radius-md)",
-                      border: `1px solid ${isActive ? "var(--c-primary)" : "transparent"}`,
-                      background: isActive ? "var(--c-primary)" : (entry.skip || isPast) ? "transparent" : "var(--c-surface-2)",
-                      color: isActive ? "var(--c-on-primary)" : "var(--c-text-muted)",
-                      opacity: (isPast && !isActive) || (entry.skip && !isActive) ? 0.55 : 1,
-                      transition: "background .15s, color .15s",
-                    }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" as const, fontFamily: "var(--font-sans)", opacity: 0.75 }}>{wd}</span>
-                    <span style={{ fontWeight: 600, fontSize: 17, lineHeight: 1, fontFamily: "var(--font-sans)" }}>{dayNum}</span>
-                    {entry.skip ? (
-                      <span style={{ fontSize: 9, fontFamily: "var(--font-sans)", opacity: 0.6 }}>skip</span>
-                    ) : isPast ? (
-                      <Check size={10} strokeWidth={3} />
-                    ) : (
-                      <span style={{ fontSize: 11 }}>{entryWx?.e ?? ""}</span>
-                    )}
-                    {isToday && <span style={{ width: 4, height: 4, borderRadius: 4, background: isActive ? "var(--c-on-primary)" : "var(--c-accent)" }} />}
-                  </button>
-                );
-              })}
-            </div>
+          <div style={{ flex: 1, minWidth: 0, textAlign: "center" as const }}>
+            <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase", color: "var(--c-primary)", margin: 0 }}>{dayLabel}</p>
+            <h1 style={{ fontFamily: "var(--font-sans)", fontSize: isMobile ? 20 : "var(--t-h1-size)", fontWeight: 700, letterSpacing: "-0.01em", lineHeight: "var(--t-h1-lh)", color: "var(--c-text)", margin: "2px 0 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{weekdayLabel(activeDate)}</h1>
           </div>
-          <button onClick={() => { const next = entries[activeIdx + 1]; if (next) setActiveDate(next.date); }} disabled={activeIdx >= entries.length - 1}
-            aria-label="Next day" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "0 8px" }}>
+          <button onClick={() => setActiveDate(addDays(activeDate, 1))}
+            aria-label="Next day" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "10px 8px", flexShrink: 0 }}>
             <ChevronRight size={18} strokeWidth={2.2} />
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+          {activeDate !== today && (
+            <button onClick={() => setActiveDate(today)} className="btn-secondary btn--sm" style={{ minHeight: 30, padding: "0 12px" }}>
+              <CalendarDays size={14} /> Today
+            </button>
+          )}
+          {wxDay && fxDay && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-pill)", padding: "5px 11px", fontSize: "var(--t-bodysm-size)", fontFamily: "var(--font-sans)", color: "var(--c-text)" }}>
+              <span style={{ fontSize: 14 }}>{wxDay.e}</span>{fxDay.hi}°F
+            </span>
+          )}
+          <button onClick={() => window.print()} className="btn-ghost btn--sm" aria-label="Print recipes" style={{ padding: "0 var(--space-2)", minHeight: 30 }}>
+            <Printer size={15} />
           </button>
         </div>
       </div>
 
-      {/* ── SKIPPED / NO DATA ── */}
-      {activeEntry?.skip ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-7)" }}>
-          <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", fontStyle: "italic", textAlign: "center" }}>No dinner planned for this day.</p>
-        </div>
-      ) : !data ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-7)" }}>
-          <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", textAlign: "center" }}>Recipe data not available for this day.</p>
+      {/* ── NOTHING PLANNED ── */}
+      {!data ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", padding: "var(--space-7)" }}>
+          <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", fontStyle: "italic", textAlign: "center", margin: 0 }}>Nothing planned for this day.</p>
+          {nextPlanned && (
+            <button onClick={() => setActiveDate(nextPlanned)} className="btn-secondary btn--sm">
+              Next dinner: {weekdayLabel(nextPlanned)} <ChevronRight size={15} strokeWidth={2.2} />
+            </button>
+          )}
+          <button onClick={onGoPlan} className="btn-ghost btn--sm">Plan dinners in Planning <ChevronRight size={14} strokeWidth={2} /></button>
         </div>
       ) : (
         <>
@@ -3144,9 +3152,9 @@ function TodayCook({
               <button onClick={() => setProgress({ made: true })} className={allDone ? "btn-primary btn--block" : "btn-secondary btn--block"} style={{ flex: 1 }}>
                 <Check size={17} strokeWidth={2.4} />{allDone ? "Made it — log dinner" : "Mark as made"}
               </button>
-              {nextCookable && (
-                <button onClick={() => setActiveDate(nextCookable.date)} className="btn-ghost" style={{ flexShrink: 0 }}>
-                  Next day <ChevronRight size={16} strokeWidth={2.2} />
+              {nextPlanned && (
+                <button onClick={() => setActiveDate(nextPlanned)} className="btn-ghost" style={{ flexShrink: 0 }}>
+                  Next dinner <ChevronRight size={16} strokeWidth={2.2} />
                 </button>
               )}
             </div>
@@ -3184,9 +3192,9 @@ function TodayCook({
                   </span>
                 )}
               </div>
-              {nextCookable && (
-                <button onClick={() => setActiveDate(nextCookable.date)} className="btn-primary btn--block">
-                  On to {weekdayLabel(nextCookable.date)} <ChevronRight size={16} strokeWidth={2.2} />
+              {nextPlanned && (
+                <button onClick={() => setActiveDate(nextPlanned)} className="btn-primary btn--block">
+                  On to {weekdayLabel(nextPlanned)} <ChevronRight size={16} strokeWidth={2.2} />
                 </button>
               )}
             </div>
