@@ -39,7 +39,9 @@ const EFFORT_LEVELS: { key: string; label: string; min: number; max: number }[] 
   { key: "involved", label: "Involved+",              min: 4, max: 5 },
 ];
 
-const DEFAULT_LOCATION = { name: "Bloomfield, IA", lat: 40.7517, lon: -92.4154 };
+// TER-429 (M-8): no seeded location — the bundle must not ship anyone's coordinates,
+// and weather must not fetch until the user has set a location.
+type Location = { name: string; lat: number; lon: number };
 
 const DEFAULT_STAPLES: any[] = [];
 
@@ -318,7 +320,7 @@ export default function App() {
   // TER-348: persist active tab so refresh restores user's place.
   useEffect(() => { try { localStorage.setItem("alldeezmeals-active-tab", tab); } catch {} }, [tab]);
 
-  const [location, setLocation] = useState(DEFAULT_LOCATION);
+  const [location, setLocation] = useState<Location | null>(null);
   const [startDate, setStartDate] = useState(isoToday());
   const [numDays, setNumDays] = useState(7);
   const [days, setDays] = useState([1, 2, 3, 4, 5, 6, 7].map(() => makeDay()));
@@ -392,7 +394,7 @@ export default function App() {
       if (raw) {
         const d = JSON.parse(raw);
         bootStamp.current = { savedAt: d.savedAt ?? null, savedBy: d.savedBy ?? null };
-        setLocation(d.location ?? DEFAULT_LOCATION);
+        setLocation(d.location ?? null);
         if (d.startDate) setStartDate(d.startDate); // TER-388: was saved but never restored
         setNumDays(d.numDays ?? 7);
         // TER-418: prefer the date model when present; migrate legacy blobs into it.
@@ -618,6 +620,7 @@ export default function App() {
 
   /* ---- weather (Open-Meteo direct, keyless) ---- */
   const loadForecast = useCallback(async () => {
+    if (!location) return; // TER-429: no fetch until a location is set
     setFxStatus("loading");
     try {
       const end = addDays(startDate, numDays - 1);
@@ -637,7 +640,7 @@ export default function App() {
     }
   }, [location, startDate, numDays]);
 
-  useEffect(() => { if (loaded) loadForecast(); }, [loaded, location, startDate, numDays]); // eslint-disable-line
+  useEffect(() => { if (loaded && location) loadForecast(); }, [loaded, location, startDate, numDays]); // eslint-disable-line
 
   const geocode = async (name: string) => {
     try {
@@ -1784,7 +1787,7 @@ function SetupView(p: any) {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
           <MapPin size={14} color="var(--c-text-muted)" />
-          <span style={{ fontSize: 13, color: "var(--c-text-muted)" }}>{location.name}</span>
+          <span style={{ fontSize: 13, color: "var(--c-text-muted)" }}>{location?.name ?? "Set your location"}</span>
           <input value={locInput} onChange={(e) => setLocInput(e.target.value)} placeholder="change location" style={{ ...s.input, flex: 1, fontSize: 12.5, padding: "6px 9px" }}
             onKeyDown={(e) => { if (e.key === "Enter" && locInput.trim()) { geocode(locInput.trim()); setLocInput(""); } }} />
           <span style={s.miniLabel}>{fxStatus === "loading" ? "loading wx..." : fxStatus === "error" ? "wx unavailable" : ""}</span>

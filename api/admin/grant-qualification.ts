@@ -53,16 +53,17 @@ export default async function handler(req: any, res: any) {
   const to = profile.email as string;
   const firstName = htmlEscape(profile.first_name ?? profile.name?.split(" ")[0] ?? "there");
 
-  (async () => {
-    try {
-      await sendResendEmail({
-        to,
-        subject: `Your ALLDEEZMeals beta spot is confirmed (#${n} of 50)`,
-        headers: { "List-Unsubscribe": "<mailto:alldeezmeals@terenc.com?subject=unsubscribe>" },
-        html: `<p>Hi ${firstName},</p><p>Thanks for testing ALLDEEZMeals and sharing your feedback — you're qualifier #${n} of 50, which locks in a full year of ALLDEEZMeals free once the paid plan launches.</p><p>Nothing to do right now; I'll be in touch as the beta develops.</p><p>— Chris<br>ALLDEEZMeals</p>`,
-      });
-    } catch { /* intentional: email failure must not affect the response */ }
-  })();
+  // TER-429 (M-7): await the send — a fire-and-forget call can be frozen when the
+  // lambda ends, silently dropping the email. The try/catch keeps a send failure
+  // from blocking the success response or the committed qualification.
+  try {
+    await sendResendEmail({
+      to,
+      subject: `Your ALLDEEZMeals beta spot is confirmed (#${n} of 50)`,
+      headers: { "List-Unsubscribe": "<mailto:alldeezmeals@terenc.com?subject=unsubscribe>" },
+      html: `<p>Hi ${firstName},</p><p>Thanks for testing ALLDEEZMeals and sharing your feedback — you're qualifier #${n} of 50, which locks in a full year of ALLDEEZMeals free once the paid plan launches.</p><p>Nothing to do right now; I'll be in touch as the beta develops.</p><p>— Chris<br>ALLDEEZMeals</p>`,
+    });
+  } catch { /* intentional: email failure must not affect the response */ }
 
   res.status(200).json({ qualified: true, number: n });
 }

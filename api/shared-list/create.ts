@@ -3,6 +3,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "crypto";
+import { isApproved } from "../_approved.js";
 
 type SnapshotItem = {
   name: string;
@@ -45,6 +46,10 @@ export default async function handler(req: any, res: any) {
     return;
   }
   const userId = userData.user.id;
+
+  // TER-429 (T-9): only approved users may mint share links.
+  const approved = await isApproved(bearerToken, userId);
+  if (!approved) { res.status(403).json({ error: "Account pending approval" }); return; }
 
   let body: { items?: SnapshotItem[] };
   try {
