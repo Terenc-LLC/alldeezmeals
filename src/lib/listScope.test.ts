@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listScope, listScopeFromModel } from "./listScope";
+import { listScope, listScopeFromModel, reuseScopeFromModel } from "./listScope";
 import { emptyDateModel, mergeWindowIntoDateModel, type DayConfig } from "./dateModel";
 
 const day = (id: string, overrides: Record<string, any> = {}) => ({ id, skip: false, ...overrides });
@@ -142,5 +142,74 @@ describe("listScopeFromModel", () => {
 
   it("is empty for an empty model", () => {
     expect(listScopeFromModel(emptyDateModel(), TODAY)).toEqual([]);
+  });
+});
+
+/* TER-428 — the generation reuse context: list scope + ready proposals. */
+describe("reuseScopeFromModel", () => {
+  const fullDay = (id: string, overrides: Record<string, any> = {}): DayConfig => ({
+    id, people: 4, cuisine: "Any", temp: "Auto", effort: "any", note: "", pinnedRecipe: undefined, skip: false, ...overrides,
+  });
+  const model = (mealsByDate: Record<string, any>, dayConfigByDate: Record<string, any> = {}) =>
+    ({ mealsByDate, dayConfigByDate });
+
+  it("includes accepted AND ready meals; excludes loading/error/dataless entries", () => {
+    const m = model({
+      "2026-06-12": accepted("Tacos"),
+      "2026-06-13": { status: "ready", data: { name: "Soup" } },
+      "2026-06-14": { status: "loading", data: null },
+      "2026-06-15": { status: "error", data: null, error: "boom" },
+      "2026-06-16": { status: "accepted", data: null }, // corrupt entry: nothing to coordinate with
+    });
+    expect(reuseScopeFromModel(m, TODAY).map((d) => d.name)).toEqual(["Tacos", "Soup"]);
+  });
+
+  it("excludes ordered/past/skipped meals — the trip-sharing filters", () => {
+    const m = model(
+      {
+        "2026-06-10": accepted("Past"),
+        "2026-06-12": accepted("Stamped", { orderedAt: "2026-06-11T18:00:00.000Z" }),
+        "2026-06-13": accepted("Skipped"),
+        "2026-06-14": accepted("Keeper"),
+      },
+      { "2026-06-13": fullDay("s", { skip: true }) },
+    );
+    expect(reuseScopeFromModel(m, TODAY).map((d) => d.name)).toEqual(["Keeper"]);
+  });
+
+  it("excludes the day being regenerated via excludeDate", () => {
+    const m = model({ "2026-06-12": accepted("Tacos"), "2026-06-13": accepted("Soup") });
+    expect(reuseScopeFromModel(m, TODAY, "2026-06-12").map((d) => d.name)).toEqual(["Soup"]);
+  });
+
+  // The PR #101 review §1 case (DoD 4): after week 1 is marked ordered, a meal
+  // generated for week 2 must only see week 2 — its provenance can't cite
+  // ingredients that already left with the stamped trip.
+  it("after an order, only unshopped meals remain in the context", () => {
+    let m = mergeWindowIntoDateModel(
+      emptyDateModel(),
+      [fullDay("a"), fullDay("b")],
+      { a: accepted("Tacos"), b: accepted("Soup") },
+      "2026-06-12",
+    );
+    m = mergeWindowIntoDateModel(
+      m,
+      [fullDay("x")],
+      { x: accepted("Curry") },
+      "2026-06-19",
+    );
+    // both weeks unshopped: a week-2 generation coordinates with everything
+    expect(reuseScopeFromModel(m, TODAY, "2026-06-20").map((d) => d.name)).toEqual(["Tacos", "Soup", "Curry"]);
+    // mark week 1 ordered
+    const orderedAt = "2026-06-12T18:00:00.000Z";
+    m = {
+      ...m,
+      mealsByDate: {
+        ...m.mealsByDate,
+        "2026-06-12": { ...m.mealsByDate["2026-06-12"], orderedAt },
+        "2026-06-13": { ...m.mealsByDate["2026-06-13"], orderedAt },
+      },
+    };
+    expect(reuseScopeFromModel(m, TODAY, "2026-06-20").map((d) => d.name)).toEqual(["Curry"]);
   });
 });

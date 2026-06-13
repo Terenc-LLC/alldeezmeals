@@ -103,6 +103,30 @@ describe("hydrateWindow", () => {
     expect(back.meals.b.data.name).toBe("Soup");
   });
 
+  // TER-428 (decision locked): a pin belongs to its date — no automatic
+  // carry-forward. Window away and back must restore the pin on its original
+  // date, config and materialized meal intact, ordered stamp included.
+  it("a pinned meal survives a window move away and back, on its date, stamp intact", () => {
+    const recipe = { name: "Friday Pizza", ingredients: [] };
+    const pinnedDay = day("p", { pinnedRecipe: recipe });
+    const pinnedMeal = { status: "accepted", data: recipe, error: null, kcalInfo: null, pinned: true, orderedAt: "2026-06-14T18:00:00.000Z" };
+    let model = mergeWindowIntoDateModel(emptyDateModel(), [pinnedDay], { p: pinnedMeal }, "2026-06-15");
+
+    // move +7: the pinned date leaves the window; the next week carries no pin
+    const ahead = hydrateWindow(model.mealsByDate, model.dayConfigByDate, "2026-06-22", 1, makeFreshDay);
+    expect(ahead.days[0].pinnedRecipe).toBeUndefined();
+    expect(ahead.meals).toEqual({});
+
+    // merge the away week, move back: pin, materialized meal, and stamp all intact
+    model = mergeWindowIntoDateModel(model, ahead.days, ahead.meals, "2026-06-22");
+    const back = hydrateWindow(model.mealsByDate, model.dayConfigByDate, "2026-06-15", 1, makeFreshDay);
+    expect(back.days[0].id).toBe("p");
+    expect(back.days[0].pinnedRecipe).toEqual(recipe);
+    expect(back.meals.p.pinned).toBe(true);
+    expect(back.meals.p.data.name).toBe("Friday Pizza");
+    expect(back.meals.p.orderedAt).toBe("2026-06-14T18:00:00.000Z");
+  });
+
   it("a partial window shift keeps overlapping dates' meals on their dates", () => {
     const days = [day("a"), day("b"), day("c")];
     const meals = { a: accepted("Tacos"), b: accepted("Soup"), c: accepted("Curry") };

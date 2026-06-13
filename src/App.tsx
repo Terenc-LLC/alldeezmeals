@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   ListChecks, CheckCircle2, AlertCircle, Repeat, Info,
-  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Archive,
+  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Boxes,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
-  MessageSquare, ChevronLeft, ChevronRight, Undo2,
+  MessageSquare, ChevronLeft, ChevronRight, Undo2, PackageCheck,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { normalizeIngName } from "./lib/normalize";
@@ -13,9 +13,9 @@ import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
 import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./lib/avoidGuard";
 import { isValidEmail, sanitizeOtpCode, classifySendError, friendlySendError, friendlyVerifyError, OTP_LENGTH, RESEND_COOLDOWN_S } from "./lib/authHelpers";
-import { addDays, projectCurrentWeek, shouldApplyRemoteState } from "./lib/weekState";
+import { addDays, shouldApplyRemoteState } from "./lib/weekState";
 import { emptyDateModel, mergeWindowIntoDateModel, hydrateWindow, migrateLegacyBlob, type DateModel } from "./lib/dateModel";
-import { listScopeFromModel } from "./lib/listScope";
+import { listScopeFromModel, reuseScopeFromModel } from "./lib/listScope";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -343,7 +343,6 @@ export default function App() {
   // from `avoid` above, which is TER-317 novelty exclusions (dish NAMES).
   const [avoidTerms, setAvoidTerms] = useState<string[]>([]);
   const [recipeStars, setRecipeStars] = useState<Record<string, number>>({});
-  const [currentWeek, setCurrentWeek] = useState<any>(null);
   const [cookProgress, setCookProgress] = useState<Record<string, { gathered: number[]; done: number[]; servings: number; made: boolean }>>({});
   // TER-422: session-only memory of the last "mark ordered" stamp set, powering the
   // "Unmark last order" undo in the list view. Deliberately not persisted. Keyed by
@@ -426,7 +425,7 @@ export default function App() {
         setAvoid(d.avoid ?? []);
         setAvoidTerms(d.avoidTerms ?? []);
         if (d.recipeStars) setRecipeStars(d.recipeStars);
-        setCurrentWeek(d.currentWeek ?? null);
+        // TER-428: old blobs may still carry a `currentWeek` key — ignored.
         if (d.cookProgress) setCookProgress(d.cookProgress);
       }
     } catch {}
@@ -506,7 +505,7 @@ export default function App() {
           if (d.avoid !== undefined) setAvoid(d.avoid);
           if (d.avoidTerms !== undefined) setAvoidTerms(d.avoidTerms);
           if (d.recipeStars !== undefined) setRecipeStars(d.recipeStars);
-          if (d.currentWeek !== undefined) setCurrentWeek(d.currentWeek);
+          // TER-428: old rows may still carry a `currentWeek` key — ignored.
           if (d.cookProgress !== undefined) setCookProgress(d.cookProgress);
         } else if (data === null) {
           // No row — one-time migration: push existing localStorage up to Supabase.
@@ -583,10 +582,11 @@ export default function App() {
       // stale remote win on the next reload.
       savedAt: new Date().toISOString(), savedBy: session?.user?.id ?? bootStamp.current.savedBy,
       location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
-      checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress,
+      checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress,
       // TER-418: dual-write the date-keyed canonical model alongside the legacy keys.
-      // Rollback-safe: a pre-Phase-A build reading this blob sees the legacy keys above
-      // (incl. currentWeek, which nothing in this build reads anymore — TER-426).
+      // TER-428: `currentWeek` is gone from state and payload — the rollback floor
+      // is now Phase B (TER-426); older builds rendered Today from currentWeek and
+      // would lose it. Acceptable: the date model is the canonical store.
       // liveModel (not dateModel) so the payload always carries the current window.
       mealsByDate: liveModel.mealsByDate, dayConfigByDate: liveModel.dayConfigByDate,
     };
@@ -603,7 +603,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, currentWeek, cookProgress, liveModel, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress, liveModel, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -734,20 +734,20 @@ ${avoidBlock}
 ${prefLines.join("\n")}
 
 ${eff}
-- Do NOT repeat a main dish already planned this week.
+- Do NOT repeat a main dish already planned below.
 ${reject ? `\nThe user REJECTED "${reject}". Propose a clearly DIFFERENT dinner (different main and ideally different cuisine).` : ""}
 
-Dinners already planned this week (with purchased ingredients):
+Dinners sharing this shopping trip (coordinate ingredient reuse with these and ONLY these):
 ${prior}
 
 ${recipeOutputContract(day.people)}`;
   };
 
-  const committedData = (excludeId?: string) => days
-    .filter((d) => d.id !== excludeId)
-    .map((d) => meals[d.id])
-    .filter((m) => m && (m.status === "accepted" || m.status === "ready"))
-    .map((m) => m.data);
+  // TER-428: the cross-meal reuse context is the trip-sharing scope (unshopped,
+  // today-forward, full model range), not the whole window — a dinner generated
+  // after an order must not claim reuse from ingredients that already left with
+  // the stamped trip. TER-400's scope repair remains the safety net.
+  const committedData = (excludeDate?: string) => reuseScopeFromModel(liveModel, isoToday(), excludeDate);
 
   const usedCuisinesFrom = (data: any[]) => Array.from(new Set(data.map((m) => m.cuisine).filter(Boolean)));
 
@@ -884,7 +884,11 @@ ${recipeOutputContract(day.people)}`;
     const weekAvoid = mergeTerms(avoidTerms, pendingAvoid);
     if (pendingAvoid.length) setAvoidTerms((prev: string[]) => mergeTerms(prev, pendingAvoid));
     setBusy(true); setTab("plan");
-    const committed = days.map((d) => meals[d.id]).filter((m) => m && m.status === "accepted").map((m) => m.data);
+    // TER-428: seed the run's reuse context from the list scope (accepted,
+    // unshopped, today-forward — every planned week), not the window's accepted
+    // meals. Ready proposals are left out of the seed: the loop below
+    // regenerates them, and each fresh result is pushed in as it lands.
+    const committed = listScopeFromModel(liveModel, isoToday()).map((e) => e.meal.data).filter(Boolean);
     for (let i = 0; i < days.length; i++) {
       const day = days[i];
       if (!!day.skip) continue; // skip overrides pin
@@ -908,12 +912,15 @@ ${recipeOutputContract(day.people)}`;
     if (day.pinnedRecipe) return;
     // TER-414: a quota error rethrows from generateOne after setting the day's
     // error state — nothing more to do for a single-day action.
-    await generateOne(day, idx, committedData(day.id), meals[day.id]?.data?.name).catch(() => {});
+    await generateOne(day, idx, committedData(dateFor(idx)), meals[day.id]?.data?.name).catch(() => {});
   };
 
   // TER-422: resetPlan and "Start over" are gone — there is no bulk-clear path.
   // Rejecting a meal is the only operation that empties a date; "mark ordered"
   // stamps meals instead of clearing them (see handleMarkOrdered below).
+  // TER-428 (decision locked): do NOT re-add a bulk clear, reset, or escape
+  // hatch in any form. Per-date rejection and ordered stamps are the only
+  // mutations; everything else is navigation.
 
   const thumbUp = (name: string) => { if (name) setLiked((p) => (p.includes(name) ? p : [...p, name])); };
   const thumbDown = async (day: any, idx: number) => {
@@ -934,15 +941,6 @@ ${recipeOutputContract(day.people)}`;
   // from this set.
   const todayISO = isoToday();
   const scopeEntries = useMemo(() => listScopeFromModel(liveModel, todayISO), [liveModel, todayISO]);
-
-  // TER-388 (I-2): "This Week" is a projection of the accepted meals, recomputed on
-  // every accept/reject/skip/date change — a stale currentWeek is impossible by
-  // construction. Guarded by acceptedCount > 0 so generating next week's plan doesn't
-  // blank the box mid-way (no bulk-clear path exists since TER-422).
-  useEffect(() => {
-    if (!loaded || acceptedCount === 0) return;
-    setCurrentWeek(projectCurrentWeek(days, meals, startDate, numDays));
-  }, [loaded, days, meals, startDate, numDays, acceptedCount]);
 
   const groceryList = useMemo(() => {
     const agg: Record<string, any> = {};
@@ -1015,7 +1013,7 @@ ${recipeOutputContract(day.people)}`;
 
   // TER-422: "mark ordered" stamps `orderedAt` on each scope meal instead of clearing
   // anything. Meals stay on their dates and in every view; the shopping list (scope-
-  // derived) empties on its own. The orders archive row inserts exactly as before;
+  // derived) empties on its own. The orders history row inserts exactly as before;
   // checked items and manual additions clear because they belong to the completed
   // trip. No startDate change, no This Week clear, no day-config reset.
   const handleMarkOrdered = async (): Promise<{ error: string | null }> => {
@@ -1038,7 +1036,7 @@ ${recipeOutputContract(day.people)}`;
         .from("orders")
         .insert({ user_id: session.user.id, plan: snapshot });
       if (error) {
-        console.warn("Failed to archive order:", error);
+        console.warn("Failed to save order:", error);
         return { error: error.message };
       }
       const orderedAt = new Date().toISOString();
@@ -1067,13 +1065,13 @@ ${recipeOutputContract(day.people)}`;
       setLastOrder({ dates: scope.map((e) => e.date), orderedAt });
       return { error: null };
     } catch (e: any) {
-      console.warn("Failed to archive order:", e);
-      return { error: e?.message || "Network error — plan not archived." };
+      console.warn("Failed to save order:", e);
+      return { error: e?.message || "Network error — order not saved." };
     }
   };
 
   // TER-422: undo for the last stamp set this session — removes `orderedAt` so those
-  // meals re-enter the shopping list. The archived orders row is left alone.
+  // meals re-enter the shopping list. The saved orders row is left alone.
   // Unstamps both stores, mirroring handleMarkOrdered (TER-426).
   const unmarkLastOrder = () => {
     if (!lastOrder) return;
@@ -1186,7 +1184,7 @@ ${recipeOutputContract(day.people)}`;
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`Shopping List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Recipe Box (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
-        {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Archive size={15} />} label="Catalog" />}
+        {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Boxes size={15} />} label="Catalog" />}
       </nav>
 
       <main style={s.main}>
@@ -1207,6 +1205,7 @@ ${recipeOutputContract(day.people)}`;
         {tab === "plan" && (
           <PlanView
             days={days} meals={meals} busy={busy} dateFor={dateFor} forecast={forecast}
+            startDate={startDate} onShiftWeek={(delta: number) => setStartDate(addDays(startDate, delta))}
             onAccept={acceptMeal} onReject={rejectMeal}
             onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
             onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
@@ -1769,11 +1768,11 @@ function SetupView(p: any) {
       <div style={s.card}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 150 }}>
-            <label style={s.fieldLabel}><CalendarDays size={12} style={{ verticalAlign: -2 }} /> Start date</label>
+            <label style={s.fieldLabel}><CalendarDays size={12} style={{ verticalAlign: -2 }} /> Planning week</label>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ ...s.input, width: "100%" }} />
           </div>
-          <div style={{ width: 78 }}>
-            <label style={s.fieldLabel}>Days</label>
+          <div style={{ width: 96 }}>
+            <label style={s.fieldLabel}>Days to plan</label>
             <select value={numDays} onChange={(e) => setNumDays(Number(e.target.value))} style={{ ...s.input, width: "100%" }}>
               {[3, 4, 5, 6, 7].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -1931,17 +1930,37 @@ function TocStatusPill({ m, isPinned, isSkipped }: { m: any; isPinned: boolean; 
   return <span style={{ ...base, background: "var(--c-accent)", color: "var(--c-pill-text)" }}>Review</span>;
 }
 
-function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onAllAccepted, acceptedCount }: any) {
+function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onAllAccepted, acceptedCount, startDate, onShiftWeek }: any) {
   const firstMealIdx = days.findIndex((d: any) => meals[d.id]);
   const [activeMealIdx, setActiveMealIdx] = useState<number>(firstMealIdx >= 0 ? firstMealIdx : 0);
 
+  // TER-428: stepping the planning window ±7 is pure navigation — the window
+  // hydration machinery (TER-418/426) folds the old week into the date model
+  // and rehydrates the new one; nothing is cleared, every week keeps its meals.
+  const weekNav = (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)" }}>
+      <button onClick={() => onShiftWeek(-7)} aria-label="Previous week" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "8px 10px", flexShrink: 0 }}>
+        <ChevronLeft size={16} strokeWidth={2.2} />
+      </button>
+      <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, letterSpacing: "var(--t-label-tracking)", textTransform: "uppercase" as const, color: "var(--c-primary)", whiteSpace: "nowrap" as const }}>
+        Week of {parseISO(startDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+      </span>
+      <button onClick={() => onShiftWeek(7)} aria-label="Next week" className="btn-ghost btn--sm" style={{ minHeight: 0, padding: "8px 10px", flexShrink: 0 }}>
+        <ChevronRight size={16} strokeWidth={2.2} />
+      </button>
+    </div>
+  );
+
   if (!days.some((d: any) => meals[d.id])) {
     return (
-      <div style={s.card}>
-        <p style={s.empty}>No meals yet.</p>
-        <button onClick={onGenerate} disabled={busy} className="btn-primary" style={{ marginTop: 12 }}>
-          <Sparkles size={16} /> Generate meal plan
-        </button>
+      <div style={{ display: "grid", gap: "var(--space-3)" }}>
+        {weekNav}
+        <div style={s.card}>
+          <p style={s.empty}>No meals yet for this week.</p>
+          <button onClick={onGenerate} disabled={busy} className="btn-primary" style={{ marginTop: 12 }}>
+            <Sparkles size={16} /> Generate meal plan
+          </button>
+        </div>
       </div>
     );
   }
@@ -1959,6 +1978,8 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 
   return (
     <div style={{ display: "grid", gap: "var(--space-3)" }}>
+      {weekNav}
+
       {/* Day-rail navigator */}
       <div style={{ display: "flex", gap: "var(--space-1)" }}>
         {days.map((day: any, i: number) => {
@@ -2569,14 +2590,14 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
         )}
 
         {/* Mark ordered (TER-422: stamps scope meals; nothing is cleared) */}
-        {orderError && <p style={{ color: "var(--c-danger)", fontSize: 12, margin: "8px 0 4px" }}>Could not archive: {orderError}</p>}
+        {orderError && <p style={{ color: "var(--c-danger)", fontSize: 12, margin: "8px 0 4px" }}>Couldn't save the order: {orderError}</p>}
         <button
           onClick={markOrdered}
           disabled={scopeCount === 0 || ordering}
           className="btn-ghost btn--sm btn--block"
           style={{ marginTop: "var(--space-4)" }}
         >
-          {ordering ? <RefreshCw size={14} className="spin" /> : <Archive size={14} />}
+          {ordering ? <RefreshCw size={14} className="spin" /> : <PackageCheck size={14} />}
           {ordering ? "Marking..." : "Mark ordered"}
         </button>
         {canUnmark && (
@@ -2909,6 +2930,9 @@ function TodayCook({
     ? mealsByDate[activeDate]
     : null;
   const data = meal?.data;
+  // TER-428: an accepted entry with no recipe payload (corrupt/partial blob) is
+  // a different situation than an unplanned day — say so instead of "Nothing planned".
+  const corruptEntry = !!meal && !data;
 
   const defaultProg = { gathered: [] as number[], done: [] as number[], servings: data?.servings ?? 2, made: false };
   const prog = { ...defaultProg, ...(cookProgress[activeDate] ?? {}) };
@@ -2995,7 +3019,7 @@ function TodayCook({
       {/* ── NOTHING PLANNED ── */}
       {!data ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", padding: "var(--space-7)" }}>
-          <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", fontStyle: "italic", textAlign: "center", margin: 0 }}>Nothing planned for this day.</p>
+          <p style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-body-size)", color: "var(--c-text-muted)", fontStyle: "italic", textAlign: "center", margin: 0 }}>{corruptEntry ? "Recipe data not available for this day." : "Nothing planned for this day."}</p>
           {nextPlanned && (
             <button onClick={() => setActiveDate(nextPlanned)} className="btn-secondary btn--sm">
               Next dinner: {weekdayLabel(nextPlanned)} <ChevronRight size={15} strokeWidth={2.2} />
