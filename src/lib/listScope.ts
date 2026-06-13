@@ -8,6 +8,10 @@
  * Phase B lifts the scope from the planning window to the full forward range of
  * the date model: `listScopeFromModel` is what the app's groceryList chokepoint
  * uses. The window-bounded `listScope` form is no longer wired into the app.
+ *
+ * Phase D (TER-428) adds `reuseScopeFromModel`: the generation reuse context
+ * shares the list's scope so new dinners only coordinate with meals that will
+ * share their shopping trip.
  */
 import { addDays } from "./weekState";
 import type { DateModel, ISODate } from "./dateModel";
@@ -57,6 +61,28 @@ export function listScopeFromModel(model: DateModel, todayISO: ISODate): ScopeEn
     if (meal.orderedAt) continue;
     if (model.dayConfigByDate[date]?.skip) continue;
     out.push({ dayId: model.dayConfigByDate[date]?.id ?? "", date, meal });
+  }
+  return out;
+}
+
+/**
+ * TER-428: the generation reuse context — the recipe data a new dinner may
+ * coordinate ingredient reuse with. Same scope as the shopping list (≥ today,
+ * no `orderedAt` stamp, no skip) so provenance never cites ingredients that
+ * already left with a stamped trip (PR #101 review §1) — TER-400's repair
+ * remains the safety net. Unlike the list, "ready" proposals count too: they
+ * join the trip if accepted, and a rejection's replacement must not duplicate
+ * a sibling proposal. `excludeDate` drops the day being (re)generated.
+ */
+export function reuseScopeFromModel(model: DateModel, todayISO: ISODate, excludeDate?: ISODate): any[] {
+  const out: any[] = [];
+  for (const date of Object.keys(model.mealsByDate).sort()) {
+    if (date < todayISO || date === excludeDate) continue;
+    const meal = model.mealsByDate[date];
+    if (meal?.status !== "accepted" && meal?.status !== "ready") continue;
+    if (meal.orderedAt) continue;
+    if (model.dayConfigByDate[date]?.skip) continue;
+    if (meal.data != null) out.push(meal.data);
   }
   return out;
 }
