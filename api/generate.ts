@@ -111,6 +111,8 @@ export default async function handler(req: any, res: any) {
         .eq("user_id", userData.user.id)
         .gte("created_at", utcDayStartISO(new Date()));
       if (!countError) todayCount = count;
+      // TER-429: fail open on a broken metering query, but make it visible in logs.
+      else console.warn(`generate: quota count failed for user ${userData.user.id}; failing open`, countError);
     }
     if (isQuotaExceeded(todayCount, dailyLimit)) {
       res.status(429).json({ error: "Daily generation limit reached — resets at midnight UTC." });

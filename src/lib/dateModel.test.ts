@@ -146,7 +146,7 @@ describe("migrateLegacyBlob", () => {
     const blob = {
       savedAt: "2026-06-10T18:00:00.000Z",
       savedBy: "user-1",
-      location: { name: "Bloomfield, IA", lat: 40.7517, lon: -92.4154 },
+      location: { name: "Springfield, IL", lat: 39.7817, lon: -89.6501 },
       startDate: "2026-06-08",
       numDays: 4,
       days: [day("x1"), day("x2", { skip: true }), day("x3"), day("x4")],
