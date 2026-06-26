@@ -160,16 +160,20 @@ Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Incl
 {"name":"","description":"one short sentence","cuisine":"","servings":${servings},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"difficulty":0,"reuseNote":"","provenance":"","reuseNotes":[],"pantryNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
 }
 
-async function generateRecipeFromPrompt(prompt: string, token: string): Promise<any> {
+async function generateRecipeFromPrompt(
+  prompt: string,
+  token: string,
+  opts?: { model?: string; feature?: string },
+): Promise<any> {
+  const model   = opts?.model   ?? "claude-sonnet-4-6";
+  const feature = opts?.feature ?? "meal_gen";
   const r = await fetch("/api/generate", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
-    // TER-414: model is required by the server allowlist; max_tokens is clamped
-    // server-side. Swap to "claude-haiku-4-5-20251001" to cut cost.
-    body: JSON.stringify({ prompt, max_tokens: 5000, model: "claude-sonnet-4-6" }),
+    body: JSON.stringify({ prompt, max_tokens: 5000, model, feature }),
   });
   const data = await r.json();
   if (!r.ok) {
@@ -3322,6 +3326,7 @@ function IngestView({ session }: { session: any }) {
           prompt: buildReceiptParsePrompt(receiptText),
           max_tokens: 4000,
           model: "claude-haiku-4-5-20251001",
+          feature: "receipt_parse",
         }),
       });
       const data = await r.json();

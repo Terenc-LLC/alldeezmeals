@@ -83,6 +83,9 @@ export default async function handler(req: any, res: any) {
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
     const { prompt } = body;
+    const FEATURE_ALLOWLIST = ["meal_gen", "receipt_parse"] as const;
+    type Feature = (typeof FEATURE_ALLOWLIST)[number];
+    const feature: Feature = FEATURE_ALLOWLIST.includes(body.feature) ? body.feature : "meal_gen";
 
     if (!prompt) {
       res.status(400).json({ error: "Missing prompt" });
@@ -156,7 +159,7 @@ export default async function handler(req: any, res: any) {
           output_tokens:     outputTokens,
           cache_read_tokens: cacheReadTokens,
           cost_usd:          costUsd,
-          feature:           "meal_gen",
+          feature,
         });
       }
     } catch {
