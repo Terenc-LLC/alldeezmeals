@@ -2,23 +2,7 @@ import { useState, useEffect } from "react";
 import { RefreshCw, Check, Sparkles, AlertCircle } from "lucide-react";
 import { supabase } from "../../supabase.js";
 import { generateRecipeFromPrompt, buildSeedPrompt } from "../../lib/recipeGenerate.js";
-
-const serif = "'Plus Jakarta Sans', system-ui, sans-serif";
-const sans  = "'Plus Jakarta Sans', -apple-system, sans-serif";
-
-const s: Record<string, any> = {
-  card:        { background: "var(--c-surface)", borderRadius: 13, padding: 16, border: "1px solid var(--c-border)" },
-  cardTitle:   { fontFamily: serif, fontSize: 16.5, fontWeight: 600, margin: 0 },
-  ghostBtn:    { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", background: "transparent", color: "var(--c-text-muted)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)", padding: "0 var(--space-4)", minHeight: "var(--tap-min)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer" },
-  primaryBtn:  { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)", background: "var(--c-primary)", color: "var(--c-on-primary)", border: "none", borderRadius: "var(--radius-md)", padding: "0 var(--space-4)", minHeight: "var(--tap-min)", fontFamily: "var(--font-sans)", fontWeight: 700, fontSize: "var(--t-body-size)", cursor: "pointer", boxShadow: "var(--elev-primary)" },
-  iconBtn:     { background: "transparent", border: "none", cursor: "pointer", padding: 5, borderRadius: 6, display: "grid", placeItems: "center" },
-  dayBlock:    { background: "var(--c-surface-2)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 11 },
-  empty:       { color: "var(--c-text-muted)", fontSize: 13.5, fontStyle: "italic", margin: 0 },
-  miniLabel:   { fontSize: 11, color: "var(--c-text-muted)" },
-  fieldLabel:  { fontSize: 11, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase", letterSpacing: ".04em", display: "block", marginBottom: 5 },
-  input:       { padding: "9px 10px", border: "1px solid var(--c-border)", borderRadius: 8, fontFamily: sans, fontSize: 13, color: "var(--c-text)", boxSizing: "border-box", background: "var(--c-surface)" },
-  collapseBtn: { width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", cursor: "pointer", fontSize: 14, color: "var(--c-text)", fontFamily: sans },
-};
+import { s } from "../../lib/styles";
 
 /* ============================ Catalog ============================ */
 type CatalogItem = {
