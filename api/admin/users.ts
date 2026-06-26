@@ -29,15 +29,20 @@ export default async function handler(req: any, res: any) {
   const dinnersAcceptedMap = new Map<string, number>();
   for (const row of userStateRes.data ?? []) {
     userStateMap.set(row.user_id, row.updated_at);
-    const state = row.state;
-    if (!state || typeof state !== "object") { dinnersAcceptedMap.set(row.user_id, 0); continue; }
-    // Date-model blobs carry mealsByDate directly; pre-Phase-A blobs migrate via migrateLegacyBlob.
-    const mealsByDate = (state as any).mealsByDate ?? migrateLegacyBlob(state).mealsByDate;
-    let accepted = 0;
-    for (const meal of Object.values(mealsByDate ?? {})) {
-      if ((meal as any)?.status === "accepted") accepted++;
+    // Defense in depth: a single malformed user_state.state blob must never crash the endpoint.
+    try {
+      const state = row.state;
+      if (!state || typeof state !== "object") { dinnersAcceptedMap.set(row.user_id, 0); continue; }
+      // Date-model blobs carry mealsByDate directly; pre-Phase-A blobs migrate via migrateLegacyBlob.
+      const mealsByDate = (state as any).mealsByDate ?? migrateLegacyBlob(state).mealsByDate;
+      let accepted = 0;
+      for (const meal of Object.values(mealsByDate ?? {})) {
+        if ((meal as any)?.status === "accepted") accepted++;
+      }
+      dinnersAcceptedMap.set(row.user_id, accepted);
+    } catch {
+      dinnersAcceptedMap.set(row.user_id, 0);
     }
-    dinnersAcceptedMap.set(row.user_id, accepted);
   }
 
   const planCountMap = new Map<string, number>();

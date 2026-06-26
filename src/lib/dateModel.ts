@@ -5,7 +5,7 @@
  * today's positional `days[]` + `meals` keyed by `day.id`. Conversion happens
  * at the persistence boundary via the pure functions below.
  */
-import { addDays } from "./weekState";
+import { addDays } from "./weekState.js";
 
 export type ISODate = string; // "2026-06-15"
 
