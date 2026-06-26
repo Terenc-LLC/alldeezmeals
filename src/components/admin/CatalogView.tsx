@@ -54,6 +54,18 @@ type AdminUser = {
   qualification_slot: number | null;
 };
 
+type FeedbackItem = {
+  id: string;
+  user_id: string | null;
+  email: string | null;
+  message: string;
+  category: string | null;
+  app_context: string | null;
+  created_at: string;
+  first_name: string | null;
+  last_name: string | null;
+};
+
 type PendingRecipe = {
   id: number;
   name: string;
@@ -101,6 +113,10 @@ function CatalogView({ session }: { session: any }) {
   const [allUsersFilter, setAllUsersFilter] = useState<"all" | "pending" | "approved" | "qualified">("all");
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
 
+  // TER-492: feedback viewer
+  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+
   // TER-357: pending recipe review queue
   const [pendingRecipes, setPendingRecipes] = useState<PendingRecipe[]>([]);
   const [recipesLoading, setRecipesLoading] = useState(false);
@@ -126,7 +142,7 @@ function CatalogView({ session }: { session: any }) {
   const [grantResult, setGrantResult] = useState<string | null>(null);
   const [granting, setGranting] = useState(false);
 
-  useEffect(() => { loadItems(); loadSubmissions(); loadAllUsers(); loadQualifiedUsers(); loadPendingRecipes(); }, []);
+  useEffect(() => { loadItems(); loadSubmissions(); loadAllUsers(); loadQualifiedUsers(); loadPendingRecipes(); loadFeedback(); }, []);
 
   const loadItems = async () => {
     setLoading(true);
@@ -284,6 +300,19 @@ function CatalogView({ session }: { session: any }) {
       setRecipeIdx(0);
     } catch { /* ignore */ }
     setRecipesLoading(false);
+  };
+
+  const loadFeedback = async () => {
+    const token = session?.access_token ?? "";
+    if (!token) return;
+    setFeedbackLoading(true);
+    try {
+      const r = await fetch("/api/admin/list-feedback", { headers: { authorization: `Bearer ${token}` } });
+      if (!r.ok) { setFeedbackLoading(false); return; }
+      const data = await r.json();
+      setFeedback(data.feedback ?? []);
+    } catch { /* ignore */ }
+    setFeedbackLoading(false);
   };
 
   const handleApproveRecipe = async (id: number) => {
@@ -658,6 +687,38 @@ function CatalogView({ session }: { session: any }) {
             </div>
           );
         })()}
+      </div>
+      {/* ── Feedback (TER-492) ── */}
+      <div style={{ ...s.card, marginBottom: 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <h3 style={{ ...s.cardTitle, margin: 0 }}>
+            Feedback ({feedbackLoading ? "…" : feedback.length})
+          </h3>
+          <button onClick={loadFeedback} style={s.ghostBtn} disabled={feedbackLoading}>
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
+        {feedbackLoading && <p style={s.empty}>Loading…</p>}
+        {!feedbackLoading && feedback.length === 0 && <p style={s.empty}>No feedback submitted yet.</p>}
+        {feedback.map(fb => {
+          const name = [fb.first_name, fb.last_name].filter(Boolean).join(" ") || fb.email || "—";
+          const categoryLabel = fb.category === "bug" ? "Bug" : fb.category === "idea" ? "Idea" : fb.category === "other" ? "Other" : fb.category ?? "—";
+          return (
+            <div key={fb.id} style={{ ...s.dayBlock, marginBottom: 8, padding: "10px 12px" }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" as const, alignItems: "baseline", marginBottom: 4 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: "var(--c-text)" }}>{name}</span>
+                <span style={{ fontSize: 11.5, background: "var(--c-surface-2)", color: "var(--c-text-muted)", borderRadius: 4, padding: "1px 6px" }}>{categoryLabel}</span>
+                {fb.app_context && (
+                  <span style={{ fontSize: 11.5, color: "var(--c-text-muted)" }}>{fb.app_context}</span>
+                )}
+                <span style={{ fontSize: 11, color: "var(--c-text-muted)", marginLeft: "auto" }}>
+                  {new Date(fb.created_at).toLocaleString()}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: "var(--c-text)", lineHeight: 1.5 }}>{fb.message}</p>
+            </div>
+          );
+        })}
       </div>
       {/* ── Seed library (TER-358) ── */}
       <div style={{ ...s.card, borderColor: "var(--c-primary)", marginBottom: 4 }}>
