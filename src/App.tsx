@@ -3434,6 +3434,9 @@ function IngestView({ session }: { session: any }) {
         <p style={{ ...s.cardSub, marginTop: 4 }}>
           Paste your ALDI order confirmation or receipt. Claude extracts each item; you review before it's logged to the shared catalog.
         </p>
+        <p style={{ fontSize: 12.5, color: "var(--c-text-muted)", lineHeight: 1.6, marginTop: 8 }}>
+          Text-paste only for now — photographing or scanning a paper receipt isn't supported yet. Get the text from your <strong>ALDI / Instacart order-confirmation email</strong>, or the <strong>Instacart app</strong> (Your Orders → the order → copy items). A physical-only receipt can be typed in following the placeholder format.
+        </p>
         <textarea
           value={receiptText}
           onChange={(e) => setReceiptText(e.target.value)}
