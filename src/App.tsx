@@ -1187,7 +1187,7 @@ ${recipeOutputContract(day.people)}`;
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`Shopping List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Recipe Box (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
-        {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Boxes size={15} />} label="Catalog" />}
+        {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Boxes size={15} />} label="Admin" />}
       </nav>
 
       <main style={s.main}>
