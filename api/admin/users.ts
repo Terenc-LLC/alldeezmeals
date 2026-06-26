@@ -15,7 +15,7 @@ export default async function handler(req: any, res: any) {
   const [profilesRes, userStateRes, llmRes, qualsRes, feedbackRes] = await Promise.all([
     svc.from("profiles").select("id, email, first_name, last_name, approved, signup_source, requested_at").order("requested_at", { ascending: false }),
     svc.from("user_state").select("user_id, updated_at"),
-    svc.from("llm_usage").select("user_id").eq("feature", "generate"),
+    svc.from("llm_usage").select("user_id").eq("feature", "meal_gen"),
     svc.from("qualifications").select("user_id, qualification_number"),
     svc.from("feedback").select("user_id"),
   ]);
