@@ -48,7 +48,8 @@ type AdminUser = {
   signup_source: string | null;
   created_at: string;
   last_active: string | null;
-  plan_count: number;
+  recipes_generated: number;
+  dinners_accepted: number;
   feedback_count: number;
   qualified: boolean;
   qualification_slot: number | null;
@@ -108,7 +109,7 @@ function CatalogView({ session }: { session: any }) {
   // TER-368: unified user table
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [allUsersLoading, setAllUsersLoading] = useState(false);
-  const [allUsersSortCol, setAllUsersSortCol] = useState<"created_at" | "last_active" | "plan_count">("created_at");
+  const [allUsersSortCol, setAllUsersSortCol] = useState<"created_at" | "last_active" | "recipes_generated">("created_at");
   const [allUsersSortDir, setAllUsersSortDir] = useState<"asc" | "desc">("desc");
   const [allUsersFilter, setAllUsersFilter] = useState<"all" | "pending" | "approved" | "qualified">("all");
   const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
@@ -599,7 +600,7 @@ function CatalogView({ session }: { session: any }) {
           const sortedUsers = [...visibleUsers].sort((a, b) => {
             let av: any, bv: any;
             if (allUsersSortCol === "last_active") { av = a.last_active ?? ""; bv = b.last_active ?? ""; }
-            else if (allUsersSortCol === "plan_count") { av = a.plan_count; bv = b.plan_count; }
+            else if (allUsersSortCol === "recipes_generated") { av = a.recipes_generated; bv = b.recipes_generated; }
             else { av = a.created_at; bv = b.created_at; }
             if (av < bv) return allUsersSortDir === "asc" ? -1 : 1;
             if (av > bv) return allUsersSortDir === "asc" ? 1 : -1;
@@ -628,7 +629,11 @@ function CatalogView({ session }: { session: any }) {
                     <th style={thStyle()}>Qualified</th>
                     <th style={thStyle(true)} onClick={() => toggleSort("created_at")}>Signed up{sortArrow("created_at")}</th>
                     <th style={thStyle(true)} onClick={() => toggleSort("last_active")}>Last active{sortArrow("last_active")}</th>
-                    <th style={thStyle(true)} onClick={() => toggleSort("plan_count")}>Plans{sortArrow("plan_count")}</th>
+                    <th style={thStyle(true)} onClick={() => toggleSort("recipes_generated")}>Recipes generated{sortArrow("recipes_generated")}</th>
+                    {/* TER-499: display-only (not sortable) for v1 — matches the Feedback column. */}
+                    <th style={thStyle()}>Dinners accepted</th>
+                    <th style={thStyle()}>Accept rate</th>
+                    {/* TODO(TER-499): "Recipes reused" column — deferred until reuse tracking exists (no data source yet). */}
                     <th style={thStyle()}>Feedback</th>
                     <th style={thStyle()}>Source</th>
                     <th style={thStyle()}>Actions</th>
@@ -656,7 +661,12 @@ function CatalogView({ session }: { session: any }) {
                         </td>
                         <td style={{ padding: "7px 8px", color: "var(--c-text-muted)", whiteSpace: "nowrap" }}>{fmtDate(user.created_at)}</td>
                         <td style={{ padding: "7px 8px", color: "var(--c-text-muted)", whiteSpace: "nowrap" }}>{fmtDate(user.last_active)}</td>
-                        <td style={{ padding: "7px 8px", color: "var(--c-text)", textAlign: "center" }}>{user.plan_count}</td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text)", textAlign: "center" }}>{user.recipes_generated}</td>
+                        <td style={{ padding: "7px 8px", color: "var(--c-text)", textAlign: "center" }}>{user.dinners_accepted}</td>
+                        {/* Accept rate = dinners_accepted / recipes_generated — perceived-quality read; guard ÷0 → "—". */}
+                        <td style={{ padding: "7px 8px", color: "var(--c-text)", textAlign: "center" }}>
+                          {user.recipes_generated > 0 ? `${Math.round((user.dinners_accepted / user.recipes_generated) * 100)}%` : "—"}
+                        </td>
                         <td style={{ padding: "7px 8px", color: "var(--c-text)", textAlign: "center" }}>{user.feedback_count}</td>
                         <td style={{ padding: "7px 8px", color: "var(--c-text-muted)" }}>{user.signup_source ?? "—"}</td>
                         <td style={{ padding: "7px 8px" }}>
