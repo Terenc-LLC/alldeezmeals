@@ -44,10 +44,35 @@ type FoodPortion = { modifier: string; gramWeight: number };
 
 export type NutritionTier = "catalog" | "usda" | "estimate";
 
+export type Macros = { protein_g: number; fat_g: number; carbs_g: number };
+
 export type NutritionResult = {
   kcalPerServing: number | null; // null = unresolved with no usable estimate
   tier: NutritionTier;
+  // TER-493: macros per serving — real when every contributing ingredient carries
+  // macros AND Calories resolved; estimated (estMacrosPerServing) otherwise; null when
+  // neither real nor estimated macros exist (never fabricated).
+  macrosPerServing: Macros | null;
+  macrosEstimated: boolean;
 };
+
+// Coerce arbitrary JSON (catalog row / API response) into a clean Macros or null.
+function coerceMacros(m: any): Macros | null {
+  if (!m || typeof m !== "object") return null;
+  const protein_g = Number(m.protein_g);
+  const fat_g = Number(m.fat_g);
+  const carbs_g = Number(m.carbs_g);
+  if (![protein_g, fat_g, carbs_g].every((x) => Number.isFinite(x))) return null;
+  return { protein_g, fat_g, carbs_g };
+}
+
+function roundMacros(m: Macros): Macros {
+  return {
+    protein_g: Math.round(m.protein_g),
+    fat_g: Math.round(m.fat_g),
+    carbs_g: Math.round(m.carbs_g),
+  };
+}
 
 // Extract the leading numeric value from a portion modifier like "2 tablespoons" → 2.
 function numericPrefix(text: string): number {
@@ -86,14 +111,14 @@ export function toGrams(qty: number, unit: string, portions: FoodPortion[]): num
 
 // ---- Internal ingredient result type ----
 type IngResult =
-  | { kind: "ok"; kcalPer100g: number; grams: number; tier: "catalog" | "usda" }
+  | { kind: "ok"; kcalPer100g: number; macrosPer100g: Macros | null; grams: number; tier: "catalog" | "usda" }
   | { kind: "skip" }
   | { kind: "unresolved" };
 
 async function fetchNutritionApi(
   ingredient: string,
   token: string,
-): Promise<{ hit: boolean; kcal_per_100g?: number; foodPortions?: FoodPortion[]; miss_reason?: string } | null> {
+): Promise<{ hit: boolean; kcal_per_100g?: number; macros?: any; foodPortions?: FoodPortion[]; miss_reason?: string } | null> {
   try {
     const r = await fetch("/api/nutrition", {
       method: "POST",
@@ -110,11 +135,35 @@ async function fetchNutritionApi(
   }
 }
 
+// TER-493: lazy-pull catalog nutrition by representative UPC for an ingredient whose
+// direct catalog lookup came back empty. Fired only for catalog misses (populated
+// ingredients stay a cheap direct read). Returns existing nutrition if present, else
+// probes UPC-bearing rows and persists the first FDC/OFF hit onto the catalog row.
+async function fetchCatalogPull(
+  normalizedName: string,
+  token: string,
+): Promise<{ hit: boolean; kcal_per_100g?: number; macros?: any } | null> {
+  try {
+    const r = await fetch("/api/catalog-nutrition-pull", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ normalizedName }),
+    });
+    if (!r.ok) return null;
+    return r.json();
+  } catch {
+    return null;
+  }
+}
+
 // Resolve kcal/serving for a generated meal.
 // Deduplicates ingredients by normalized name, fires all lookups in parallel,
 // and returns the computed result with a source tier badge.
 export async function resolveNutrition(
-  meal: { ingredients: any[]; servings: number; estKcalPerServing?: number | null },
+  meal: { ingredients: any[]; servings: number; estKcalPerServing?: number | null; estMacrosPerServing?: Macros | null },
   token: string,
 ): Promise<NutritionResult> {
   const servings = Math.max(1, meal.servings || 1);
@@ -132,13 +181,16 @@ export async function resolveNutrition(
     uniqueIngs.push({ key, name, qty: Number(ra.qty) || 0, unit: String(ra.unit || "").trim() });
   }
 
+  const isSkip = (ing: { name: string; unit: string }) =>
+    SKIP_TERMS.some((t) => ing.name.toLowerCase().includes(t) || ing.unit.toLowerCase().includes(t));
+
+  type CatRes = { kcal: number; macros: Macros | null };
+
   // Fire USDA API and catalog queries in parallel.
-  const [nutritionResponses, catalogKcals] = await Promise.all([
+  const [nutritionResponses, catalogRows] = await Promise.all([
     Promise.all(
       uniqueIngs.map((ing) => {
-        if (SKIP_TERMS.some((t) => ing.name.toLowerCase().includes(t) || ing.unit.toLowerCase().includes(t))) {
-          return Promise.resolve(null);
-        }
+        if (isSkip(ing)) return Promise.resolve(null);
         return fetchNutritionApi(ing.name, token);
       }),
     ),
@@ -146,28 +198,44 @@ export async function resolveNutrition(
       uniqueIngs.map((ing) =>
         supabase
           .from("catalog")
-          .select("kcal_per_100g")
+          .select("kcal_per_100g, macros, serving_g")
           .eq("normalized_name", ing.key)       // generic ingredient lookup column
           .not("kcal_per_100g", "is", null)
           .limit(1)                             // normalized_name is non-unique (TER-202)
           .maybeSingle()
           .then(
-            ({ data }) => (data?.kcal_per_100g as number | null) ?? null,
-            () => null as number | null,
+            ({ data }): CatRes | null =>
+              data?.kcal_per_100g != null
+                ? { kcal: data.kcal_per_100g as number, macros: coerceMacros(data.macros) }
+                : null,
+            () => null as CatRes | null,
           ),
       ),
     ),
   ]);
 
+  // TER-493: lazy-pull by UPC only for catalog misses (non-skip ingredients with no
+  // populated catalog row). Fired in parallel; populated ingredients stay a cheap read.
+  const pullRows: Array<CatRes | null> = await Promise.all(
+    uniqueIngs.map((ing, i) => {
+      if (isSkip(ing) || catalogRows[i] != null) return Promise.resolve(null as CatRes | null);
+      return fetchCatalogPull(ing.key, token).then((res): CatRes | null =>
+        res?.hit && res.kcal_per_100g != null
+          ? { kcal: Number(res.kcal_per_100g), macros: coerceMacros(res.macros) }
+          : null,
+      );
+    }),
+  );
+
   // Resolve each ingredient to a result.
   const ingResults: IngResult[] = uniqueIngs.map((ing, i) => {
     // Skip by name/unit.
-    if (SKIP_TERMS.some((t) => ing.name.toLowerCase().includes(t) || ing.unit.toLowerCase().includes(t))) {
+    if (isSkip(ing)) {
       return { kind: "skip" };
     }
 
     const nutRes = nutritionResponses[i];
-    const catalogKcal = catalogKcals[i];
+    const catRes = catalogRows[i] ?? pullRows[i];
 
     // API reported this ingredient should be skipped (e.g., "salt to taste").
     if (nutRes?.hit === false && nutRes.miss_reason === "skip") {
@@ -178,42 +246,74 @@ export async function resolveNutrition(
     const grams = toGrams(ing.qty, ing.unit, portions);
     if (grams === null) return { kind: "unresolved" };
 
-    // Catalog kcal takes priority; fall back to USDA.
-    if (catalogKcal != null) {
-      return { kind: "ok", kcalPer100g: catalogKcal, grams, tier: "catalog" };
+    // Catalog (incl. lazy-pull) kcal takes priority; fall back to USDA. Carry macros.
+    if (catRes != null) {
+      return { kind: "ok", kcalPer100g: catRes.kcal, macrosPer100g: catRes.macros, grams, tier: "catalog" };
     }
     if (nutRes?.hit && nutRes.kcal_per_100g != null) {
-      return { kind: "ok", kcalPer100g: nutRes.kcal_per_100g, grams, tier: "usda" };
+      return { kind: "ok", kcalPer100g: nutRes.kcal_per_100g, macrosPer100g: coerceMacros(nutRes.macros), grams, tier: "usda" };
     }
 
     // No kcal data (API miss or network failure).
     return { kind: "unresolved" };
   });
 
-  // Any material ingredient unresolved → fall back to LLM estimate.
-  // Return null (not 0) when the estimate is also absent — never fabricate a number.
-  const hasUnresolved = ingResults.some((r) => r.kind === "unresolved");
-  if (hasUnresolved) {
+  // Estimate-tier fallback (Calories AND macros): used when any material ingredient is
+  // unresolved or every ingredient is skipped. Never fabricate — null when the estimate
+  // is absent too.
+  const estResult = (): NutritionResult => {
     const est = meal.estKcalPerServing;
-    return { kcalPerServing: est && est > 0 ? est : null, tier: "estimate" };
-  }
+    const em = coerceMacros(meal.estMacrosPerServing);
+    return {
+      kcalPerServing: est && est > 0 ? est : null,
+      tier: "estimate",
+      macrosPerServing: em ? roundMacros(em) : null,
+      macrosEstimated: em != null,
+    };
+  };
+
+  // Any material ingredient unresolved → fall back to LLM estimate.
+  if (ingResults.some((r) => r.kind === "unresolved")) return estResult();
 
   // All skipped (entirely "to taste" ingredients) → fall back to estimate.
-  if (ingResults.every((r) => r.kind === "skip")) {
-    const est = meal.estKcalPerServing;
-    return { kcalPerServing: est && est > 0 ? est : null, tier: "estimate" };
-  }
+  if (ingResults.every((r) => r.kind === "skip")) return estResult();
 
-  // Sum computed kcal; track weakest tier.
+  // Sum computed kcal + macro grams; track weakest tier and macro completeness.
   let totalKcal = 0;
   let weakestTier: "catalog" | "usda" = "catalog";
+  const macroTotal: Macros = { protein_g: 0, fat_g: 0, carbs_g: 0 };
+  let allHaveMacros = true;
   for (const r of ingResults) {
     if (r.kind !== "ok") continue;
     totalKcal += (r.grams * r.kcalPer100g) / 100;
     if (r.tier === "usda") weakestTier = "usda";
+    if (r.macrosPer100g) {
+      macroTotal.protein_g += (r.grams * r.macrosPer100g.protein_g) / 100;
+      macroTotal.fat_g += (r.grams * r.macrosPer100g.fat_g) / 100;
+      macroTotal.carbs_g += (r.grams * r.macrosPer100g.carbs_g) / 100;
+    } else {
+      allHaveMacros = false;
+    }
   }
 
-  return { kcalPerServing: Math.round(totalKcal / servings), tier: weakestTier };
+  // Honest macros: real only if every contributing ingredient carries macros; otherwise
+  // fall back to the meal's estimate (marked estimated), or null when none exists.
+  let macrosPerServing: Macros | null;
+  let macrosEstimated: boolean;
+  if (allHaveMacros) {
+    macrosPerServing = roundMacros({
+      protein_g: macroTotal.protein_g / servings,
+      fat_g: macroTotal.fat_g / servings,
+      carbs_g: macroTotal.carbs_g / servings,
+    });
+    macrosEstimated = false;
+  } else {
+    const em = coerceMacros(meal.estMacrosPerServing);
+    macrosPerServing = em ? roundMacros(em) : null;
+    macrosEstimated = em != null;
+  }
+
+  return { kcalPerServing: Math.round(totalKcal / servings), tier: weakestTier, macrosPerServing, macrosEstimated };
 }
 
 // ---- Module-level assertions (run at import time, fail loudly if logic drifts) ----

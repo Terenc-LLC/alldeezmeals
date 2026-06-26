@@ -1206,7 +1206,7 @@ ${recipeOutputContract(day.people)}`;
                 ["Prep", meal.data.prepMinutes != null ? `${meal.data.prepMinutes} min` : "—"],
                 ["Cook", meal.data.cookMinutes != null ? `${meal.data.cookMinutes} min` : "—"],
                 ["Serves", String(meal.data.servings ?? "—")],
-                ["Per serving", meal.kcalInfo?.kcalPerServing != null ? `~${meal.kcalInfo.kcalPerServing} kcal` : "—"],
+                ["Per serving", meal.kcalInfo?.kcalPerServing != null ? `~${meal.kcalInfo.kcalPerServing} Calories` : "—"],
                 ["Effort", meal.data.difficulty != null ? `${(["Premade","Minimal","Simple","Moderate","Involved","Intricate"] as const)[meal.data.difficulty]} (${meal.data.difficulty}/5)` : "—"],
               ] as [string, string][]).map(([k, v]) => (
                 <div key={k}>
@@ -1249,7 +1249,7 @@ ${recipeOutputContract(day.people)}`;
             {/* footer */}
             <div style={{ marginTop: "var(--space-7)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--c-border)", display: "flex", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-2)" }}>
               <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>Printed from ALLDEEZMeals · {new Date().toLocaleDateString()}</span>
-              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>kcal source: USDA FoodData Central</span>
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", fontWeight: 600, color: "var(--c-text-muted)" }}>Calories source: USDA FoodData Central</span>
             </div>
           </div>
         </div>
@@ -2047,7 +2047,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                 {m.kcalInfo && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
                     <Flame size={14} color="var(--c-primary)" />
-                    ~{m.kcalInfo.kcalPerServing} kcal
+                    ~{m.kcalInfo.kcalPerServing} Calories
                     {m.kcalInfo.tier === "estimate" && (
                       <span style={{ background: "var(--c-warning-bg)", color: "var(--c-warning)", fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: "var(--radius-pill)", lineHeight: 1 }}>Est.</span>
                     )}
@@ -2648,7 +2648,7 @@ function ManualRecipeForm({ rotation, onSave, onCancel }: { rotation: any[]; onS
             <input type="number" min={0} value={cookMinutes} onChange={e => setCookMinutes(e.target.value)} style={{ ...s.input, width: "100%", textAlign: "center" }} />
           </div>
           <div style={{ flex: 1, minWidth: isMobile ? "40%" : 100 }}>
-            <label style={s.fieldLabel}>Est. kcal/serving</label>
+            <label style={s.fieldLabel}>Est. Calories/serving</label>
             <input type="number" min={0} value={estKcal} onChange={e => setEstKcal(e.target.value)} placeholder="optional" style={{ ...s.input, width: "100%", textAlign: "center" }} />
           </div>
         </div>
@@ -2908,6 +2908,8 @@ function TodayCook({
   const difficulty: number | null = data?.difficulty ?? null;
   const diffLabel = difficulty != null ? (DIFFICULTY_LABELS[difficulty] ?? "") : "";
   const kcal = meal?.kcalInfo?.kcalPerServing ?? null;
+  const macros = meal?.kcalInfo?.macrosPerServing ?? null;
+  const macrosEst = meal?.kcalInfo?.macrosEstimated || meal?.kcalInfo?.tier === "estimate";
 
   const footerBase: React.CSSProperties = { position: "sticky", bottom: 0, background: "var(--c-surface)", borderTop: "1px solid var(--c-border)", padding: "var(--space-4) var(--space-5)", boxShadow: "0 -2px 10px rgba(26,58,52,.05)" };
 
@@ -2993,7 +2995,12 @@ function TodayCook({
                 )}
                 {kcal && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
-                    <Flame size={15} color="var(--c-primary)" strokeWidth={1.8} />~{kcal} kcal
+                    <Flame size={15} color="var(--c-primary)" strokeWidth={1.8} />~{kcal} Calories
+                  </span>
+                )}
+                {macros && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", color: "var(--c-text-muted)" }}>
+                    P {macros.protein_g}g · F {macros.fat_g}g · C {macros.carbs_g}g{macrosEst ? " est." : ""}
                   </span>
                 )}
                 {difficulty != null && (
@@ -3483,10 +3490,10 @@ function KcalBadge({ kcalPerServing, tier }: { kcalPerServing: number | null; ti
     <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, flexWrap: "wrap" as const }}>
       {kcalPerServing !== null ? (
         <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--c-text)" }}>
-          {isEst ? "~" : ""}{kcalPerServing} kcal/serving
+          {isEst ? "~" : ""}{kcalPerServing} Calories/serving
         </span>
       ) : (
-        <span style={{ fontSize: 13, color: "var(--c-warning)" }}>— kcal/serving</span>
+        <span style={{ fontSize: 13, color: "var(--c-warning)" }}>— Calories/serving</span>
       )}
       <span style={{
         fontSize: 10, fontWeight: 700,
@@ -3569,13 +3576,13 @@ function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, is
         <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-4)", marginTop: "var(--space-3)" }}>
           {totalMin > 0 && <span style={s.rcMetaItem}><Clock size={15} color="var(--c-primary)" />{totalMin} min</span>}
           {meal.servings && <span style={s.rcMetaItem}><Users size={15} color="var(--c-primary)" />Serves {meal.servings}</span>}
-          {kcalInfo?.kcalPerServing != null && <span style={s.rcMetaItem}><Flame size={15} color="var(--c-primary)" />~{kcalInfo.kcalPerServing} kcal</span>}
+          {kcalInfo?.kcalPerServing != null && <span style={s.rcMetaItem}><Flame size={15} color="var(--c-primary)" />~{kcalInfo.kcalPerServing} Calories</span>}
         </div>
         {/* 5. Badges */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-3)", alignItems: "center" }}>
           {kcalInfo?.kcalPerServing != null && (
             <span style={kcalInfo.tier === "estimate" ? s.rcKcalBadgeEst : s.rcKcalBadge}>
-              {kcalInfo.tier === "usda" ? "USDA" : kcalInfo.tier === "catalog" ? "ALDI catalog" : "Estimated"} · {kcalInfo.kcalPerServing} kcal/serving
+              {kcalInfo.tier === "usda" ? "USDA" : kcalInfo.tier === "catalog" ? "ALDI catalog" : "Estimated"} · {kcalInfo.kcalPerServing} Calories/serving
             </span>
           )}
           {meal.difficulty != null && (
