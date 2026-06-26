@@ -33,6 +33,7 @@ session (status, decisions, next steps).
 - Always include the standing staples (breakfast/lunch) in the grocery list.
 - Force cuisine variety across the week unless a cuisine is pinned per day.
 - **Recipe originality**: all generated recipes must be original — original cooking directions and descriptions in the model's own words; never copied text from published recipes. (Ingredient quantities/lists are fine.) Only model-generated recipes enter the global `recipe_library`; user-entered recipes (TER-234) are account-private and never sync.
+- **Codebase decomposition (`App.tsx`) — standing rule.** No new feature is built *inside* `src/App.tsx`; new features land in their own module. When a queued issue touches a feature still living in `App.tsx`, extract that feature **opportunistically, as a pure-move PR separate from the feature change**, so each diff stays reviewable. Preserve all infrastructure identifiers (`STORAGE_KEY`, `VALID_TABS` entries, tab keys, persisted shapes) and the inline-`s`/CSS-var + `.ts`→`.js` conventions on every move. `App.tsx` trends toward a router/shell over time; a big-bang rewrite is rejected. Demand-paced — extractions happen as adjacent work surfaces, never as a standalone push. Tracked by the [TER-494](https://linear.app/terenc/issue/TER-494/umbrella-incrementally-decompose-apptsx-monolith-modules) umbrella.
 
 ## Status (TER-173 — May 2026)
 - Per-user Supabase schema + RLS (TER-173): created five tables with row-level security.

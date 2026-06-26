@@ -1,6 +1,7 @@
 // TER-368: unified admin user list with engagement metrics
 import { createClient } from "@supabase/supabase-js";
 import { getAuthedUser } from "../_admin.js";
+import { migrateLegacyBlob } from "../../src/lib/dateModel.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") { res.status(405).json({ error: "Method not allowed" }); return; }
@@ -14,7 +15,7 @@ export default async function handler(req: any, res: any) {
 
   const [profilesRes, userStateRes, llmRes, qualsRes, feedbackRes] = await Promise.all([
     svc.from("profiles").select("id, email, first_name, last_name, approved, signup_source, requested_at").order("requested_at", { ascending: false }),
-    svc.from("user_state").select("user_id, updated_at"),
+    svc.from("user_state").select("user_id, updated_at, state"),
     svc.from("llm_usage").select("user_id").eq("feature", "meal_gen"),
     svc.from("qualifications").select("user_id, qualification_number"),
     svc.from("feedback").select("user_id"),
@@ -23,7 +24,21 @@ export default async function handler(req: any, res: any) {
   if (profilesRes.error) { res.status(500).json({ error: profilesRes.error.message }); return; }
 
   const userStateMap = new Map<string, string>();
-  for (const row of userStateRes.data ?? []) userStateMap.set(row.user_id, row.updated_at);
+  // TER-499: count accepted dinners across ALL dates in each user's date model
+  // (no date / orderedAt filter — an ordered dinner was still an approved recipe).
+  const dinnersAcceptedMap = new Map<string, number>();
+  for (const row of userStateRes.data ?? []) {
+    userStateMap.set(row.user_id, row.updated_at);
+    const state = row.state;
+    if (!state || typeof state !== "object") { dinnersAcceptedMap.set(row.user_id, 0); continue; }
+    // Date-model blobs carry mealsByDate directly; pre-Phase-A blobs migrate via migrateLegacyBlob.
+    const mealsByDate = (state as any).mealsByDate ?? migrateLegacyBlob(state).mealsByDate;
+    let accepted = 0;
+    for (const meal of Object.values(mealsByDate ?? {})) {
+      if ((meal as any)?.status === "accepted") accepted++;
+    }
+    dinnersAcceptedMap.set(row.user_id, accepted);
+  }
 
   const planCountMap = new Map<string, number>();
   for (const row of llmRes.data ?? []) planCountMap.set(row.user_id, (planCountMap.get(row.user_id) ?? 0) + 1);
@@ -43,7 +58,8 @@ export default async function handler(req: any, res: any) {
     signup_source: (p.signup_source ?? null) as string | null,
     created_at: p.requested_at as string,
     last_active: (userStateMap.get(p.id) ?? null) as string | null,
-    plan_count: planCountMap.get(p.id) ?? 0,
+    recipes_generated: planCountMap.get(p.id) ?? 0,
+    dinners_accepted: dinnersAcceptedMap.get(p.id) ?? 0,
     feedback_count: feedbackCountMap.get(p.id) ?? 0,
     qualified: qualsMap.has(p.id),
     qualification_slot: qualsMap.get(p.id) ?? null,
