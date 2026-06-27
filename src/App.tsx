@@ -2556,13 +2556,6 @@ function ListView({ groceryList, totalItems, listText, checkedItems, setCheckedI
                             onClick={() => toggleAlwaysHave(it.name)}
                             style={{ ...s.lvHaveIt, color: isAH ? "var(--c-on-primary)" : "var(--c-text-muted)", background: isAH ? "var(--c-primary)" : "transparent", borderColor: isAH ? "var(--c-primary)" : "var(--c-border)" }}
                           >have it</button>
-                          <button
-                            onClick={() => toggleAlwaysHave(it.name)}
-                            style={{ ...s.lvStar, color: isAH ? "var(--c-warning)" : "var(--c-border)" }}
-                            title={isAH ? "Remove from always have" : "Always have (auto-excluded every week)"}
-                          >
-                            <Star size={17} fill={isAH ? "var(--c-warning)" : "none"} />
-                          </button>
                         </div>
                       );
                     })}
