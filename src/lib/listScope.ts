@@ -13,8 +13,8 @@
  * shares the list's scope so new dinners only coordinate with meals that will
  * share their shopping trip.
  */
-import { addDays } from "./weekState";
-import type { DateModel, ISODate } from "./dateModel";
+import { addDays } from "@terenc/shared/weekState";
+import type { DateModel, ISODate } from "@terenc/shared/dateModel";
 
 export type ScopeEntry = { dayId: string; date: ISODate; meal: any };
 

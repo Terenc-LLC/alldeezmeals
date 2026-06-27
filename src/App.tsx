@@ -6,15 +6,15 @@ import {
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
   MessageSquare, ChevronLeft, ChevronRight, Undo2, PackageCheck,
 } from "lucide-react";
-import { supabase } from "./supabase";
+import { supabase } from "@terenc/shared/supabase";
 import { normalizeIngName, mergePantryIntoAlwaysHave } from "./lib/normalize";
 import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/nutritionResolve";
 import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
 import { checkRecipe, avoidPromptBlock, mergeTerms, parseAvoidInput } from "./lib/avoidGuard";
 import { isValidEmail, sanitizeOtpCode, classifySendError, friendlySendError, friendlyVerifyError, OTP_LENGTH, RESEND_COOLDOWN_S } from "./lib/authHelpers";
-import { addDays, shouldApplyRemoteState } from "./lib/weekState";
-import { emptyDateModel, mergeWindowIntoDateModel, hydrateWindow, migrateLegacyBlob, type DateModel } from "./lib/dateModel";
+import { addDays, shouldApplyRemoteState } from "@terenc/shared/weekState";
+import { emptyDateModel, mergeWindowIntoDateModel, hydrateWindow, migrateLegacyBlob, type DateModel } from "@terenc/shared/dateModel";
 import { listScopeFromModel, reuseScopeFromModel } from "./lib/listScope";
 import { s, serif, sans } from "./lib/styles";
 import { CATEGORIES, generateRecipeFromPrompt, recipeOutputContract } from "./lib/recipeGenerate.js";
