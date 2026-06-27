@@ -38,6 +38,86 @@ const UNIT_CANONICAL: Record<string, string> = {
   sprigs: "sprig",
 };
 
+// Volume-unit canonical names for the standard-portion fallback (TER-502).
+const STD_VOL_CANONICAL: Record<string, "tsp" | "tbsp" | "cup"> = {
+  tsp: "tsp", teaspoon: "tsp", teaspoons: "tsp",
+  tbsp: "tbsp", tbs: "tbsp", tablespoon: "tbsp", tablespoons: "tbsp",
+  cup: "cup", cups: "cup",
+};
+
+type VolumePortion = { tsp?: number; tbsp?: number; cup?: number };
+
+// Curated per-ingredient volume→gram table (TER-502). Sorted longest-key-first so the
+// most-specific entry wins (e.g. "brown sugar" beats "sugar", "shredded cheddar" beats "shredded cheese").
+const STD_PORTIONS: Array<[string, VolumePortion]> = ([
+  // Oils
+  ["olive oil", { tsp: 4.5, tbsp: 13.5 }],
+  ["vegetable oil", { tsp: 4.5, tbsp: 13.5 }],
+  ["canola oil", { tsp: 4.5, tbsp: 13.5 }],
+  ["sesame oil", { tsp: 4.5, tbsp: 13.5 }],
+  ["avocado oil", { tsp: 4.5, tbsp: 13.5 }],
+  // Fats
+  ["butter", { tsp: 4.7, tbsp: 14 }],
+  // Acids
+  ["lemon juice", { tsp: 5, tbsp: 15 }],
+  ["lime juice", { tsp: 5, tbsp: 15 }],
+  ["vinegar", { tsp: 5, tbsp: 15 }],
+  // Condiments
+  ["soy sauce", { tsp: 5.3, tbsp: 16 }],
+  ["fish sauce", { tbsp: 18 }],
+  ["honey", { tsp: 7, tbsp: 21 }],
+  ["ketchup", { tbsp: 17 }],
+  ["mustard", { tsp: 5, tbsp: 15 }],
+  ["mayonnaise", { tbsp: 14, cup: 220 }],
+  ["mayo", { tbsp: 14, cup: 220 }],
+  ["cornstarch", { tsp: 2.7, tbsp: 8 }],
+  // Sugars — "brown sugar" must precede "sugar" (longer key)
+  ["brown sugar", { tsp: 4.6, tbsp: 13.8 }],
+  ["sugar", { tsp: 4.2, tbsp: 12.5 }],
+  // Ground spices
+  ["garlic powder", { tsp: 2.6, tbsp: 7.8 }],
+  ["onion powder", { tsp: 2.6, tbsp: 7.8 }],
+  ["chili powder", { tsp: 2.6, tbsp: 7.8 }],
+  ["curry powder", { tsp: 2.6, tbsp: 7.8 }],
+  ["ground ginger", { tsp: 2.6, tbsp: 7.8 }],
+  ["cumin", { tsp: 2.6, tbsp: 7.8 }],
+  ["paprika", { tsp: 2.6, tbsp: 7.8 }],
+  ["cinnamon", { tsp: 2.6, tbsp: 7.8 }],
+  ["coriander", { tsp: 2.6, tbsp: 7.8 }],
+  ["cayenne", { tsp: 2.6, tbsp: 7.8 }],
+  ["turmeric", { tsp: 2.6, tbsp: 7.8 }],
+  // Dried leafy herbs / flakes
+  ["italian seasoning", { tsp: 1, tbsp: 3 }],
+  ["red pepper flakes", { tsp: 1, tbsp: 3 }],
+  ["crushed red pepper", { tsp: 1, tbsp: 3 }],
+  ["oregano", { tsp: 1, tbsp: 3 }],
+  ["thyme", { tsp: 1, tbsp: 3 }],
+  ["basil", { tsp: 1, tbsp: 3 }],
+  ["parsley", { tsp: 1, tbsp: 3 }],
+  // Seeds
+  ["sesame seeds", { tsp: 3, tbsp: 9 }],
+  // Dairy
+  ["greek yogurt", { tbsp: 15, cup: 245 }],
+  ["sour cream", { tbsp: 14, cup: 230 }],
+  // Shredded cheese — compound keys; longest wins
+  ["shredded mozzarella", { tbsp: 7, cup: 113 }],
+  ["shredded cheddar", { tbsp: 7, cup: 113 }],
+  ["shredded cabbage", { cup: 70 }],
+  ["shredded chicken", { cup: 140 }],
+  ["shredded mexican", { tbsp: 7, cup: 113 }],
+  ["shredded carrot", { cup: 110 }],
+  ["shredded cheese", { tbsp: 7, cup: 113 }],
+  // Produce / slaw
+  ["cherry tomato", { cup: 150 }],
+  ["grated carrot", { cup: 110 }],
+  ["coleslaw", { cup: 70 }],
+  ["slaw mix", { cup: 70 }],
+  // Liquids
+  ["broth", { cup: 240 }],
+  ["stock", { cup: 240 }],
+  ["ranch", { tbsp: 15, cup: 240 }],
+] as Array<[string, VolumePortion]>).sort((a, b) => b[0].length - a[0].length);
+
 const SKIP_TERMS = ["to taste", "as needed", "for garnish", "optional"];
 
 type FoodPortion = { modifier: string; gramWeight: number };
@@ -80,9 +160,9 @@ function numericPrefix(text: string): number {
   return m ? parseFloat(m[1]) : 1;
 }
 
-// Convert qty of unit to grams using mass table, pinch table, or FDC food portions.
-// Returns null when conversion is impossible (caller must flag as unresolved).
-export function toGrams(qty: number, unit: string, portions: FoodPortion[]): number | null {
+// Convert qty of unit to grams using mass table, pinch table, FDC portions, or the
+// standard-portion fallback table. Returns null when conversion is impossible.
+export function toGrams(qty: number, unit: string, portions: FoodPortion[], ingredient?: string): number | null {
   if (qty <= 0) return 0;
   const u = unit.toLowerCase().trim();
 
@@ -102,6 +182,27 @@ export function toGrams(qty: number, unit: string, portions: FoodPortion[]): num
       if (p.modifier.toLowerCase().includes(cand)) {
         const factor = numericPrefix(p.modifier);
         return qty * (p.gramWeight / Math.max(factor, 0.001));
+      }
+    }
+  }
+
+  // 4. Standard-portion fallback — curated per-ingredient volume densities (TER-502).
+  //    FDC still wins (step 3 above). Unlisted ingredient×unit → null (unchanged).
+  if (ingredient) {
+    const stdUnit = STD_VOL_CANONICAL[u];
+    if (stdUnit) {
+      const normIng = ingredient
+        .toLowerCase()
+        .replace(/\s*\([^)]*\)\s*/g, " ")
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      for (const [key, row] of STD_PORTIONS) {
+        if (normIng.includes(key)) {
+          const gPerUnit = row[stdUnit];
+          if (gPerUnit != null) return Math.round(qty * gPerUnit * 10000) / 10000;
+          break; // matched key but no entry for this unit → null
+        }
       }
     }
   }
@@ -243,7 +344,7 @@ export async function resolveNutrition(
     }
 
     const portions: FoodPortion[] = nutRes?.foodPortions ?? [];
-    const grams = toGrams(ing.qty, ing.unit, portions);
+    const grams = toGrams(ing.qty, ing.unit, portions, ing.name);
     if (grams === null) return { kind: "unresolved" };
 
     // Catalog (incl. lazy-pull) kcal takes priority; fall back to USDA. Carry macros.
@@ -347,3 +448,21 @@ _assert(
 _assert(toGrams(1, "can", []) === null, "unresolved unit → null");
 // qty=0 → 0 regardless of unit
 _assert(toGrams(0, "cup", _p) === 0, "qty 0 → 0g");
+
+// ---- Standard-portion fallback assertions (TER-502) ----
+// Basic lookups
+_assert(toGrams(1, "tbsp", [], "olive oil") === 13.5, "1 tbsp olive oil → 13.5g");
+_assert(toGrams(3, "tsp", [], "garlic powder") === 7.8, "3 tsp garlic powder → 7.8g");
+_assert(toGrams(1, "tbsp", [], "honey") === 21, "1 tbsp honey → 21g");
+_assert(toGrams(1, "cup", [], "shredded cheddar cheese") === 113, "1 cup shredded cheddar cheese → 113g");
+_assert(toGrams(1, "cup", [], "chicken broth") === 240, "1 cup chicken broth → 240g");
+_assert(toGrams(2, "tbsp", [], "soy sauce") === 32, "2 tbsp soy sauce → 32g");
+// Most-specific key wins: "brown sugar" before "sugar"
+_assert(toGrams(1, "tbsp", [], "brown sugar") === 13.8, "brown sugar before sugar → 13.8g");
+// FDC precedence: cup portion present → FDC wins over table (sour cream table=230, FDC=125)
+_assert(
+  toGrams(1, "cup", [{ modifier: "1 cup", gramWeight: 125 }], "sour cream") === 125,
+  "FDC portion wins over std-portion table",
+);
+// No match → null
+_assert(toGrams(1, "cup", [], "rutabaga") === null, "no table match → null");
