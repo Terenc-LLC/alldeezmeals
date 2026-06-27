@@ -2053,6 +2053,11 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                     )}
                   </span>
                 )}
+                {m.kcalInfo?.macrosPerServing && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--t-bodysm-size)", color: "var(--c-text-muted)" }}>
+                    P {m.kcalInfo.macrosPerServing.protein_g}g · F {m.kcalInfo.macrosPerServing.fat_g}g · C {m.kcalInfo.macrosPerServing.carbs_g}g{(m.kcalInfo.macrosEstimated || m.kcalInfo.tier === "estimate") ? " est." : ""}
+                  </span>
+                )}
                 {m.data.servings && (
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--t-bodysm-size)", color: "var(--c-text)" }}>
                     <Users size={14} color="var(--c-primary)" />
