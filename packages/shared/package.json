@@ -1,0 +1,15 @@
+{
+  "name": "@terenc/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared source-only TypeScript consumed by the consumer app and the admin app. No build step — exports raw .ts with .js import specifiers throughout (see TER-500/TER-506).",
+  "exports": {
+    "./dateModel": "./src/dateModel.ts",
+    "./weekState": "./src/weekState.ts",
+    "./supabase": "./src/supabase.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1"
+  }
+}

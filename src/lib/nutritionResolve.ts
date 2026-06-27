@@ -3,7 +3,7 @@
 // and the ALDI catalog (Supabase), then converting ingredient amounts to grams.
 
 import { normalizeIngName } from "./normalize.js";
-import { supabase } from "../supabase.js";
+import { supabase } from "@terenc/shared/supabase";
 
 export const USDA_ATTRIBUTION = "Nutrition data: USDA FoodData Central";
 

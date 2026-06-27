@@ -15,7 +15,10 @@
     "noImplicitAny": false,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@terenc/shared/*": ["./packages/shared/src/*"]
+    }
   },
-  "include": ["src", "api"]
+  "include": ["src", "api", "packages"]
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { RefreshCw, Check, Sparkles, AlertCircle } from "lucide-react";
-import { supabase } from "../../supabase.js";
+import { supabase } from "@terenc/shared/supabase";
 import { generateRecipeFromPrompt, buildSeedPrompt } from "../../lib/recipeGenerate.js";
 import { s } from "../../lib/styles";
 

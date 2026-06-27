@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { listScope, listScopeFromModel, reuseScopeFromModel } from "./listScope";
-import { emptyDateModel, mergeWindowIntoDateModel, type DayConfig } from "./dateModel";
+import { emptyDateModel, mergeWindowIntoDateModel, type DayConfig } from "@terenc/shared/dateModel";
 
 const day = (id: string, overrides: Record<string, any> = {}) => ({ id, skip: false, ...overrides });
 const accepted = (name: string, overrides: Record<string, any> = {}) => ({
