@@ -106,8 +106,7 @@ export const s: Record<string, any> = {
   lvRow:      { display: "flex", alignItems: "center", gap: "var(--space-3)", minHeight: "var(--tap-min)", padding: "var(--space-1) 0" },
   lvCheck:    { width: 24, height: 24, borderRadius: "var(--radius-sm)", border: "2px solid", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0, padding: 0, transition: "background 120ms, border-color 120ms" },
   lvHaveIt:   { fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", fontWeight: 700, border: "1px solid", borderRadius: "var(--radius-pill)", padding: "2px 9px", cursor: "pointer", whiteSpace: "nowrap" as const, display: "inline-flex", alignItems: "center", minHeight: 28 },
-  lvStar:     { background: "transparent", border: "none", cursor: "pointer", padding: "0 2px", flexShrink: 0, display: "grid", placeItems: "center" },
-  lvStaple:   { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)" },
+lvStaple:   { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)" },
   lvFooter:   { marginTop: "var(--space-4)", padding: "var(--space-3) var(--space-4)", background: "var(--c-success-bg)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)" },
   // TER-283: TOC wizard
   tocRow:        { background: "var(--c-surface)", border: "1px solid var(--c-border)", borderRadius: 12, overflow: "hidden" },

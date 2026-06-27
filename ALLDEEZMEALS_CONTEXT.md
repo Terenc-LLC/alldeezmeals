@@ -282,14 +282,13 @@ session (status, decisions, next steps).
 - **Grocery rows** (`s.lvRow`): min-height 44px, gap 12px. Checkbox (`s.lvCheck`): 24×24,
   `radius-sm`, 2px border, fills primary + Check strokeWidth 2.6 when checked. Name/qty label
   uses `s.typeBody`/`s.typeBodySm`; line-through + muted when checked. "have it" pill
-  (`s.lvHaveIt`): outlined → fills primary when active. Star (`s.lvStar`): lucide Star with
-  fill toggle. Staple (`s.lvStaple`): warning-bg radius-pill label.
+  (`s.lvHaveIt`): outlined → fills primary when active. Staple (`s.lvStaple`): warning-bg radius-pill label.
 - **Price estimate footer** (`s.lvFooter`): `--c-success-bg`, `radius-md`, bold success-text
   total + "not a quote" note.
 - **Archive button**: `.btn-ghost .btn--sm .btn--block` at bottom of list.
 - **Desktop**: `maxWidth: 680, margin: "0 auto"` inner div; single centered column.
 - **`s` object**: added `lvSunken`, `lvAhChip`, `lvCatCard`, `lvCatTitle`, `lvRow`, `lvCheck`,
-  `lvHaveIt`, `lvStar`, `lvStaple`, `lvFooter`.
+  `lvHaveIt`, `lvStaple`, `lvFooter`.
 - PR #40 open: https://github.com/Terenc-LLC/alldeezmeals/pull/40
   Commit: `e99c4a4`. Awaiting Chris review/merge.
 - `tsc --noEmit && vite build` pass (472.38 kB JS / 9.28 kB CSS, 0 TS errors).
