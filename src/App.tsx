@@ -7,7 +7,7 @@ import {
   MessageSquare, ChevronLeft, ChevronRight, Undo2, PackageCheck,
 } from "lucide-react";
 import { supabase } from "./supabase";
-import { normalizeIngName } from "./lib/normalize";
+import { normalizeIngName, mergePantryIntoAlwaysHave } from "./lib/normalize";
 import { resolveNutrition, USDA_ATTRIBUTION, type NutritionResult } from "./lib/nutritionResolve";
 import { buildInstacartHandoff } from "./lib/instacart-handoff";
 import { repairWeek, stripBankedProvenance } from "./lib/ingredientFlow";
@@ -256,7 +256,8 @@ export default function App() {
 
   const [meals, setMeals] = useState<Record<string, any>>({});
   const [staples, setStaples] = useState(DEFAULT_STAPLES);
-  const [pantry, setPantry] = useState<string[]>([]);
+  // TER-330: `pantry` and `alwaysHave` collapsed onto one normalized key.
+  // Legacy `pantry` blobs are still read on hydrate and forward-merged here.
   const [alwaysHave, setAlwaysHave] = useState<string[]>([]);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [weekAdditions, setWeekAdditions] = useState<Array<{id: string; name: string; qty: string}>>([]);
@@ -347,8 +348,8 @@ export default function App() {
         }
         setForecast(d.forecast ?? {});
         setStaples(d.staples ?? DEFAULT_STAPLES);
-        setPantry(d.pantry ?? []);
-        setAlwaysHave(d.alwaysHave ?? []);
+        // TER-330: forward-merge legacy `pantry` into the unified `alwaysHave` key.
+        setAlwaysHave(mergePantryIntoAlwaysHave(d.pantry, d.alwaysHave));
         setCheckedItems(d.checkedItems ?? {});
         if (d.weekAdditions) setWeekAdditions(d.weekAdditions);
         setDefaultPeople(d.defaultPeople ?? 4);
@@ -427,8 +428,8 @@ export default function App() {
           }
           if (d.forecast !== undefined) setForecast(d.forecast);
           if (d.staples !== undefined) setStaples(d.staples);
-          if (d.pantry !== undefined) setPantry(d.pantry);
-          if (d.alwaysHave !== undefined) setAlwaysHave(d.alwaysHave);
+          // TER-330: forward-merge legacy `pantry` into the unified `alwaysHave` key.
+          if (d.pantry !== undefined || d.alwaysHave !== undefined) setAlwaysHave(mergePantryIntoAlwaysHave(d.pantry, d.alwaysHave));
           if (d.checkedItems !== undefined) setCheckedItems(d.checkedItems);
           if (d.weekAdditions !== undefined) setWeekAdditions(d.weekAdditions);
           if (d.defaultPeople !== undefined) setDefaultPeople(d.defaultPeople);
@@ -515,7 +516,10 @@ export default function App() {
       // no edits can happen signed-out, and clobbering savedBy with null would let a
       // stale remote win on the next reload.
       savedAt: new Date().toISOString(), savedBy: session?.user?.id ?? bootStamp.current.savedBy,
-      location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave,
+      // TER-330: `pantry` is no longer written — its entries are forward-merged
+      // into `alwaysHave` on hydrate. Old clients still read `alwaysHave`, so the
+      // merged set keeps excluding correctly with no data loss.
+      location, startDate, numDays, days, forecast, meals, staples, alwaysHave,
       checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress,
       // TER-418: dual-write the date-keyed canonical model alongside the legacy keys.
       // TER-428: `currentWeek` is gone from state and payload — the rollback floor
@@ -537,7 +541,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, pantry, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress, liveModel, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress, liveModel, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -950,13 +954,12 @@ ${recipeOutputContract(day.people)}`;
     const byCat: Record<string, any[]> = {}; CATEGORIES.forEach((c) => (byCat[c] = []));
     Object.values(agg).forEach((it: any) => {
       if (it.qty === 0) return;
-      if (pantry.includes(it.name.toLowerCase())) return;
-      if (alwaysHave.includes(normalizeIngName(it.name))) return;
+      if (alwaysHave.includes(normalizeIngName(it.name))) return; // TER-330: unified pantry exclusion
       (byCat[it.category] || byCat.Other).push(it);
     });
     CATEGORIES.forEach((c) => byCat[c].sort((a, b) => a.name.localeCompare(b.name)));
     return byCat;
-  }, [scopeEntries, staples, pantry, alwaysHave]);
+  }, [scopeEntries, staples, alwaysHave]);
 
   const totalItems = useMemo(() => Object.values(groceryList).reduce((n, a) => n + a.length, 0), [groceryList]);
 
@@ -1193,13 +1196,12 @@ ${recipeOutputContract(day.people)}`;
             setRecipeStars={setRecipeStars}
             liked={liked} setLiked={setLiked}
             avoid={avoid} setAvoid={setAvoid}
-            pantry={pantry}
             alwaysHave={alwaysHave}
           />
         )}
         {tab === "list" && (
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
-            pantry={pantry} setPantry={setPantry} checkedItems={checkedItems} setCheckedItems={setCheckedItems}
+            checkedItems={checkedItems} setCheckedItems={setCheckedItems}
             weekAdditions={weekAdditions} setWeekAdditions={setWeekAdditions}
             slotCount={days.length} location={location}
             onMarkOrdered={handleMarkOrdered} scopeCount={scopeEntries.length}
@@ -2287,7 +2289,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
 }
 
 /* ============================ List ============================ */
-function ListView({ groceryList, totalItems, listText, pantry, setPantry, checkedItems, setCheckedItems, weekAdditions, setWeekAdditions, slotCount, location, onMarkOrdered, scopeCount, canUnmark, onUnmarkOrder, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
+function ListView({ groceryList, totalItems, listText, checkedItems, setCheckedItems, weekAdditions, setWeekAdditions, slotCount, location, onMarkOrdered, scopeCount, canUnmark, onUnmarkOrder, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
   const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
   const [copiedCart, setCopiedCart] = useState(false);
@@ -2338,7 +2340,6 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
     setOrdering(false);
     if (error) setOrderError(error);
   };
-  const togglePantry = (n: string) => { const k = n.toLowerCase(); setPantry((p: string[]) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k]); };
   const toggleCheck = (k: string) => setCheckedItems((p: any) => ({ ...p, [k]: !p[k] }));
   const toggleAlwaysHave = (name: string) => {
     const k = normalizeIngName(name);
@@ -2444,8 +2445,7 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
                     {items.map((it: any) => {
                       const key = `${it.name}|${it.unit}`;
                       const checked = !!checkedItems[key];
-                      const isP = pantry.includes(it.name.toLowerCase());
-                      const isAH = alwaysHave.includes(normalizeIngName(it.name));
+                      const isAH = alwaysHave.includes(normalizeIngName(it.name)); // TER-330: unified exclusion
                       const itemPrice = catalogPriceMap.get(normalizeIngName(it.name));
                       return (
                         <div key={key} style={s.lvRow}>
@@ -2469,8 +2469,8 @@ function ListView({ groceryList, totalItems, listText, pantry, setPantry, checke
                             {it.staple && <span style={s.lvStaple}>staple</span>}
                           </span>
                           <button
-                            onClick={() => togglePantry(it.name)}
-                            style={{ ...s.lvHaveIt, color: isP || isAH ? "var(--c-on-primary)" : "var(--c-text-muted)", background: isP || isAH ? "var(--c-primary)" : "transparent", borderColor: isP || isAH ? "var(--c-primary)" : "var(--c-border)" }}
+                            onClick={() => toggleAlwaysHave(it.name)}
+                            style={{ ...s.lvHaveIt, color: isAH ? "var(--c-on-primary)" : "var(--c-text-muted)", background: isAH ? "var(--c-primary)" : "transparent", borderColor: isAH ? "var(--c-primary)" : "var(--c-border)" }}
                           >have it</button>
                           <button
                             onClick={() => toggleAlwaysHave(it.name)}
@@ -2884,7 +2884,7 @@ function TodayCook({
   cookProgress, setCookProgress,
   recipeStars, setRecipeStars,
   liked, setLiked, avoid, setAvoid,
-  pantry, alwaysHave,
+  alwaysHave,
 }: any) {
   const today = isoToday();
   // TER-426: rolling date navigation — starts at today, unbounded both directions.
@@ -2939,8 +2939,7 @@ function TodayCook({
   const allDone = steps.length > 0 && done.length === steps.length;
 
   const isIngStaple = (ing: any): boolean =>
-    alwaysHave.includes(normalizeIngName(ing.name ?? "")) ||
-    pantry.includes((ing.name ?? "").toLowerCase());
+    alwaysHave.includes(normalizeIngName(ing.name ?? "")); // TER-330: unified pantry exclusion
 
   const dayLabel = activeDate === today ? "Tonight" : activeDate > today ? "Upcoming" : "Earlier";
   const fxDay = forecast[activeDate];
