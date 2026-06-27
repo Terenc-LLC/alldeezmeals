@@ -1158,30 +1158,36 @@ ${recipeOutputContract(day.people)}`;
       </nav>
 
       <main style={s.main}>
-        {tab === "setup" && (
-          <SetupView
-            location={location} geocode={geocode}
-            startDate={startDate} setStartDate={setStartDate}
-            numDays={numDays} setNumDays={setNumDays}
-            days={days} updDay={updDay} dateFor={dateFor} forecast={forecast} fxStatus={fxStatus}
-            defaultPeople={defaultPeople} setDefaultPeople={setEveryonePeople}
-            efficiency={efficiency} setEfficiency={setEfficiency}
-            mixCuisines={mixCuisines} setMixCuisines={setMixCuisines}
-            staples={staples} setStaples={setStaples} rotation={rotation}
-            avoidTerms={avoidTerms} setAvoidTerms={setAvoidTerms}
-            onGenerate={generateAll} busy={busy} isMobile={isMobile}
-          />
-        )}
-        {tab === "plan" && (
-          <PlanView
-            days={days} meals={meals} busy={busy} dateFor={dateFor} forecast={forecast}
-            startDate={startDate} onShiftWeek={(delta: number) => setStartDate(addDays(startDate, delta))}
-            onAccept={acceptMeal} onReject={rejectMeal}
-            onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
-            onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
-            liked={liked} onGenerate={() => generateAll()}
-            onAllAccepted={() => setTab("today")} acceptedCount={acceptedCount}
-          />
+        {(tab === "setup" || tab === "plan") && (
+          <>
+            <PlanningHeader tab={tab} setTab={setTab} acceptedCount={acceptedCount} slotCount={days.length} />
+            {tab === "setup" && (
+              <SetupView
+                location={location} geocode={geocode}
+                startDate={startDate} setStartDate={setStartDate}
+                numDays={numDays} setNumDays={setNumDays}
+                days={days} updDay={updDay} dateFor={dateFor} forecast={forecast} fxStatus={fxStatus}
+                defaultPeople={defaultPeople} setDefaultPeople={setEveryonePeople}
+                efficiency={efficiency} setEfficiency={setEfficiency}
+                mixCuisines={mixCuisines} setMixCuisines={setMixCuisines}
+                staples={staples} setStaples={setStaples} rotation={rotation}
+                avoidTerms={avoidTerms} setAvoidTerms={setAvoidTerms}
+                alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave}
+                onGenerate={generateAll} busy={busy} isMobile={isMobile}
+              />
+            )}
+            {tab === "plan" && (
+              <PlanView
+                days={days} meals={meals} busy={busy} dateFor={dateFor} forecast={forecast}
+                startDate={startDate} onShiftWeek={(delta: number) => setStartDate(addDays(startDate, delta))}
+                onAccept={acceptMeal} onReject={rejectMeal}
+                onThumbUp={(d: any) => thumbUp(meals[d.id]?.data?.name)} onThumbDown={thumbDown}
+                onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
+                liked={liked} onGenerate={() => generateAll()}
+                onAllAccepted={() => setTab("today")} acceptedCount={acceptedCount}
+              />
+            )}
+          </>
         )}
         {tab === "today" && (
           <TodayCook
@@ -1706,14 +1712,54 @@ function PeopleInput({ value, onChange, style }: { value: number; onChange: (n: 
   );
 }
 
+/* ============================ Planning (unified Setup + Meals) — TER-330 ============================ */
+// Wraps the Setup and Meals panes under one screen with a segmented sub-toggle.
+// The top-nav Planning group (TER-328) and this in-screen toggle both drive the
+// same `tab` state ("setup" | "plan"), so either entry point opens the right pane.
+function PlanningHeader({ tab, setTab, acceptedCount, slotCount }: { tab: string; setTab: (t: string) => void; acceptedCount: number; slotCount: number }) {
+  const SubTab = ({ id, label, n }: { id: string; label: string; n: string }) => {
+    const active = tab === id;
+    return (
+      <button onClick={() => setTab(id)} style={{ ...s.subTab, ...(active ? s.subTabActive : {}) }}>
+        <span style={{ ...s.subBadge, ...(active ? s.subBadgeActive : {}) }}>{n}</span>
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div>
+      <div style={s.planHead}>
+        <p style={s.planLabel}>Planning</p>
+        <h1 style={{ ...s.typeH1, marginTop: 2 }}>Plan your week</h1>
+        <p style={s.planSub}>Set it up, then review what we generated — two steps, one place.</p>
+      </div>
+      <div style={s.subToggle}>
+        <SubTab id="setup" label="Setup" n="1" />
+        <SubTab id="plan" label={`Meals (${acceptedCount}/${slotCount})`} n="2" />
+      </div>
+    </div>
+  );
+}
+
 /* ============================ Setup ============================ */
 function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
     defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples,
-    rotation, avoidTerms, setAvoidTerms, onGenerate, busy, isMobile } = p;
+    rotation, avoidTerms, setAvoidTerms, alwaysHave, setAlwaysHave, onGenerate, busy, isMobile } = p;
   const [showStaples, setShowStaples] = useState(false);
   const [locInput, setLocInput] = useState("");
   const [avoidInput, setAvoidInput] = useState("");
+  const [newPantry, setNewPantry] = useState("");
+
+  // TER-330: the unified pantry list (durable exclude-from-buy set) now lives in
+  // Setup. Backed by the normalized `alwaysHave` key, same as the Shopping List.
+  const addPantry = () => {
+    const k = normalizeIngName(newPantry);
+    if (!k) return;
+    setAlwaysHave((prev: string[]) => prev.includes(k) ? prev : [...prev, k]);
+    setNewPantry("");
+  };
+  const removePantry = (k: string) => setAlwaysHave((prev: string[]) => prev.filter((x) => x !== k));
 
   // TER-401: comma/Enter-parsed terms, lowercased and deduped.
   const addAvoidTerms = (raw: string) => {
@@ -1791,59 +1837,65 @@ function SetupView(p: any) {
           {days.map((day: any, i: number) => {
             const date = dateFor(i); const fx = forecast[date]; const w = fx ? wx(fx.code) : null;
             return (
-              <div key={day.id} style={s.dayBlock}>
-                <div style={s.dayHeadRow}>
+              <div key={day.id} style={{ ...s.dayBlock, opacity: day.skip ? 0.7 : 1 }}>
+                <div style={s.sdrHead}>
                   <span style={s.dayDate}>{weekdayLabel(date)}</span>
-                  {fx ? <span style={s.fxChip}>{w!.e} {fx.hi}/{fx.lo}F - {w!.l}</span> : <span style={s.fxChipMuted}>no forecast</span>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" as const }}>
+                    {fx ? <span style={s.fxChip}>{w!.e} {fx.hi}/{fx.lo}F - {w!.l}</span> : <span style={s.fxChipMuted}>no forecast</span>}
+                    <button
+                      onClick={() => updDay(day.id, { skip: !day.skip })}
+                      style={s.sdrSkipBtn}
+                      aria-pressed={!!day.skip}
+                      title={day.skip ? "Add dinner back for this day" : "Skip this day — no dinner"}
+                    >
+                      <span style={{ ...s.sdrCheck, background: day.skip ? "var(--c-primary)" : "var(--c-surface)", borderColor: day.skip ? "var(--c-primary)" : "var(--c-border)" }}>
+                        {day.skip && <Check size={12} color="var(--c-on-primary)" strokeWidth={2.6} />}
+                      </span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: day.skip ? "var(--c-primary)" : "var(--c-text-muted)" }}>Skip day</span>
+                    </button>
+                  </div>
                 </div>
-                <div style={{ opacity: day.skip ? 0.4 : 1, pointerEvents: day.skip ? "none" : undefined }}>
-                  <div style={{ ...s.slotRow, flexWrap: isMobile ? "wrap" as const : undefined }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <PeopleInput value={day.people} onChange={(n) => updDay(day.id, { people: n })} style={{ ...s.input, width: 50 }} />
-                      <span style={s.miniLabel}>ppl</span>
+                {day.skip ? (
+                  <p style={s.sdrSkipMsg}>No dinner this day — we'll leave {weekdayLabel(date)} off the plan and the shopping list.</p>
+                ) : (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ ...s.slotRow, flexWrap: isMobile ? "wrap" as const : undefined }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <PeopleInput value={day.people} onChange={(n) => updDay(day.id, { people: n })} style={{ ...s.input, width: 50 }} />
+                        <span style={s.miniLabel}>ppl</span>
+                      </div>
+                      <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
+                      <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: isMobile ? "100%" : 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
+                      <select
+                        aria-label="Desired effort"
+                        value={day.effort ?? "any"}
+                        onChange={(e) => updDay(day.id, { effort: e.target.value })}
+                        disabled={!!day.pinnedRecipe}
+                        title={day.pinnedRecipe ? "Pinned days skip generation" : "Desired cooking effort"}
+                        style={{ ...s.input, width: isMobile ? "100%" : 130 }}
+                      >
+                        {EFFORT_LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+                      </select>
                     </div>
-                    <select value={day.cuisine} onChange={(e) => updDay(day.id, { cuisine: e.target.value })} style={{ ...s.input, flex: 1, minWidth: isMobile ? 0 : 100 }}>{CUISINES.map((c) => <option key={c}>{c}</option>)}</select>
-                    <select value={day.temp} onChange={(e) => updDay(day.id, { temp: e.target.value })} style={{ ...s.input, width: isMobile ? "100%" : 82 }}>{TEMPS.map((t) => <option key={t}>{t}</option>)}</select>
-                    <select
-                      aria-label="Desired effort"
-                      value={day.effort ?? "any"}
-                      onChange={(e) => updDay(day.id, { effort: e.target.value })}
-                      disabled={!!day.pinnedRecipe}
-                      title={day.pinnedRecipe ? "Pinned days skip generation" : "Desired cooking effort"}
-                      style={{ ...s.input, width: isMobile ? "100%" : 130 }}
-                    >
-                      {EFFORT_LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
-                    </select>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <select
+                        value={day.pinnedRecipe?.name ?? ""}
+                        onChange={(e) => {
+                          const found = rotation.find((r: any) => r.name === e.target.value);
+                          updDay(day.id, { pinnedRecipe: found ? { ...found } : undefined });
+                        }}
+                        style={{ ...s.input, flex: 1 }}
+                        disabled={rotation.length === 0}
+                        title={rotation.length === 0 ? "Save a recipe to your Recipe Box first" : ""}
+                      >
+                        <option value="">{rotation.length === 0 ? "Save a recipe to Recipe Box first" : "None (generate)"}</option>
+                        {rotation.map((r: any) => <option key={r.name} value={r.name}>{r.name}</option>)}
+                      </select>
+                      {day.pinnedRecipe && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, whiteSpace: "nowrap" as const }}>📌 Pinned</span>}
+                    </div>
+                    <input value={day.note} onChange={(e) => updDay(day.id, { note: e.target.value })} placeholder="optional note" style={{ ...s.input, fontSize: 12.5, width: "100%" }} />
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-                    <select
-                      value={day.pinnedRecipe?.name ?? ""}
-                      onChange={(e) => {
-                        const found = rotation.find((r: any) => r.name === e.target.value);
-                        updDay(day.id, { pinnedRecipe: found ? { ...found } : undefined });
-                      }}
-                      style={{ ...s.input, flex: 1 }}
-                      disabled={rotation.length === 0}
-                      title={rotation.length === 0 ? "Save a recipe to your Recipe Box first" : ""}
-                    >
-                      <option value="">{rotation.length === 0 ? "Save a recipe to Recipe Box first" : "None (generate)"}</option>
-                      {rotation.map((r: any) => <option key={r.name} value={r.name}>{r.name}</option>)}
-                    </select>
-                    {day.pinnedRecipe && <span style={{ fontSize: 12, color: "var(--c-primary)", fontWeight: 700, whiteSpace: "nowrap" as const }}>📌 Pinned</span>}
-                  </div>
-                  <input value={day.note} onChange={(e) => updDay(day.id, { note: e.target.value })} placeholder="optional note" style={{ ...s.input, fontSize: 12.5, marginTop: 6, width: "100%" }} />
-                </div>
-                <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={!!day.skip}
-                    onChange={(e) => updDay(day.id, { skip: e.target.checked })}
-                    style={{ width: 15, height: 15, flexShrink: 0 }}
-                  />
-                  <span style={{ fontSize: 13, color: day.skip ? "var(--c-danger)" : "var(--c-text-muted)" }}>
-                    Skip this day — no dinner
-                  </span>
-                </label>
+                )}
               </div>
             );
           })}
@@ -1858,6 +1910,38 @@ function SetupView(p: any) {
         <input type="checkbox" checked={efficiency} onChange={(e) => setEfficiency(e.target.checked)} style={{ width: 17, height: 17, marginTop: 2 }} />
         <span><strong>Efficient ingredient reuse</strong><span style={s.cardSub}> - share ingredients across meals (whole chicken, bulk-poach &amp; shred). Avoids double-buying.</span></span>
       </label>
+
+      {/* TER-330: unified pantry list — durable exclude-from-buy set, backed by alwaysHave */}
+      <div style={s.card}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-2)", gap: 8, flexWrap: "wrap" as const }}>
+          <span style={{ ...s.typeH3, fontSize: 15, color: "var(--c-primary)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Star size={15} color="var(--c-warning)" fill="var(--c-warning)" />
+            Pantry — always have
+          </span>
+          <span style={{ ...s.typeCaption, color: "var(--c-text-muted)" }}>auto-excluded from every buy list</span>
+        </div>
+        <p style={s.cardSub}>Items you keep on hand — we leave these off the shopping list every week. (Staples below are the opposite: always <em>added</em> to the list.)</p>
+        {alwaysHave.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--space-2)", margin: "10px 0" }}>
+            {alwaysHave.map((k: string) => (
+              <span key={k} style={s.lvAhChip}>
+                {k}
+                <button onClick={() => removePantry(k)} aria-label={`Remove ${k}`} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid", color: "rgba(255,255,255,0.65)", lineHeight: 1 }}><X size={12} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+          <input
+            value={newPantry}
+            onChange={(e) => setNewPantry(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addPantry(); }}
+            placeholder="Add item (e.g. olive oil)…"
+            style={{ ...s.input, flex: 1, fontSize: 12.5 }}
+          />
+          <button onClick={addPantry} disabled={!newPantry.trim()} style={{ ...s.addBtn, opacity: newPantry.trim() ? 1 : 0.45 }}><Plus size={14} /> Add</button>
+        </div>
+      </div>
 
       <div style={s.card}>
         <button onClick={() => setShowStaples((v) => !v)} style={s.collapseBtn}>

@@ -744,6 +744,43 @@ The permanent favorites pool is called **Recipe Box** in the UI. Internally, cod
 - New lucide imports: `ChevronLeft`, `ChevronRight`.
 - `tsc --noEmit && vite build` pass (513.17 kB JS / 9.69 kB CSS, 0 TS errors).
 
+## TER-330 — Wave 2 · PR4: unified Planning screen + pantry/alwaysHave migration (Jun 2026)
+Built in two reviewable commits.
+
+**PR-A — state reconciliation + migration (client-only, no SQL/API).**
+- `pantry` and `alwaysHave` were two parallel "exclude from buy list" sets differing only in
+  normalization (`pantry` raw `.toLowerCase()`, `alwaysHave` `normalizeIngName`). Collapsed onto
+  the single normalized `alwaysHave` key.
+- New `mergePantryIntoAlwaysHave()` in `src/lib/normalize.ts` (forward-merge: normalize each
+  pantry entry, union into alwaysHave, dedupe — lossless) with an import-time snapshot assertion.
+- Run the merge on BOTH hydrate paths (localStorage boot + Supabase `user_state.state` load) so
+  old blobs migrate forward with no data loss. `pantry` is still **read** from old blobs but no
+  longer **written** to the save payload (house rule: never rename a persisted key without the
+  migration; old clients keep reading the merged `alwaysHave`).
+- Both exclusion sites collapsed to one normalized lookup: grocery `groceryList` useMemo and the
+  cook-view `isIngStaple`. ListView: dropped the separate pantry set; the "have it" button now
+  toggles unified `alwaysHave` membership. `pantry`/`setPantry` state + props removed.
+
+**PR-B — unified Planning screen + 260604 restyle.**
+- New `PlanningHeader` component renders the screen header (label "Planning" / h1 "Plan your week"
+  / sub) + a segmented **1 Setup / 2 Meals** sub-toggle. Both the top-nav Planning group (TER-328)
+  and this in-screen toggle drive the same `tab` state (`"setup"|"plan"`). `setup`+`plan` render
+  blocks wrapped under the shared shell in the main render.
+- `SetupView` per-day rows restyled to the 260604 SetupDayRow: weekday + weather + a **Skip day**
+  check-toggle in the header; when skipped the row dims (opacity .7) and shows an italic-muted "No
+  dinner this day…" message in place of the controls. **All pre-existing controls preserved** —
+  per-day ppl/cuisine/temp/effort, Recipe-Box pin (`📌 Pinned`), note; plus the Allergies/avoid
+  card, Mix-cuisines + Efficient-reuse toggles, and the Weekly-staples editor (the 260604 mock
+  omitted these — they were retained per the issue's preservation list).
+- **NEW pantry card in Setup** (star + "Pantry — always have" + "auto-excluded from every buy
+  list" + teal pill chips + add/remove), backed by the unified `alwaysHave` key. Sits directly
+  above the staples editor — pantry = exclude, staples = include, kept visually distinct.
+- Meals pane = the existing TER-283 TOC wizard / TER-352 v2 card re-housed unchanged (not rebuilt,
+  generation not forked).
+- New style keys in `styles.ts`: `planHead/planLabel/planSub/subToggle/subTab/subTabActive/
+  subBadge/subBadgeActive/sdrRow/sdrHead/sdrSkipBtn/sdrCheck/sdrSkipMsg`.
+- `tsc --noEmit && vite build` pass (559.76 kB JS / 155.17 kB gzip, 0 TS errors).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
