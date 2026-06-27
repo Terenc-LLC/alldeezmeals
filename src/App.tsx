@@ -277,6 +277,11 @@ export default function App() {
   // "Unmark last order" undo in the list view. Deliberately not persisted. Keyed by
   // date (TER-426) since the scope can include dates outside the current window.
   const [lastOrder, setLastOrder] = useState<{ dates: string[]; orderedAt: string } | null>(null);
+  // TER-503: session-scoped per-slot rejection memory. Keyed by day.id, holds
+  // every dish rejected for that slot this session so a re-roll never cycles back
+  // to an earlier-rejected dish. Deliberately NOT persisted — rejections are
+  // momentary; a fresh plan/reload starts clean. Cleared per-slot on accept.
+  const [rejectedBySlot, setRejectedBySlot] = useState<Record<string, string[]>>({});
 
   /* ---- pinned-recipe materialization ---- */
   const pinnedSignature = useMemo(
@@ -587,7 +592,7 @@ export default function App() {
   /* ---- meal generation (via /api/generate proxy) ---- */
   const callClaude = async (prompt: string) => generateRecipeFromPrompt(prompt, session?.access_token ?? "");
 
-  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], reject?: string, violatedTerms: string[] = [], weekAvoid: string[] = avoidTerms) => {
+  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], rejected: string[] = [], violatedTerms: string[] = [], weekAvoid: string[] = avoidTerms) => {
     const fx = forecast[dateISO];
     const band = tempBand(fx?.hi);
     const wlabel = fx ? `Forecast for ${weekdayLabel(dateISO)}: high ${fx.hi}F, low ${fx.lo}F, ${wx(fx.code).l}.` : `Date: ${weekdayLabel(dateISO)} (no forecast available).`;
@@ -652,6 +657,20 @@ export default function App() {
     // event as an avoid-list commit uses the merged list, not stale state.
     const avoidBlock = avoidPromptBlock(weekAvoid, detectDietaryTerms(day.note ?? ""), violatedTerms);
 
+    // TER-503 Fix A: multi-dimensional exclusion of EVERY dish rejected for this
+    // slot this session — a new name for a substantively similar dish is not
+    // acceptable; the proposal must differ on protein, cuisine, AND format.
+    const rejectLine = rejected.length
+      ? `\nThe user REJECTED these dinners for this slot — do NOT propose any of them again, and do NOT propose a near-variant of any: ${rejected.join("; ")}.\nYour proposal MUST differ from EVERY rejected dish above on ALL THREE of: main protein, cuisine, and dish format (e.g. stir-fry vs. bake vs. soup vs. tacos vs. salad). A renamed but similar dish is a failure.`
+      : "";
+
+    // TER-503 Fix B: on a re-roll (rejected.length > 0), variety wins over the
+    // efficiency / ingredient-reuse bias. The efficiency block is kept verbatim
+    // for the initial week plan (rejected.length === 0) — that's the cost value prop.
+    const reshuffleOverride = rejected.length
+      ? `\nVARIETY OVERRIDE (this is a re-roll, not the initial plan): prioritize a genuinely DIFFERENT meal over ingredient reuse and batch-prep efficiency. Ignore the default "batch chicken across multiple dinners" lean. Affordable, mainstream ALDI ingredients are still fine, but variety wins over reuse here.`
+      : "";
+
     return `You are a practical weekly dinner planner for a family that shops at ALDI. Generate ONE dinner only (breakfast and lunch are covered by staples).
 
 ${wlabel}
@@ -664,8 +683,8 @@ ${avoidBlock}
 ${prefLines.join("\n")}
 
 ${eff}
-- Do NOT repeat a main dish already planned below.
-${reject ? `\nThe user REJECTED "${reject}". Propose a clearly DIFFERENT dinner (different main and ideally different cuisine).` : ""}
+- Do NOT repeat a main dish already planned below.${reshuffleOverride}
+${rejectLine}
 
 Dinners sharing this shopping trip (coordinate ingredient reuse with these and ONLY these):
 ${prior}
@@ -681,7 +700,7 @@ ${recipeOutputContract(day.people)}`;
 
   const usedCuisinesFrom = (data: any[]) => Array.from(new Set(data.map((m) => m.cuisine).filter(Boolean)));
 
-  const generateOne = async (day: any, idx: number, committed: any[], reject?: string, weekAvoid: string[] = avoidTerms) => {
+  const generateOne = async (day: any, idx: number, committed: any[], rejected: string[] = [], weekAvoid: string[] = avoidTerms) => {
     setMeals((m) => ({ ...m, [day.id]: { status: "loading", data: null, error: null, kcalInfo: null } }));
     try {
       // TER-401: structured week-level avoid terms + per-day note-detected terms.
@@ -699,7 +718,7 @@ ${recipeOutputContract(day.people)}`;
             ...avoid,
             ...rotation.map((r: any) => r.name),
             ...committed.map((m: any) => m.name),
-            ...(reject ? [reject] : []),
+            ...rejected,
           ];
           const rr = await fetch("/api/recipes-reuse", {
             method: "POST",
@@ -746,7 +765,7 @@ ${recipeOutputContract(day.people)}`;
         let pendingHits: ReturnType<typeof checkRecipe> = [];
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            const candidate = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), reject, violatedTerms, weekAvoid));
+            const candidate = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), rejected, violatedTerms, weekAvoid));
             // TER-401 deterministic guard: runs after parse, BEFORE the save gate
             // and before any meals-state commit — a violating dish must never
             // render, even transiently.
@@ -813,6 +832,9 @@ ${recipeOutputContract(day.people)}`;
   const generateAll = async (pendingAvoid: string[] = []) => {
     const weekAvoid = mergeTerms(avoidTerms, pendingAvoid);
     if (pendingAvoid.length) setAvoidTerms((prev: string[]) => mergeTerms(prev, pendingAvoid));
+    // TER-503: a fresh full-week generation starts with clean per-slot rejection
+    // memory — it only governs single-slot re-rolls, never the initial plan.
+    setRejectedBySlot({});
     setBusy(true); setTab("plan");
     // TER-428: seed the run's reuse context from the list scope (accepted,
     // unshopped, today-forward — every planned week), not the window's accepted
@@ -826,7 +848,7 @@ ${recipeOutputContract(day.people)}`;
       if (meals[day.id]?.status === "accepted") continue;
       let data: any = null;
       try {
-        data = await generateOne(day, i, [...committed], undefined, weekAvoid);
+        data = await generateOne(day, i, [...committed], [], weekAvoid);
       } catch {
         // TER-414: only quota errors propagate out of generateOne — every
         // remaining day would 429 too, so halt the run here.
@@ -837,12 +859,27 @@ ${recipeOutputContract(day.people)}`;
     setBusy(false);
   };
 
-  const acceptMeal = (id: string) => setMeals((m) => ({ ...m, [id]: { ...m[id], status: "accepted" } }));
+  const acceptMeal = (id: string) => {
+    setMeals((m) => ({ ...m, [id]: { ...m[id], status: "accepted" } }));
+    // TER-503: accepting a slot ends its re-roll session — clear its rejection memory.
+    setRejectedBySlot((m) => {
+      if (!(id in m)) return m;
+      const next = { ...m }; delete next[id]; return next;
+    });
+  };
   const rejectMeal = async (day: any, idx: number) => {
     if (day.pinnedRecipe) return;
+    // TER-503: accumulate the currently-displayed dish into this slot's rejection
+    // memory and pass the FULL set to generateOne, so a re-roll never cycles back
+    // to an earlier-rejected dish. Computed locally — the setState below won't be
+    // visible to this run (React batching), mirroring the pendingAvoid pattern.
+    const current = meals[day.id]?.data?.name;
+    const prev = rejectedBySlot[day.id] ?? [];
+    const rejected = current && !prev.includes(current) ? [...prev, current] : prev;
+    if (current && rejected !== prev) setRejectedBySlot((m) => ({ ...m, [day.id]: rejected }));
     // TER-414: a quota error rethrows from generateOne after setting the day's
     // error state — nothing more to do for a single-day action.
-    await generateOne(day, idx, committedData(dateFor(idx)), meals[day.id]?.data?.name).catch(() => {});
+    await generateOne(day, idx, committedData(dateFor(idx)), rejected).catch(() => {});
   };
 
   // TER-422: resetPlan and "Start over" are gone — there is no bulk-clear path.
