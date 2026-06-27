@@ -486,7 +486,7 @@ function CatalogView({ session }: { session: any }) {
       const saveData = await saveRes.json();
       if (!saveRes.ok) throw new Error(saveData.error || `Error ${saveRes.status}`);
       const srcLabel = nutData.source === "usda" ? "USDA FDC" : "Open Food Facts";
-      setStatusMsg(p => ({ ...p, [item.id]: { ok: true, msg: `Saved from ${srcLabel} — ${Math.round(nutData.kcal_per_100g)} kcal/100g` } }));
+      setStatusMsg(p => ({ ...p, [item.id]: { ok: true, msg: `Saved from ${srcLabel} — ${Math.round(nutData.kcal_per_100g)} Calories/100g` } }));
       await loadItems();
     } catch (e: any) {
       setStatusMsg(p => ({ ...p, [item.id]: { ok: false, msg: e?.message || "Failed" } }));
@@ -986,7 +986,7 @@ function CatalogView({ session }: { session: any }) {
                     <span style={{ fontSize: 10, fontWeight: 700, color: "var(--c-primary)", background: "var(--c-surface-2)", padding: "1px 6px", borderRadius: 10 }}>{srcLabel}</span>
                   )}
                   {hasNutrition && (
-                    <span style={{ fontSize: 11.5, color: "var(--c-text-muted)", fontWeight: 600 }}>{Math.round(item.kcal_per_100g!)} kcal</span>
+                    <span style={{ fontSize: 11.5, color: "var(--c-text-muted)", fontWeight: 600 }}>{Math.round(item.kcal_per_100g!)} Calories</span>
                   )}
                 </div>
               </div>
@@ -997,7 +997,7 @@ function CatalogView({ session }: { session: any }) {
               <div style={{ marginTop: 12, borderTop: "1px solid var(--c-border)", paddingTop: 12, display: "grid", gap: 12 }}>
                 {hasNutrition && (
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" as const, fontSize: 12.5, color: "var(--c-text-muted)", alignItems: "center" }}>
-                    <span><strong>{Math.round(item.kcal_per_100g!)} kcal</strong>/100g</span>
+                    <span><strong>{Math.round(item.kcal_per_100g!)} Calories</strong>/100g</span>
                     {item.serving_g != null && <span>Serving: {item.serving_g}g</span>}
                     {item.macros && (
                       <>
@@ -1037,7 +1037,7 @@ function CatalogView({ session }: { session: any }) {
                   <span style={s.fieldLabel}>Manual nutrition</span>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
                     {[
-                      { label: "kcal/100g", key: "kcal" as const, w: 80 },
+                      { label: "Calories/100g", key: "kcal" as const, w: 80 },
                       { label: "serving g", key: "serving_g" as const, w: 72 },
                       { label: "protein g", key: "protein" as const, w: 72 },
                       { label: "fat g", key: "fat" as const, w: 64 },
