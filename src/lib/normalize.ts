@@ -2,6 +2,25 @@ export function normalizeIngName(name: string): string {
   return name.toLowerCase().trim().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// TER-330: forward-merge the legacy `pantry` exclusion list into `alwaysHave`.
+// Historically two parallel "exclude from the buy list" sets existed: `pantry`
+// (raw `name.toLowerCase()` keys) and `alwaysHave` (`normalizeIngName` keys).
+// They are being collapsed onto the single normalized `alwaysHave` key. Each
+// pantry entry is run through normalizeIngName so it dedupes against existing
+// alwaysHave entries; the union is returned with no data loss. Used on every
+// hydrate path so old persisted blobs migrate forward without dropping items.
+export function mergePantryIntoAlwaysHave(
+  pantry: string[] | undefined | null,
+  alwaysHave: string[] | undefined | null,
+): string[] {
+  const out = new Set<string>(alwaysHave ?? []);
+  for (const p of pantry ?? []) {
+    const k = normalizeIngName(p ?? "");
+    if (k) out.add(k);
+  }
+  return [...out];
+}
+
 // Normalize UPC-A / EAN-13 / GTIN-14 to a canonical 14-digit string for comparison.
 // Strips non-digits then left-pads with zeros so "048001206867" and "0048001206867"
 // both become "00048001206867" and match each other.
@@ -25,6 +44,17 @@ const _checks: [string, string][] = [
 for (const [input, expected] of _checks) {
   const got = normalizeIngName(input);
   if (got !== expected) throw new Error(`normalizeIngName: "${input}" → "${got}", expected "${expected}"`);
+}
+
+// TER-330 merge: union + normalize + dedupe, lossless across both legacy keys.
+{
+  const merged = mergePantryIntoAlwaysHave(
+    ["Olive Oil", "Garlic (organic)", "salt"],   // legacy raw-lowercased pantry keys
+    ["garlic", "pepper"],                          // existing normalized alwaysHave keys
+  );
+  const expected = ["garlic", "pepper", "olive oil", "salt"]; // garlic deduped, no loss
+  const ok = merged.length === expected.length && expected.every((e) => merged.includes(e));
+  if (!ok) throw new Error(`mergePantryIntoAlwaysHave drift: got ${JSON.stringify(merged)}`);
 }
 
 const _gtinChecks: [string, string][] = [
