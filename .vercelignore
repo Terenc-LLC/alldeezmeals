@@ -1,0 +1,14 @@
+# CLI upload excludes (Git-integrated deploys ignore this file).
+# Keeps `vercel deploy` from uploading installed deps / build output —
+# Vercel installs and builds on its own.
+node_modules
+dist
+dist-ssr
+.git
+.vercel
+.DS_Store
+
+# Local-only working files not needed for the admin build.
+off.csv
+docs
+.claude

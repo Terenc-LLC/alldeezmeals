@@ -1,0 +1,20 @@
+/* Shared brand + shadcn tokens (single source of truth in packages/shared). */
+@import "../../../packages/shared/src/theme.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
