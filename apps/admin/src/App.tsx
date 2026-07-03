@@ -3,6 +3,7 @@ import { ShieldAlert } from "lucide-react";
 import { supabase } from "@terenc/shared/supabase";
 import { Button } from "@/components/ui/button";
 import SignInView from "./SignInView";
+import Approvals from "./Approvals";
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -86,10 +87,9 @@ export default function App() {
           </Button>
         </div>
       </header>
-      <main className="flex-1 px-6 py-8">
-        <p className="text-sm text-muted-foreground">
-          Admin shell ready. Sections land in Phase 1.
-        </p>
+      <main className="flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <h2 className="mb-4 text-base font-semibold text-foreground">Pending approvals</h2>
+        <Approvals session={session} />
       </main>
     </div>
   );
