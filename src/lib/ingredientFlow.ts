@@ -35,6 +35,11 @@ export type FlowIngredient = {
   preparedEarlier?: boolean;
   purchaseSize?: string;
   purchaseQty?: number;
+  // TER-523: on a source:"reused" ingredient, the exact name of the raw purchasable
+  // product as named by the meal that BUYS it (e.g. "boneless skinless chicken breasts").
+  // Present → the reused use is keyed under this name so it unifies with the raw buy flow
+  // instead of hashing to its derived display name ("shredded poached chicken breast").
+  buySourceName?: string;
   [key: string]: any;
 };
 
@@ -86,8 +91,16 @@ export function buildGraph(week: FlowRecipe[]): FlowGraph {
     (recipe?.ingredients ?? []).forEach((ing, ingredientIndex) => {
       const name = String(ing?.name || "").trim();
       if (!name) return;
-      const key = normalizeIngName(name);
       const source = coerceSource(ing.source);
+      // TER-523: key reused uses under their raw buy-source name (when the generator
+      // supplied one) so a derived display name — "shredded poached chicken breast" —
+      // unifies with the raw "boneless skinless chicken breasts" buy flow. This is the
+      // upstream linkage that stops validate/repair from firing a false violation and
+      // fabricating a duplicate derived-form purchase line. Display name is untouched.
+      const buySourceName = String(ing?.buySourceName || "").trim();
+      const key = source === "reused" && buySourceName
+        ? normalizeIngName(buySourceName)
+        : normalizeIngName(name);
       const use: IngredientUse = {
         day,
         recipeName: String(recipe?.name || ""),

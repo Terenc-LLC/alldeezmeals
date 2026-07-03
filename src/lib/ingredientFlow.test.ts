@@ -174,6 +174,83 @@ describe("audit C-1 end-to-end repro", () => {
   });
 });
 
+// TER-523: reused uses key under their raw buy-source name so derived display-name variants
+// ("shredded cooked chicken breast" / "shredded poached chicken breast") unify with the raw
+// buy ("boneless skinless chicken breasts") — one flow, no false violation, one list line.
+describe("TER-523: buySourceName linkage collapses derived reuse variants into the raw buy", () => {
+  // Same buy-only filter as App.tsx pushIngredient: only source:"buy" reaches the list.
+  function buyLineNames(recipes: FlowRecipe[]) {
+    const names: string[] = [];
+    for (const r of recipes) for (const i of r.ingredients) {
+      if (i.source === "reused" || i.source === "staple") continue;
+      names.push(normalizeIngName(i.name));
+    }
+    return names;
+  }
+
+  const week: FlowRecipe[] = [
+    recipe("Chicken Taco Salad", [
+      ing("Boneless skinless chicken breasts", "buy", { recipeAmount: { qty: 1, unit: "lb" }, purchaseSize: "1 lb", purchaseQty: 1 }),
+    ]),
+    recipe("Shredded Chicken BLT Wraps", [
+      ing("Shredded poached chicken breast", "reused", {
+        recipeAmount: { qty: 2, unit: "cups" }, preparedEarlier: true,
+        purchaseSize: "", purchaseQty: 0, buySourceName: "Boneless skinless chicken breasts",
+      }),
+    ]),
+    recipe("Sesame-Ginger Chicken Fried Rice", [
+      ing("Shredded cooked chicken breast", "reused", {
+        recipeAmount: { qty: 2, unit: "cups" }, preparedEarlier: true,
+        // Case-insensitive match — normalizeIngName folds case/whitespace.
+        purchaseSize: "", purchaseQty: 0, buySourceName: "boneless skinless chicken breasts",
+      }),
+    ]),
+  ];
+
+  it("all three uses collapse into ONE flow keyed by the raw buy name", () => {
+    const graph = buildGraph(week);
+    const flow = graph.get(normalizeIngName("Boneless skinless chicken breasts"));
+    expect(flow).toBeDefined();
+    expect(flow!.uses).toHaveLength(3);
+    expect(flow!.uses.map((u) => u.buy)).toEqual([true, false, false]);
+    // No stray flows under the derived display names.
+    expect(graph.get(normalizeIngName("Shredded poached chicken breast"))).toBeUndefined();
+    expect(graph.get(normalizeIngName("Shredded cooked chicken breast"))).toBeUndefined();
+  });
+
+  it("no false violation and repairWeek is a no-op (no fabricated derived purchase line)", () => {
+    expect(validateWeek(week)).toEqual([]);
+    const { week: repaired, promotions } = repairWeek(week);
+    expect(promotions).toEqual([]);
+    expect(repaired).toBe(week); // same reference — nothing repaired
+  });
+
+  it("aggregates to exactly one raw purchasable line (the derived reuses never hit the list)", () => {
+    const names = buyLineNames(week);
+    expect(names).toEqual([normalizeIngName("Boneless skinless chicken breasts")]);
+  });
+
+  it("display names on the recipe cards are untouched by the keying", () => {
+    // The cook-mode dimension still shows the derived names the recipes were generated with.
+    expect(week[1].ingredients[0].name).toBe("Shredded poached chicken breast");
+    expect(week[2].ingredients[0].name).toBe("Shredded cooked chicken breast");
+  });
+
+  it("legacy path: reused variants with NO buySourceName still key by display name → promotion preserved", () => {
+    const legacy: FlowRecipe[] = [
+      recipe("Roast", [ing("Chicken Breast", "buy")]),
+      recipe("BLT Wraps", [ing("Shredded Chicken", "reused", { preparedEarlier: true })]),
+      recipe("Fried Rice", [ing("Shredded Chicken", "reused", { preparedEarlier: true })]),
+    ];
+    const violations = validateWeek(legacy);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].key).toBe("shredded chicken");
+    const { promotions } = repairWeek(legacy);
+    expect(promotions.map((p) => p.key)).toEqual(["shredded chicken"]);
+    expect(promotions[0]).toMatchObject({ day: 1, recipeName: "BLT Wraps" });
+  });
+});
+
 describe("stripBankedProvenance", () => {
   it("blanks week-specific provenance, resets preparedEarlier, keeps pantryNote and source flags", () => {
     const banked = {

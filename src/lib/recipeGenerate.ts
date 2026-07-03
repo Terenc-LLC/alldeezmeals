@@ -2,10 +2,10 @@ export const CATEGORIES = ["Produce", "Meat & Seafood", "Dairy & Eggs", "Pantry"
 
 // TER-358: extracted so buildSeedPrompt can share the exact same output contract as buildPrompt.
 export function recipeOutputContract(servings: number): string {
-  return `Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0. For source:"staple" omit or zero purchaseSize/purchaseQty. preparedEarlier (boolean, default false): set to true ONLY if this ingredient was actually prepped/cooked in an EARLIER meal this week and is being reused in that prepared form (e.g. shredded chicken poached Monday, onions diced earlier). A whole/raw item pulled from a shared pack is NOT preparedEarlier (e.g. half an onion from the already-purchased bag → preparedEarlier:false). This field is independent of source.
+  return `Each ingredient requires: source ("buy"|"reused"|"staple"), recipeAmount {qty, unit} (cooking amount; required for buy & reused; optional for staple — use qty:0,unit:"to taste" if unmeasured). For source:"buy" only: purchaseSize (realistic ALDI package label, e.g. "1 head", "16 oz box", "2 lb bag", "1 dozen") and purchaseQty (integer ≥ 1, packages rounded UP to cover recipeAmount). For source:"reused" set purchaseSize:"" purchaseQty:0 AND set buySourceName to the EXACT ingredient name used by the meal that buys the raw product (the raw purchasable form, e.g. "boneless skinless chicken breasts") — it must match a buy-item name shown for the other dinners sharing this shopping trip when such a list is provided. For source:"staple" omit or zero purchaseSize/purchaseQty. preparedEarlier (boolean, default false): set to true ONLY if this ingredient was actually prepped/cooked in an EARLIER meal this week and is being reused in that prepared form (e.g. shredded chicken poached Monday, onions diced earlier). A whole/raw item pulled from a shared pack is NOT preparedEarlier (e.g. half an onion from the already-purchased bag → preparedEarlier:false). This field is independent of source.
 
 Respond with ONLY one JSON object -- no markdown, no fences, no commentary. Include numbered step-by-step cooking instructions in "steps". Set realistic "prepMinutes" and "cookMinutes" integers. Set "estKcalPerServing" to your best integer estimate of kilocalories per serving for the given number of servings. Set "estMacrosPerServing" to your best integer estimate of grams of protein, fat, and carbohydrate per serving. Set "difficulty" to an integer 0–5 for total effort: 0=premade/heat-and-serve (no real prep), 1=minimal (assemble/microwave/toast), 2=simple one-pan/weeknight, 3=moderate (some technique or multiple components), 4=involved (multiple steps/timing), 5=intricate (advanced technique or long prep). Use 0–1 for occasional convenience nights. ORIGINALITY: write original recipes — original cooking directions and descriptions in your own words; do not copy text from published recipes. (Quantities/ingredient lists are fine; the written steps/description must be original.) SPECIFIC NAME: set "name" to a distinctive, specific dish name (e.g. "Ginger-Soy Chicken Stir Fry with Peppers"), NOT a generic category ("Chicken Stir Fry"). Exactly:
-{"name":"","description":"one short sentence","cuisine":"","servings":${servings},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"estMacrosPerServing":{"protein_g":0,"fat_g":0,"carbs_g":0},"difficulty":0,"reuseNote":"","provenance":"","reuseNotes":[],"pantryNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
+{"name":"","description":"one short sentence","cuisine":"","servings":${servings},"prepMinutes":0,"cookMinutes":0,"estKcalPerServing":0,"estMacrosPerServing":{"protein_g":0,"fat_g":0,"carbs_g":0},"difficulty":0,"reuseNote":"","provenance":"","reuseNotes":[],"pantryNote":"","ingredients":[{"name":"","recipeAmount":{"qty":0,"unit":""},"source":"buy","preparedEarlier":false,"purchaseSize":"","purchaseQty":1,"buySourceName":"","category":"Produce|Meat & Seafood|Dairy & Eggs|Pantry|Frozen|Bakery|Other"}],"steps":["step 1","step 2","..."]}`;
 }
 
 export async function generateRecipeFromPrompt(
@@ -75,7 +75,14 @@ export async function generateRecipeFromPrompt(
     const source: "buy" | "reused" | "staple" =
       i.source === "reused" ? "reused" : i.source === "staple" ? "staple" : "buy";
     const preparedEarlier: boolean = i.preparedEarlier === true;
-    return { name, recipeAmount, purchaseSize, purchaseQty, category, source, preparedEarlier };
+    const out: any = { name, recipeAmount, purchaseSize, purchaseQty, category, source, preparedEarlier };
+    // TER-523: preserve the reused→buy linkage. Additive & backward compatible —
+    // only attach for reused ingredients that actually carry a name; absent/empty → omit.
+    if (source === "reused") {
+      const buySourceName = String(i.buySourceName || "").trim();
+      if (buySourceName) out.buySourceName = buySourceName;
+    }
+    return out;
   }).filter((i: any) => i.name);
   obj.provenance = typeof obj.provenance === "string" ? obj.provenance : "";
   obj.reuseNotes = Array.isArray(obj.reuseNotes) ? obj.reuseNotes.filter((s: any) => typeof s === "string") : [];
