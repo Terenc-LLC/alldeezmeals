@@ -639,7 +639,7 @@ export default function App() {
 - INCLUDE EVERY ingredient needed to cook this dish in the "ingredients" array — mains, reused items, AND pantry staples. No omissions. The recipe card must be cookable on its own.
 - Assign each ingredient a "source" value:
     "buy"    — net-new purchase needed (include purchaseSize + purchaseQty).
-    "reused" — from a pack already bought this week for another meal, OR batch-prepped earlier (e.g. shredded chicken from Monday). recipeAmount required; set purchaseSize to "" and purchaseQty to 0.
+    "reused" — from a pack already bought this week for another meal, OR batch-prepped earlier (e.g. chicken poached earlier this week, then shredded). recipeAmount required; set purchaseSize to "" and purchaseQty to 0. ALSO set buySourceName to the EXACT raw item name from "Dinners sharing this shopping trip" below for the meal that buys it (e.g. buySourceName:"boneless skinless chicken breasts") — it MUST match one of those listed buy-item names character-for-character so the shopping list aggregates this into that single raw purchase. Standardize batch-prep wording on "poached" (not "cooked").
     "staple" — common pantry item assumed on hand (salt, pepper, dried spices, vegetable/olive oil, etc.). recipeAmount optional (use "to taste" in unit if no qty); omit purchaseSize/purchaseQty.
 - Share ingredients across the week; minimize waste.
 - The family likes bulk chicken breasts poached with onion+garlic then shredded for multiple dinners. Favor this kind of batch prep — those prepped items are source:"reused".
