@@ -10,6 +10,7 @@ import { CATEGORIES } from "../lib/recipeGenerate.js";
 import { s } from "../lib/styles";
 import { uid, useIsMobile } from "../lib/utils";
 import { fmtPurchaseQty } from "../lib/format";
+import ShareListControls from "./ShareListControls";
 
 export default function ListView({ groceryList, totalItems, listText, checkedItems, setCheckedItems, weekAdditions, setWeekAdditions, slotCount, location, onMarkOrdered, scopeCount, canUnmark, onUnmarkOrder, alwaysHave, setAlwaysHave, session, qualificationNumber, setQualificationNumber }: any) {
   const isMobile = useIsMobile();
@@ -121,6 +122,9 @@ export default function ListView({ groceryList, totalItems, listText, checkedIte
             {copiedCart ? "Copied!" : "Instacart (AI)"}
           </button>
         </div>
+
+        {/* Share list (TER-287) */}
+        <ShareListControls session={session} groceryList={groceryList} totalItems={totalItems} />
 
         {/* Always Have sunken panel */}
         <div style={s.lvSunken}>
