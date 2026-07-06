@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
-  Plus, Trash2, X, Check, Copy, Sparkles, RefreshCw, Settings2,
+  Plus, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   ListChecks, CheckCircle2, AlertCircle, Repeat, Info,
   ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Boxes,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
@@ -19,8 +19,10 @@ import { listScopeFromModel, reuseScopeFromModel } from "./lib/listScope";
 import { s, serif, sans } from "./lib/styles";
 import { CATEGORIES, generateRecipeFromPrompt, recipeOutputContract } from "./lib/recipeGenerate.js";
 import { uid, useIsMobile } from "./lib/utils";
-import { fmtPurchaseQty } from "./lib/format";
+import { fmtPurchaseQty, DIFFICULTY_LABELS, fmtRecipeQty, dietaryDisclaimer } from "./lib/format";
 import ListView from "./components/ListView";
+import RotationView from "./components/RotationView";
+import ChipManager from "./components/ChipManager";
 import { CatalogView } from "./components/admin/CatalogView.js";
 
 /* ------------------------------------------------------------------ */
@@ -34,7 +36,6 @@ const STORAGE_KEY = "alldeezmeals-v1";
 
 const CUISINES = ["Any", "American", "Comfort food", "Italian", "Mexican", "Tex-Mex", "Asian", "Chinese", "Thai", "Indian", "Mediterranean", "Greek", "BBQ", "Soup / Stew", "Salad-forward"];
 const TEMPS = ["Auto", "Either", "Hot", "Cold"];
-const DIFFICULTY_LABELS = ["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"] as const;
 const EFFORT_LEVELS: { key: string; label: string; min: number; max: number }[] = [
   { key: "any",      label: "Any effort",             min: 0, max: 5 },
   { key: "easy",     label: "Easy (Premade–Minimal)", min: 0, max: 1 },
@@ -86,19 +87,6 @@ function scaleRecipeToHeadcount(recipe: any, dayPeople: number) {
   return { ...recipe, servings: dayPeople, ingredients };
 }
 
-/* ---- display helpers ---- */
-function fmtRecipeQty(ing: any): string {
-  if (ing.recipeAmount) {
-    const { qty, unit } = ing.recipeAmount;
-    if (!qty) return "";
-    const q = Number.isInteger(qty) ? qty : Math.round(qty * 100) / 100;
-    return `${q}${unit ? " " + unit : ""}`;
-  }
-  if (!ing.qty) return "";
-  const q = Number.isInteger(ing.qty) ? ing.qty : Math.round(ing.qty * 100) / 100;
-  return `${q}${ing.unit ? " " + ing.unit : ""}`;
-}
-
 function detectDietaryTerms(note: string): string[] {
   const n = note.toLowerCase();
   function hasAvoid(trigger: string): boolean {
@@ -132,12 +120,6 @@ function detectDietaryTerms(note: string): string[] {
     ["alcohol",  ["alcohol", "booze", "wine", "beer"]],
   ];
   return TERMS.filter(([, triggers]) => triggers.some(hasAvoid)).map(([canonical]) => canonical);
-}
-
-// TER-401: rendered from the structured term list, never from an LLM echo —
-// every restriction is always named. Keep the "verify every label" sentence verbatim.
-function dietaryDisclaimer(items: string[]): string {
-  return `Generated to avoid: ${items.join(", ")}. Verify every ingredient and package label yourself — not an allergen-safety guarantee.`;
 }
 
 /* ====================================================================== */
@@ -2357,302 +2339,6 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
   );
 }
 
-/* ============================ Manual Recipe Form ============================ */
-type IngRow = { id: string; name: string; rQty: string; rUnit: string; purchaseSize: string; purchaseQty: string; category: string };
-
-function ManualRecipeForm({ rotation, onSave, onCancel }: { rotation: any[]; onSave: (data: any) => void; onCancel: () => void }) {
-  const isMobile = useIsMobile();
-  const [recipeName, setRecipeName] = useState("");
-  const [description, setDescription] = useState("");
-  const [cuisine, setCuisine] = useState("");
-  const [servings, setServings] = useState("4");
-  const [prepMinutes, setPrepMinutes] = useState("0");
-  const [cookMinutes, setCookMinutes] = useState("0");
-  const [estKcal, setEstKcal] = useState("");
-  const [difficulty, setDifficulty] = useState(2);
-  const [steps, setSteps] = useState<{ id: string; text: string }[]>([{ id: uid(), text: "" }]);
-  const [ings, setIngs] = useState<IngRow[]>([{ id: uid(), name: "", rQty: "", rUnit: "", purchaseSize: "", purchaseQty: "1", category: "Produce" }]);
-  const [errors, setErrors] = useState<string[]>([]);
-
-  const addStep = () => setSteps(p => [...p, { id: uid(), text: "" }]);
-  const removeStep = (id: string) => setSteps(p => p.filter(s => s.id !== id));
-  const updateStep = (id: string, text: string) => setSteps(p => p.map(s => s.id === id ? { ...s, text } : s));
-
-  const addIng = () => setIngs(p => [...p, { id: uid(), name: "", rQty: "", rUnit: "", purchaseSize: "", purchaseQty: "1", category: "Produce" }]);
-  const removeIng = (id: string) => setIngs(p => p.filter(i => i.id !== id));
-  const patchIng = (id: string, patch: Partial<IngRow>) => setIngs(p => p.map(i => i.id === id ? { ...i, ...patch } : i));
-
-  const validate = (): string[] => {
-    const errs: string[] = [];
-    const trimName = recipeName.trim();
-    if (!trimName) errs.push("Recipe name is required.");
-    const srv = Number(servings);
-    if (!Number.isFinite(srv) || srv < 1) errs.push("Servings must be at least 1.");
-    const validIngs = ings.filter(i => i.name.trim());
-    if (validIngs.length === 0) errs.push("Add at least one ingredient.");
-    for (const ing of validIngs) {
-      if (!ing.purchaseSize.trim()) errs.push(`"${ing.name.trim()}" needs a purchase size (e.g. "2 lb bag").`);
-    }
-    if (trimName && rotation.some((r: any) => r.name.toLowerCase() === trimName.toLowerCase())) {
-      errs.push(`"${trimName}" is already in your rotation — use a different name or remove the existing one first.`);
-    }
-    return errs;
-  };
-
-  const handleSave = () => {
-    const errs = validate();
-    if (errs.length) { setErrors(errs); return; }
-    setErrors([]);
-    const srv = Math.max(1, Math.round(Number(servings)));
-    const validIngs = ings.filter(i => i.name.trim());
-    const data: Record<string, any> = {
-      name: recipeName.trim(),
-      servings: srv,
-      prepMinutes: Math.round(Number(prepMinutes) || 0),
-      cookMinutes: Math.round(Number(cookMinutes) || 0),
-      difficulty: Math.min(5, Math.max(0, difficulty)),
-      steps: steps.map(s => s.text.trim()).filter(Boolean),
-      ingredients: validIngs.map(i => ({
-        name: i.name.trim(),
-        recipeAmount: { qty: Number(i.rQty) || 0, unit: i.rUnit.trim() },
-        purchaseSize: i.purchaseSize.trim(),
-        purchaseQty: Math.max(1, Math.round(Number(i.purchaseQty) || 1)),
-        category: CATEGORIES.includes(i.category) ? i.category : "Other",
-      })),
-    };
-    if (description.trim()) data.description = description.trim();
-    if (cuisine.trim()) data.cuisine = cuisine.trim();
-    const kcal = Math.round(Number(estKcal));
-    if (kcal > 0) data.estKcalPerServing = kcal;
-    onSave(data);
-  };
-
-  const diffLabels = ["Premade", "Minimal", "Simple", "Moderate", "Involved", "Intricate"];
-
-  return (
-    <div style={{ ...s.card, display: "grid", gap: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={s.cardTitle}>New recipe</h3>
-        <button onClick={onCancel} style={s.iconBtn}><X size={16} color="var(--c-text-muted)" /></button>
-      </div>
-
-      <div style={{ display: "grid", gap: 10 }}>
-        <div>
-          <label style={s.fieldLabel}>Recipe name *</label>
-          <input value={recipeName} onChange={e => setRecipeName(e.target.value)} placeholder="e.g. One-Pan Chicken Thighs" style={{ ...s.input, width: "100%" }} />
-        </div>
-        <div>
-          <label style={s.fieldLabel}>Description <span style={{ fontWeight: 400, textTransform: "none" as const }}>(optional)</span></label>
-          <input value={description} onChange={e => setDescription(e.target.value)} placeholder="One short sentence" style={{ ...s.input, width: "100%" }} />
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: isMobile ? "wrap" as const : undefined }}>
-          <div style={{ flex: 1, minWidth: 100 }}>
-            <label style={s.fieldLabel}>Cuisine <span style={{ fontWeight: 400, textTransform: "none" as const }}>(optional)</span></label>
-            <input value={cuisine} onChange={e => setCuisine(e.target.value)} placeholder="e.g. Italian" style={{ ...s.input, width: "100%" }} />
-          </div>
-          <div style={{ width: isMobile ? "100%" : 80 }}>
-            <label style={s.fieldLabel}>Servings *</label>
-            <input type="number" min={1} value={servings} onChange={e => setServings(e.target.value)} style={{ ...s.input, width: "100%", textAlign: "center" }} />
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: isMobile ? "wrap" as const : undefined }}>
-          <div style={{ flex: 1, minWidth: isMobile ? "40%" : 80 }}>
-            <label style={s.fieldLabel}>Prep (min)</label>
-            <input type="number" min={0} value={prepMinutes} onChange={e => setPrepMinutes(e.target.value)} style={{ ...s.input, width: "100%", textAlign: "center" }} />
-          </div>
-          <div style={{ flex: 1, minWidth: isMobile ? "40%" : 80 }}>
-            <label style={s.fieldLabel}>Cook (min)</label>
-            <input type="number" min={0} value={cookMinutes} onChange={e => setCookMinutes(e.target.value)} style={{ ...s.input, width: "100%", textAlign: "center" }} />
-          </div>
-          <div style={{ flex: 1, minWidth: isMobile ? "40%" : 100 }}>
-            <label style={s.fieldLabel}>Est. Calories/serving</label>
-            <input type="number" min={0} value={estKcal} onChange={e => setEstKcal(e.target.value)} placeholder="optional" style={{ ...s.input, width: "100%", textAlign: "center" }} />
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <label style={s.fieldLabel}>Difficulty</label>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" as const, marginTop: 4 }}>
-          {diffLabels.map((label, i) => (
-            <button
-              key={i}
-              onClick={() => setDifficulty(i)}
-              style={{
-                padding: "5px 10px", borderRadius: 20, cursor: "pointer",
-                border: difficulty === i ? "none" : "1px solid var(--c-border)",
-                background: difficulty === i ? "var(--c-primary)" : "var(--c-surface-2)",
-                color: difficulty === i ? "var(--c-on-primary)" : "var(--c-text-muted)",
-                fontFamily: "var(--font-sans, inherit)", fontSize: 12, fontWeight: 600,
-              }}
-            >
-              {i} · {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label style={s.fieldLabel}>Steps</label>
-        <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
-          {steps.map((step, idx) => (
-            <div key={step.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ ...s.miniLabel, width: 18, flexShrink: 0, textAlign: "center" as const }}>{idx + 1}</span>
-              <input
-                value={step.text}
-                onChange={e => updateStep(step.id, e.target.value)}
-                placeholder={`Step ${idx + 1}`}
-                style={{ ...s.input, flex: 1 }}
-              />
-              {steps.length > 1 && (
-                <button onClick={() => removeStep(step.id)} style={s.iconBtn}><X size={13} color="var(--c-text-muted)" /></button>
-              )}
-            </div>
-          ))}
-        </div>
-        <button onClick={addStep} style={{ ...s.addBtn, marginTop: 8 }}><Plus size={14} /> Add step</button>
-      </div>
-
-      <div>
-        <label style={s.fieldLabel}>Ingredients *</label>
-        <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
-          {ings.map((ing) => (
-            <div key={ing.id} style={{ ...s.dayBlock, display: "grid", gap: 6 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input
-                  value={ing.name}
-                  onChange={e => patchIng(ing.id, { name: e.target.value })}
-                  placeholder="Ingredient name"
-                  style={{ ...s.input, flex: 1 }}
-                />
-                {ings.length > 1 && (
-                  <button onClick={() => removeIng(ing.id)} style={s.iconBtn}><X size={13} color="var(--c-danger)" /></button>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
-                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  <span style={{ ...s.miniLabel, whiteSpace: "nowrap" as const }}>Recipe</span>
-                  <input type="number" min={0} step="any" value={ing.rQty} onChange={e => patchIng(ing.id, { rQty: e.target.value })} placeholder="qty" style={{ ...s.input, width: 52, textAlign: "center", fontSize: 12 }} />
-                  <input value={ing.rUnit} onChange={e => patchIng(ing.id, { rUnit: e.target.value })} placeholder="unit" style={{ ...s.input, width: 64, fontSize: 12 }} />
-                </div>
-                <div style={{ display: "flex", gap: 4, alignItems: "center", flex: 1, minWidth: 140 }}>
-                  <span style={{ ...s.miniLabel, whiteSpace: "nowrap" as const }}>Buy</span>
-                  <input value={ing.purchaseSize} onChange={e => patchIng(ing.id, { purchaseSize: e.target.value })} placeholder='e.g. "2 lb bag" *' style={{ ...s.input, flex: 1, fontSize: 12 }} />
-                  <input type="number" min={1} value={ing.purchaseQty} onChange={e => patchIng(ing.id, { purchaseQty: e.target.value })} style={{ ...s.input, width: 44, textAlign: "center", fontSize: 12 }} />
-                </div>
-                <select
-                  value={ing.category}
-                  onChange={e => patchIng(ing.id, { category: e.target.value })}
-                  style={{ ...s.input, fontSize: 12, flex: 1, minWidth: 100 }}
-                >
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-          ))}
-        </div>
-        <button onClick={addIng} style={{ ...s.addBtn, marginTop: 8 }}><Plus size={14} /> Add ingredient</button>
-      </div>
-
-      {errors.length > 0 && (
-        <div style={{ background: "var(--c-danger-bg)", borderRadius: 8, padding: "10px 12px", display: "grid", gap: 4 }}>
-          {errors.map((e, i) => (
-            <p key={i} style={{ margin: 0, fontSize: 13, color: "var(--c-danger)", display: "flex", gap: 5, alignItems: "flex-start" }}>
-              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} /> {e}
-            </p>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-        <button onClick={handleSave} style={s.primaryBtn}><Check size={15} /> Save recipe</button>
-        <button onClick={onCancel} style={s.ghostBtn}><X size={14} /> Cancel</button>
-      </div>
-    </div>
-  );
-}
-
-/* ============================ Rotation ============================ */
-function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid, recipeStars, setRecipeStars }: any) {
-  const [showForm, setShowForm] = useState(false);
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-
-  const handleSaveManual = (data: any) => {
-    setRotation((p: any[]) => [...p, data]);
-    if (data.name) setLiked((p: string[]) => p.includes(data.name) ? p : [...p, data.name]);
-    setShowForm(false);
-  };
-
-  if (selectedIdx !== null && rotation[selectedIdx]) {
-    return (
-      <div>
-        <button className="btn-ghost btn--sm" style={{ marginBottom: "var(--space-4)" }} onClick={() => setSelectedIdx(null)}>
-          ← Back to Recipe Box
-        </button>
-        <RecipeCard
-          meal={rotation[selectedIdx]}
-          onSaveRotation={() => setSelectedIdx(null)}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div style={s.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={s.cardTitle}>Recipe Box <span style={s.cardSub}>- saved favorites the planner leans toward</span></h3>
-          <button onClick={() => setShowForm(v => !v)} style={s.addBtn}><Plus size={14} /> Add recipe</button>
-        </div>
-        {rotation.length === 0 && !showForm
-          ? <p style={{ ...s.empty, marginTop: 8 }}>Tap "Recipe Box" on a meal you love to save it here.</p>
-          : rotation.length > 0 && (
-            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-              {rotation.map((r: any, i: number) => {
-                const rating = recipeStars[r.name] ?? 0;
-                return (
-                  <div key={i} style={s.rotItem}>
-                    <button onClick={() => setSelectedIdx(i)} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: "var(--c-text)" }}>{r.name}</div>
-                      <div style={s.cardSub}>{r.cuisine ? `${r.cuisine} · ` : ""}{r.ingredients?.length ?? 0} ingredients</div>
-                    </button>
-                    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => setRecipeStars((prev: Record<string, number>) => {
-                            const next = { ...prev };
-                            if (next[r.name] === n) delete next[r.name];
-                            else next[r.name] = n;
-                            return next;
-                          })}
-                          style={{ ...s.starBtn, color: n <= rating ? "var(--c-warning)" : "var(--c-border)" }}
-                          title={n <= rating && n === rating ? "Clear rating" : `Rate ${n} star${n > 1 ? "s" : ""}`}
-                        >★</button>
-                      ))}
-                    </div>
-                    <button onClick={() => setRotation((p: any[]) => p.filter((_, idx) => idx !== i))} style={s.iconBtn}><Trash2 size={15} color="var(--c-danger)" /></button>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        }
-      </div>
-
-      {showForm && (
-        <ManualRecipeForm
-          rotation={rotation}
-          onSave={handleSaveManual}
-          onCancel={() => setShowForm(false)}
-        />
-      )}
-
-      <div style={s.card}><h3 style={s.cardTitle}>Liked styles</h3><ChipManager items={liked} onRemove={(x: string) => setLiked((p: string[]) => p.filter((i) => i !== x))} empty="Thumbs-up meals show up here." tone="green" /></div>
-      <div style={s.card}><h3 style={s.cardTitle}>Avoiding</h3><ChipManager items={avoid} onRemove={(x: string) => setAvoid((p: string[]) => p.filter((i) => i !== x))} empty="Thumbs-down meals get added here." tone="red" /></div>
-    </div>
-  );
-}
 /* ============================ Today / Cook Mode (TER-329, rolling dates TER-426) ============================ */
 function TodayCook({
   mealsByDate, dayConfigByDate, onGoPlan, forecast, isMobile,
@@ -2978,19 +2664,6 @@ function TodayCook({
           )}
         </>
       )}
-    </div>
-  );
-}
-
-function ChipManager({ items, onRemove, empty, tone }: any) {
-  if (!items.length) return <p style={{ ...s.empty, marginTop: 8 }}>{empty}</p>;
-  return (
-    <div style={{ ...s.tagWrap, marginTop: 10 }}>
-      {items.map((x: string, i: number) => (
-        <span key={i} style={{ ...s.tag, ...(tone === "red" ? { background: "var(--c-danger-bg)", color: "var(--c-danger)" } : {}), display: "inline-flex", gap: 5, alignItems: "center" }}>
-          {x}<button onClick={() => onRemove(x)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "grid" }}><X size={12} /></button>
-        </span>
-      ))}
     </div>
   );
 }
@@ -3334,121 +3007,6 @@ function DifficultyBadge({ difficulty }: { difficulty: number }) {
         {label}
       </span>
     </div>
-  );
-}
-
-/* ============================ RecipeCard (TER-251) — standalone, no planner actions ============================ */
-function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, isLiked }: { meal: any; kcalInfo?: { kcalPerServing: number | null; tier: string } | null; onSaveRotation?: () => void; onThumbUp?: () => void; onThumbDown?: () => void; isLiked?: boolean }) {
-  const isMobile = useIsMobile();
-  const totalMin = (meal.prepMinutes ?? 0) + (meal.cookMinutes ?? 0);
-  const diffLabel = DIFFICULTY_LABELS[meal.difficulty] ?? "";
-
-  const Ingredients = () => (
-    <div>
-      <p style={{ ...s.typeLabel, color: "var(--c-text-muted)", marginBottom: "var(--space-2)" }}>Ingredients</p>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "var(--space-2)" }}>
-        {(meal.ingredients ?? []).map((ing: any, i: number) => {
-          const qty = fmtRecipeQty(ing);
-          return (
-            <li key={i} style={s.rcIngRow}>
-              <span style={{ ...s.typeBody, color: "var(--c-text)" }}>
-                {ing.name}{ing.staple && <span style={s.rcStaplePill}>staple</span>}
-              </span>
-              <span style={{ ...s.typeBodySm, color: "var(--c-text-muted)", textAlign: "right" as const, flexShrink: 0 }}>{qty}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-
-  const Steps = () => (
-    <div>
-      <p style={{ ...s.typeLabel, color: "var(--c-text-muted)", marginBottom: "var(--space-2)" }}>Instructions</p>
-      <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "var(--space-3)" }}>
-        {(meal.steps ?? []).map((step: string, i: number) => (
-          <li key={i} style={s.rcStepRow}>
-            <span style={s.rcStepMarker}>{i + 1}</span>
-            <span style={{ ...s.typeBody, color: "var(--c-text)", paddingTop: 2 }}>{step}</span>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-
-  return (
-    <article style={{ ...s.rcCard, maxWidth: isMobile ? "none" : 680, margin: isMobile ? 0 : "0 auto" }}>
-      {/* 1. Image slot — striped placeholder is the default state */}
-      <div style={{ ...s.rcImgSlot, height: isMobile ? 190 : 240 }}>
-        <span style={s.rcImgHint}>meal photo (optional)</span>
-      </div>
-      <div style={{ padding: "var(--space-5)" }}>
-        {/* 2. Cuisine pill */}
-        {meal.cuisine && <span style={s.rcCuisinePill}>{meal.cuisine}</span>}
-        {/* 3. Meal name + description */}
-        <h2 style={{ ...s.typeH2, color: "var(--c-text)", marginTop: meal.cuisine ? "var(--space-3)" : 0 }}>{meal.name}</h2>
-        {meal.description && <p style={{ ...s.typeBodySm, color: "var(--c-text-muted)", marginTop: "var(--space-2)" }}>{meal.description}</p>}
-        {/* 4. Meta row */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-4)", marginTop: "var(--space-3)" }}>
-          {totalMin > 0 && <span style={s.rcMetaItem}><Clock size={15} color="var(--c-primary)" />{totalMin} min</span>}
-          {meal.servings && <span style={s.rcMetaItem}><Users size={15} color="var(--c-primary)" />Serves {meal.servings}</span>}
-          {kcalInfo?.kcalPerServing != null && <span style={s.rcMetaItem}><Flame size={15} color="var(--c-primary)" />~{kcalInfo.kcalPerServing} Calories</span>}
-        </div>
-        {/* 5. Badges */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)", marginTop: "var(--space-3)", alignItems: "center" }}>
-          {kcalInfo?.kcalPerServing != null && (
-            <span style={kcalInfo.tier === "estimate" ? s.rcKcalBadgeEst : s.rcKcalBadge}>
-              {kcalInfo.tier === "usda" ? "USDA" : kcalInfo.tier === "catalog" ? "ALDI catalog" : "Estimated"} · {kcalInfo.kcalPerServing} Calories/serving
-            </span>
-          )}
-          {meal.difficulty != null && (
-            <span style={s.rcEffortBadge}>
-              <span style={{ letterSpacing: 1 }}>{"●".repeat(meal.difficulty)}{"○".repeat(5 - meal.difficulty)}</span>{" "}{diffLabel}
-            </span>
-          )}
-        </div>
-        {meal.dietaryAvoid?.length > 0 && (
-          <div style={{ ...s.reuseNote, marginTop: "var(--space-3)" }}>{dietaryDisclaimer(meal.dietaryAvoid)}</div>
-        )}
-        {/* 6. Divider */}
-        <hr style={s.rcDivider} />
-        {/* 7+8. Ingredients + Instructions */}
-        {!isMobile ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--space-6)" }}>
-            <Ingredients />
-            <Steps />
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: "var(--space-5)" }}>
-            <Ingredients />
-            <Steps />
-          </div>
-        )}
-        {/* 9. Footer */}
-        <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-5)", flexWrap: "wrap" }}>
-          {onThumbUp && (
-            <button
-              onClick={onThumbUp}
-              style={{ ...s.thumb, color: isLiked ? "var(--c-primary)" : "var(--c-text-muted)", borderColor: isLiked ? "var(--c-primary)" : "var(--c-border)" }}
-              title="Like"
-            ><ThumbsUp size={15} /></button>
-          )}
-          {onThumbDown && (
-            <button
-              onClick={onThumbDown}
-              style={{ ...s.thumb, color: "var(--c-danger)", borderColor: "var(--c-danger-bg)" }}
-              title="Dislike"
-            ><ThumbsDown size={15} /></button>
-          )}
-          <button className="btn-secondary" style={{ flex: 1 }} onClick={onSaveRotation}>
-            <Star size={16} /> Save to Recipe Box
-          </button>
-          <button className="btn-ghost" aria-label="Print" onClick={() => window.print()} style={{ padding: "0 var(--space-4)" }}>
-            <Printer size={16} />
-          </button>
-        </div>
-      </div>
-    </article>
   );
 }
 
