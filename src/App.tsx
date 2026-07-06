@@ -22,6 +22,7 @@ import { uid, useIsMobile } from "./lib/utils";
 import { fmtPurchaseQty, DIFFICULTY_LABELS, fmtRecipeQty, dietaryDisclaimer } from "./lib/format";
 import ListView from "./components/ListView";
 import RotationView from "./components/RotationView";
+import RecipeImportHandler from "./components/RecipeImportHandler";
 import ChipManager from "./components/ChipManager";
 import { CatalogView } from "./components/admin/CatalogView.js";
 
@@ -1084,6 +1085,7 @@ ${recipeOutputContract(day.people)}`;
     <>
     <div className="no-print" style={{ ...s.shell, padding: isMobile ? 12 : 20 }}>
       <style>{fontImport}</style>
+      <RecipeImportHandler rotation={rotation} setRotation={setRotation} />
       <header style={s.header}>
         <div style={{ ...s.logoRow, justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1183,7 +1185,7 @@ ${recipeOutputContract(day.people)}`;
             session={session} qualificationNumber={qualificationNumber} setQualificationNumber={setQualificationNumber} />
         )}
         {tab === "rotation" && (
-          <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} recipeStars={recipeStars} setRecipeStars={setRecipeStars} />
+          <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} recipeStars={recipeStars} setRecipeStars={setRecipeStars} session={session} />
         )}
         {tab === "receipt" && <IngestView session={session} />}
         {tab === "catalog" && isAdmin && <CatalogView session={session} />}

@@ -4,9 +4,10 @@ import { s } from "../lib/styles";
 import ManualRecipeForm from "./ManualRecipeForm";
 import RecipeCard from "./RecipeCard";
 import ChipManager from "./ChipManager";
+import ShareRecipeButton from "./ShareRecipeButton";
 
 /* ============================ Rotation ============================ */
-export default function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid, recipeStars, setRecipeStars }: any) {
+export default function RotationView({ rotation, setRotation, liked, setLiked, avoid, setAvoid, recipeStars, setRecipeStars, session }: any) {
   const [showForm, setShowForm] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
@@ -64,6 +65,7 @@ export default function RotationView({ rotation, setRotation, liked, setLiked, a
                         >★</button>
                       ))}
                     </div>
+                    <ShareRecipeButton session={session} recipe={r} />
                     <button onClick={() => setRotation((p: any[]) => p.filter((_, idx) => idx !== i))} style={s.iconBtn}><Trash2 size={15} color="var(--c-danger)" /></button>
                   </div>
                 );
