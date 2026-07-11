@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ShieldAlert } from "lucide-react";
 import { supabase } from "@terenc/shared/supabase";
 import { Button } from "@/components/ui/button";
 import SignInView from "./SignInView";
-import Approvals from "./Approvals";
+import AdminShell from "./AdminShell";
+import Dashboard from "./routes/Dashboard";
+import Insights from "./routes/Insights";
+import ApprovalsPage from "./routes/ApprovalsPage";
+import ReviewQueues from "./routes/ReviewQueues";
+import Users from "./routes/Users";
+import Catalog from "./routes/Catalog";
+import Beta from "./routes/Beta";
+import Feedback from "./routes/Feedback";
+import Tools from "./routes/Tools";
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -73,24 +83,22 @@ export default function App() {
     );
   }
 
-  // Admin shell — empty base every Phase 1 section fills.
+  // Admin shell — IA routes every Phase 1 section fills (TER-509).
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="flex items-center justify-between border-b border-border bg-card px-6 py-3">
-        <h1 className="text-lg font-semibold text-foreground">
-          ALLDEEZ<span className="text-primary">Meals</span> Admin
-        </h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">{session.user?.email}</span>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            Sign out
-          </Button>
-        </div>
-      </header>
-      <main className="flex-1 px-4 py-6 sm:px-6 sm:py-8">
-        <h2 className="mb-4 text-base font-semibold text-foreground">Pending approvals</h2>
-        <Approvals session={session} />
-      </main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<AdminShell email={session.user?.email} onSignOut={signOut} />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/insights" element={<Insights />} />
+          <Route path="/approvals" element={<ApprovalsPage session={session} />} />
+          <Route path="/review-queues" element={<ReviewQueues />} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/catalog" element={<Catalog />} />
+          <Route path="/beta" element={<Beta />} />
+          <Route path="/feedback" element={<Feedback />} />
+          <Route path="/tools" element={<Tools />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
