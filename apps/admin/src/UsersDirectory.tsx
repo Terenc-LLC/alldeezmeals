@@ -45,6 +45,7 @@ export default function UsersDirectory({ session }: { session: any }) {
 
   const [feedback, setFeedback] = useState<FeedbackItem[] | null>(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
 
   const token = session?.access_token ?? "";
 
@@ -68,12 +69,16 @@ export default function UsersDirectory({ session }: { session: any }) {
   }, [token]);
 
   const loadFeedback = () => {
-    if (feedback !== null || feedbackLoading) return; // fetch once, cache
+    if (feedback !== null || feedbackLoading) return; // fetch once, cache; retries on failure
     setFeedbackLoading(true);
+    setFeedbackError("");
     fetch("/api/list-feedback", { headers: { authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : { feedback: [] }))
-      .then((data) => setFeedback(data.feedback ?? []))
-      .catch(() => setFeedback([]))
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error ?? `Error ${r.status}`);
+        setFeedback(data.feedback ?? []);
+      })
+      .catch((e: any) => setFeedbackError(e?.message ?? "Failed to load feedback."))
       .finally(() => setFeedbackLoading(false));
   };
 
@@ -412,6 +417,7 @@ export default function UsersDirectory({ session }: { session: any }) {
           user={selectedUser}
           feedback={(feedback ?? []).filter((f) => f.user_id === selectedUser.id)}
           feedbackLoading={feedbackLoading}
+          feedbackError={feedbackError}
           busy={busyId === selectedUser.id}
           onClose={() => setSelectedUserId(null)}
           onApprove={handleApprove}

@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { AlertCircle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
@@ -9,6 +9,7 @@ type UserDrillDownPanelProps = {
   user: AdminUser;
   feedback: FeedbackItem[];
   feedbackLoading: boolean;
+  feedbackError: string;
   busy: boolean;
   onClose: () => void;
   onApprove: (userId: string) => void;
@@ -22,6 +23,7 @@ export default function UserDrillDownPanel({
   user,
   feedback,
   feedbackLoading,
+  feedbackError,
   busy,
   onClose,
   onApprove,
@@ -88,7 +90,12 @@ export default function UserDrillDownPanel({
           <section>
             <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Feedback</h4>
             {feedbackLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-            {!feedbackLoading && feedback.length === 0 && (
+            {!feedbackLoading && feedbackError && (
+              <p className="flex items-center gap-1.5 text-sm text-destructive">
+                <AlertCircle size={14} /> {feedbackError}
+              </p>
+            )}
+            {!feedbackLoading && !feedbackError && feedback.length === 0 && (
               <p className="text-sm text-muted-foreground">No feedback submitted.</p>
             )}
             <div className="flex flex-col gap-2">
