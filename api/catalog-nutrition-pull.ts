@@ -1,7 +1,8 @@
 // TER-493: Lazy-pull nutrition (Calories + macros) for a recipe ingredient by
 // representative catalog UPC, persisting the hit onto the catalog row so it's
 // cached for everyone. Runs for ANY approved user (the resolver calls it on a
-// catalog nutrition gap) — NOT admin-gated, unlike api/catalog-nutrition.ts.
+// catalog nutrition gap) — NOT admin-gated, unlike the admin-only
+// apps/admin/api/catalog-nutrition.ts (relocated out of the consumer in TER-510).
 // Service-role for the catalog write (catalog RLS has no JWT write policy).
 //
 // Locked decision (founder 2026-06-26): mapping a generic recipe ingredient to a
@@ -18,7 +19,7 @@ import { lookupByGtin } from "./_nutritionLookup.js";
 const MAX_UPC_PROBES = 8;
 
 // Derive a serving gram weight from a serving_basis string like "240g" or "1serving".
-// Mirrors api/catalog-nutrition.ts auto-mode exactly.
+// Mirrors apps/admin/api/catalog-nutrition.ts auto-mode exactly.
 function servingGFromBasis(basis: string | undefined): number | null {
   if (!basis) return null;
   const m = basis.match(/(\d+(?:\.\d+)?)\s*g\b/);

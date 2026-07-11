@@ -1,10 +1,10 @@
 // Admin/auth gate helper for the admin app's serverless functions.
 // Underscore prefix => not a Vercel route.
 //
-// TER-520: this is a LOCAL COPY of the consumer's api/_admin.ts. The admin
-// skeleton's /api must NOT import @terenc/shared — the serverless cross-boundary
-// case (reaching packages/shared from the apps/admin root) is deferred to
-// TER-510, which consolidates this duplication. Imports @supabase/supabase-js only.
+// TER-510: canonical (and only) copy of the admin gate. The consumer deploy no
+// longer contains any admin code; all /api/admin endpoints now live here. Bearer
+// JWT verify via anon client -> ADMIN_EMAILS check; privileged ops use the
+// service-role key. Imports @supabase/supabase-js only.
 import { createClient } from "@supabase/supabase-js";
 
 export function adminEmails(): string[] {

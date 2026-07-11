@@ -1,6 +1,6 @@
 // TER-357: Approve or reject a pending recipe. Reject is NOT delete — row retained for analytics.
 import { createClient } from "@supabase/supabase-js";
-import { getAuthedUser } from "../_admin.js";
+import { getAuthedUser } from "./_admin.js";
 
 const VALID_CATEGORIES = [
   "not_original", "bad_instructions", "implausible_ingredients",

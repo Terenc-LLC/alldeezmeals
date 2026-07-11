@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Plus, X, Check, Copy, Sparkles, RefreshCw, Settings2,
   ListChecks, CheckCircle2, AlertCircle, Repeat, Info,
-  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut, Boxes,
+  ThumbsUp, ThumbsDown, Star, MapPin, CalendarDays, LogOut,
   ReceiptText, HelpCircle, Clock, Users, Flame, Printer, ShoppingCart,
   MessageSquare, ChevronLeft, ChevronRight, Undo2, PackageCheck,
 } from "lucide-react";
@@ -24,7 +24,6 @@ import ListView from "./components/ListView";
 import RotationView from "./components/RotationView";
 import RecipeImportHandler from "./components/RecipeImportHandler";
 import ChipManager from "./components/ChipManager";
-import { CatalogView } from "./components/admin/CatalogView.js";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -136,7 +135,6 @@ export default function App() {
 
   /* ---- Supabase auth ---- */
   const [session, setSession] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [qualificationNumber, setQualificationNumber] = useState<number | null>(null);
   const [approvedStatus, setApprovedStatus] = useState<boolean | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
@@ -167,14 +165,16 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []); // eslint-disable-line
 
-  // TER-236: resolve admin flag from server (server reads ADMIN_EMAILS, never bundled to client).
+  // TER-510: resolve the user's qualification status from the server. Admin
+  // detection was removed with the admin console — the consumer deploy no longer
+  // reads ADMIN_EMAILS or receives an isAdmin flag.
   useEffect(() => {
-    if (!session?.access_token) { setIsAdmin(false); return; }
+    if (!session?.access_token) { setQualificationNumber(null); return; }
     let cancelled = false;
     fetch("/api/me", { headers: { authorization: `Bearer ${session.access_token}` } })
-      .then((r) => (r.ok ? r.json() : { isAdmin: false }))
-      .then((d) => { if (!cancelled) { setIsAdmin(!!d.isAdmin); setQualificationNumber(d.qualification_number ?? null); } })
-      .catch(() => { if (!cancelled) setIsAdmin(false); });
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d: any) => { if (!cancelled) setQualificationNumber(d?.qualification_number ?? null); })
+      .catch(() => { if (!cancelled) setQualificationNumber(null); });
     return () => { cancelled = true; };
   }, [session?.access_token]);
 
@@ -201,7 +201,7 @@ export default function App() {
   }, [session?.user?.id]); // eslint-disable-line
 
   const [loaded, setLoaded] = useState(false);
-  const VALID_TABS = ["today", "setup", "plan", "list", "rotation", "receipt", "catalog"];
+  const VALID_TABS = ["today", "setup", "plan", "list", "rotation", "receipt"];
   const [tab, setTab] = useState<string>(() => {
     try {
       const saved = localStorage.getItem("alldeezmeals-active-tab");
@@ -210,8 +210,6 @@ export default function App() {
     return "today";
   });
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  // TER-236: safety reset — if admin flips off while Catalog is open, redirect to setup.
-  useEffect(() => { if (!isAdmin && tab === "catalog") setTab("setup"); }, [isAdmin, tab]);
   // TER-348: persist active tab so refresh restores user's place.
   useEffect(() => { try { localStorage.setItem("alldeezmeals-active-tab", tab); } catch {} }, [tab]);
 
@@ -1123,7 +1121,6 @@ ${recipeOutputContract(day.people)}`;
         <TabBtn active={tab === "list"} onClick={() => setTab("list")} icon={<ListChecks size={15} />} label={`Shopping List (${totalItems})`} />
         <TabBtn active={tab === "rotation"} onClick={() => setTab("rotation")} icon={<Star size={15} />} label={`Recipe Box (${rotation.length})`} />
         <TabBtn active={tab === "receipt"} onClick={() => setTab("receipt")} icon={<ReceiptText size={15} />} label="Receipt" />
-        {isAdmin && <TabBtn active={tab === "catalog"} onClick={() => setTab("catalog")} icon={<Boxes size={15} />} label="Admin" />}
       </nav>
 
       <main style={s.main}>
@@ -1188,7 +1185,6 @@ ${recipeOutputContract(day.people)}`;
           <RotationView rotation={rotation} setRotation={setRotation} liked={liked} setLiked={setLiked} avoid={avoid} setAvoid={setAvoid} recipeStars={recipeStars} setRecipeStars={setRecipeStars} session={session} />
         )}
         {tab === "receipt" && <IngestView session={session} />}
-        {tab === "catalog" && isAdmin && <CatalogView session={session} />}
       </main>
       <footer className="no-print" style={{ marginTop: 24, padding: "16px 4px 8px", borderTop: "1px solid var(--c-border)", fontSize: 12, color: "var(--c-text-muted)", textAlign: "center" as const }}>
         <a href="/help.html" style={{ color: "var(--c-text-muted)" }}>Help</a>

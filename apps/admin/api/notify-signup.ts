@@ -1,7 +1,7 @@
 // TER-238: Supabase Database Webhook — fires on profiles INSERT.
 // Verifies x-webhook-secret header, then sends a Resend email to the admin.
 // No user auth here — caller is Supabase's webhook service.
-import { sendResendEmail } from "../_email.js";
+import { sendResendEmail } from "./_email.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
