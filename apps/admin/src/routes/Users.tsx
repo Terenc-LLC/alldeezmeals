@@ -1,5 +1,7 @@
-import SectionPlaceholder from "../SectionPlaceholder";
+import UsersDirectory from "../UsersDirectory";
 
-export default function Users() {
-  return <SectionPlaceholder title="Users" />;
+// UsersDirectory renders its own heading (with a live filtered count), unlike
+// ApprovalsPage's static title — no need to duplicate it here.
+export default function Users({ session }: { session: any }) {
+  return <UsersDirectory session={session} />;
 }
