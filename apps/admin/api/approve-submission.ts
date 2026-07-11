@@ -1,6 +1,6 @@
 // TER-237: Approve a pending receipt submission — writes rows to catalog, backfills item_usage.
 import { createClient } from "@supabase/supabase-js";
-import { getAuthedUser } from "../_admin.js";
+import { getAuthedUser } from "./_admin.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }

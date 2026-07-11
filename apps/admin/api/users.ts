@@ -1,7 +1,7 @@
 // TER-368: unified admin user list with engagement metrics
 import { createClient } from "@supabase/supabase-js";
-import { getAuthedUser } from "../_admin.js";
-import { migrateLegacyBlob } from "../../packages/shared/src/dateModel.js";
+import { getAuthedUser } from "./_admin.js";
+import { migrateLegacyBlob } from "../../../packages/shared/src/dateModel.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") { res.status(405).json({ error: "Method not allowed" }); return; }

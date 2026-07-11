@@ -1,6 +1,6 @@
 // TER-266: list beta-qualified users for admin
 import { createClient } from "@supabase/supabase-js";
-import { getAuthedUser } from "../_admin.js";
+import { getAuthedUser } from "./_admin.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") { res.status(405).json({ error: "Method not allowed" }); return; }

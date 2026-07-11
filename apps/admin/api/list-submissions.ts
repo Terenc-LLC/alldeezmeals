@@ -1,6 +1,6 @@
-// TER-238: List pending (unapproved) user profiles for admin review.
+// TER-237: List pending receipt submissions for admin review.
 import { createClient } from "@supabase/supabase-js";
-import { getAuthedUser } from "../_admin.js";
+import { getAuthedUser } from "./_admin.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") { res.status(405).json({ error: "Method not allowed" }); return; }
@@ -13,12 +13,12 @@ export default async function handler(req: any, res: any) {
   const svc = createClient(url, svcKey);
 
   const { data, error } = await svc
-    .from("profiles")
-    .select("id, email, name, nearest_aldi, reason, requested_at")
-    .eq("approved", false)
-    .order("requested_at", { ascending: false })
+    .from("receipt_submissions")
+    .select("id, submitter_email, order_date, rows, status, created_at")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
     .limit(50);
 
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.status(200).json({ users: data ?? [] });
+  res.status(200).json({ submissions: data ?? [] });
 }

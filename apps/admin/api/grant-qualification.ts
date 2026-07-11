@@ -1,7 +1,7 @@
 // TER-355: admin-granted qualification (replaces self-serve /api/qualify)
 import { createClient } from "@supabase/supabase-js";
-import { getAuthedUser } from "../_admin.js";
-import { sendResendEmail, htmlEscape } from "../_email.js";
+import { getAuthedUser } from "./_admin.js";
+import { sendResendEmail, htmlEscape } from "./_email.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
