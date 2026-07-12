@@ -1741,6 +1741,24 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
   const isPinned = !!activeDay?.pinnedRecipe;
   const isSkipped = !!activeDay?.skip;
   const isLiked = m?.data && liked.includes(m.data.name);
+  const renderAcceptSwapButtons = (compact?: boolean) => (
+    <>
+      {m.status !== "accepted" && (
+        <button
+          onClick={() => onAccept(activeDay.id)}
+          style={compact ? { ...s.acceptBtn, padding: "6px 12px", fontSize: 12 } : s.acceptBtn}
+        >
+          <Check size={compact ? 13 : 15} /> Accept
+        </button>
+      )}
+      <button
+        onClick={() => onReject(activeDay, safeIdx)}
+        style={compact ? { ...s.rejectBtn, padding: "6px 12px", fontSize: 12 } : s.rejectBtn}
+      >
+        <RefreshCw size={compact ? 12 : 14} /> {m.status === "accepted" ? "Swap" : "Reject"}
+      </button>
+    </>
+  );
 
   return (
     <div style={{ display: "grid", gap: "var(--space-3)" }}>
@@ -1855,6 +1873,16 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
           )}
           {m?.data && (m.status === "ready" || m.status === "accepted") && (
             <>
+              {/* Actions row (top, compact) */}
+              {!isPinned && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" as const,
+                  marginBottom: "var(--space-3)",
+                }}>
+                  {renderAcceptSwapButtons(true)}
+                </div>
+              )}
+
               {/* Recipe identity */}
               {m.data.cuisine && <span style={s.cuisineTag}>{m.data.cuisine}</span>}
               <h2 style={{
@@ -2028,14 +2056,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                   borderTop: "1px solid var(--c-border)",
                   display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" as const,
                 }}>
-                  {m.status !== "accepted" && (
-                    <button onClick={() => onAccept(activeDay.id)} style={s.acceptBtn}>
-                      <Check size={15} /> Accept
-                    </button>
-                  )}
-                  <button onClick={() => onReject(activeDay, safeIdx)} style={s.rejectBtn}>
-                    <RefreshCw size={14} /> {m.status === "accepted" ? "Swap" : "Reject"}
-                  </button>
+                  {renderAcceptSwapButtons()}
                   <div style={{ flex: 1 }} />
                   <button
                     onClick={() => onThumbUp(activeDay)}
