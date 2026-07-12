@@ -1,5 +1,5 @@
-import SectionPlaceholder from "../SectionPlaceholder";
+import Dashboard from "../Dashboard";
 
-export default function Dashboard() {
-  return <SectionPlaceholder title="Dashboard" />;
+export default function DashboardPage({ session }: { session: any }) {
+  return <Dashboard session={session} />;
 }
