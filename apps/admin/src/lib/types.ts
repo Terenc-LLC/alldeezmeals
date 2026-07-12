@@ -52,6 +52,27 @@ export const REJECT_CATEGORIES: { value: string; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+// TER-186/195b: shape returned by a direct `catalog` table read (RLS allows any
+// authenticated user to SELECT; writes go through the admin-gated endpoints —
+// apps/admin/api/catalog-nutrition.ts and apps/admin/api/nutrition.ts). Mirrors
+// the CatalogItem shape from the old CatalogView.tsx (deleted in TER-510).
+export type CatalogItem = {
+  id: string;
+  product_name: string | null;
+  normalized_product: string;
+  package_size: string | null;
+  category: string | null;
+  upc: string | null;
+  kcal_per_100g: number | null;
+  serving_g: number | null;
+  macros: { protein_g: number; fat_g: number; carbs_g: number } | null;
+  fdc_id: string | null;
+  nutrition_source: string | null;
+  nutrition_retrieved_at: string | null;
+  nutrition_stale: boolean | null;
+  updated_at: string;
+};
+
 // TER-237: shape returned by GET /api/list-submissions.
 export type PendingSubmission = {
   id: string;
