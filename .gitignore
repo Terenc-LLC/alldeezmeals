@@ -18,3 +18,6 @@ dist-ssr/
 *.local
 .vscode/
 .idea/
+
+# Local data files (e.g. Open Food Facts export) — never commit
+off.csv
