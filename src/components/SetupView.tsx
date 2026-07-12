@@ -41,11 +41,31 @@ function PeopleInput({ value, onChange, style }: { value: number; onChange: (n: 
 export default function SetupView(p: any) {
   const { location, geocode, startDate, setStartDate, numDays, setNumDays, days, updDay, dateFor, forecast, fxStatus,
     defaultPeople, setDefaultPeople, efficiency, setEfficiency, mixCuisines, setMixCuisines, staples, setStaples,
-    rotation, avoidTerms, setAvoidTerms, alwaysHave, setAlwaysHave, onGenerate, busy, isMobile } = p;
+    rotation, avoidTerms, setAvoidTerms, alwaysHave, setAlwaysHave, weekNote, setWeekNote, onGenerate, busy, isMobile } = p;
   const [showStaples, setShowStaples] = useState(false);
+  const [showNotesHelp, setShowNotesHelp] = useState(false);
+  const [applyConfirm, setApplyConfirm] = useState<string | null>(null);
   const [locInput, setLocInput] = useState("");
   const [avoidInput, setAvoidInput] = useState("");
   const [newPantry, setNewPantry] = useState("");
+
+  // TER-532: one-time append copy-down — every day's note gets the week note
+  // folded in, separated by " · " if the day already has text (day-note field
+  // is a single-line input; a blank line renders as a run-on and is stripped
+  // on any subsequent edit). After this, day notes are fully independent
+  // again (no linkage back to the week note).
+  useEffect(() => {
+    if (!applyConfirm) return;
+    const t = setTimeout(() => setApplyConfirm(null), 3000);
+    return () => clearTimeout(t);
+  }, [applyConfirm]);
+
+  const applyWeekNoteToAllDays = () => {
+    const note = weekNote.trim();
+    if (!note) return;
+    days.forEach((day: any) => updDay(day.id, { note: day.note ? `${day.note} · ${note}` : note }));
+    setApplyConfirm(`Added to ${days.length} day${days.length === 1 ? "" : "s"}`);
+  };
 
   // TER-330: the unified pantry list (durable exclude-from-buy set) now lives in
   // Setup. Backed by the normalized `alwaysHave` key, same as the Shopping List.
@@ -76,6 +96,39 @@ export default function SetupView(p: any) {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>Week note</h3>
+        <p style={s.cardSub}>One note for the whole week — use "Apply to all days" to fold it into every day's note below.</p>
+        <textarea
+          value={weekNote}
+          onChange={(e) => setWeekNote(e.target.value)}
+          placeholder="Min 40g protein per serving · no fish · kid-friendly"
+          rows={2}
+          style={{ ...s.input, width: "100%", marginTop: 10, resize: "vertical", fontFamily: "inherit" }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" as const }}>
+          <button onClick={applyWeekNoteToAllDays} disabled={!weekNote.trim()} className="btn-secondary btn--sm">
+            Apply to all days
+          </button>
+          {applyConfirm && <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--c-primary)" }}>{applyConfirm}</span>}
+        </div>
+        <button onClick={() => setShowNotesHelp((v) => !v)} style={{ ...s.collapseBtn, marginTop: 10 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--c-text-muted)" }}>What can notes do?</span>
+          <span style={s.miniLabel}>{showNotesHelp ? "hide" : "show"}</span>
+        </button>
+        {showNotesHelp && (
+          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+            <p style={s.cardSub}><strong>Nutrition targets</strong> (estimates the planner aims for) — "Min 40g protein, 20g fiber per serving"</p>
+            <p style={s.cardSub}><strong>Exclusions</strong> (preferences we steer around, not a guarantee against allergens — always check ingredient labels yourself) — "no fish," "no pork"</p>
+            <p style={s.cardSub}><strong>Use-it-up</strong> — "Use the chicken in the fridge"</p>
+            <p style={s.cardSub}><strong>Audience</strong> — "Kid-friendly"</p>
+            <p style={s.cardSub}><strong>Method/equipment</strong> — "Slow cooker," "one pan," "grill"</p>
+            <p style={s.cardSub}><strong>Leftovers/format</strong> — "Enough for lunch next day," "handheld"</p>
+            <p style={s.cardSub}><strong>Budget</strong> — "Keep it cheap this week"</p>
+          </div>
+        )}
+      </div>
+
       <div style={s.card}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 150 }}>

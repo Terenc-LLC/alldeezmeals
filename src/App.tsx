@@ -223,6 +223,8 @@ export default function App() {
   // TER-330: `pantry` and `alwaysHave` collapsed onto one normalized key.
   // Legacy `pantry` blobs are still read on hydrate and forward-merged here.
   const [alwaysHave, setAlwaysHave] = useState<string[]>([]);
+  // TER-532: week-level note, copy-down source only — never sent to generation itself.
+  const [weekNote, setWeekNote] = useState<string>("");
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [weekAdditions, setWeekAdditions] = useState<Array<{id: string; name: string; qty: string}>>([]);
   const [defaultPeople, setDefaultPeople] = useState(4);
@@ -314,6 +316,7 @@ export default function App() {
         setStaples(d.staples ?? DEFAULT_STAPLES);
         // TER-330: forward-merge legacy `pantry` into the unified `alwaysHave` key.
         setAlwaysHave(mergePantryIntoAlwaysHave(d.pantry, d.alwaysHave));
+        setWeekNote(d.weekNote ?? "");
         setCheckedItems(d.checkedItems ?? {});
         if (d.weekAdditions) setWeekAdditions(d.weekAdditions);
         setDefaultPeople(d.defaultPeople ?? 4);
@@ -394,6 +397,7 @@ export default function App() {
           if (d.staples !== undefined) setStaples(d.staples);
           // TER-330: forward-merge legacy `pantry` into the unified `alwaysHave` key.
           if (d.pantry !== undefined || d.alwaysHave !== undefined) setAlwaysHave(mergePantryIntoAlwaysHave(d.pantry, d.alwaysHave));
+          if (d.weekNote !== undefined) setWeekNote(d.weekNote);
           if (d.checkedItems !== undefined) setCheckedItems(d.checkedItems);
           if (d.weekAdditions !== undefined) setWeekAdditions(d.weekAdditions);
           if (d.defaultPeople !== undefined) setDefaultPeople(d.defaultPeople);
@@ -483,7 +487,7 @@ export default function App() {
       // TER-330: `pantry` is no longer written — its entries are forward-merged
       // into `alwaysHave` on hydrate. Old clients still read `alwaysHave`, so the
       // merged set keeps excluding correctly with no data loss.
-      location, startDate, numDays, days, forecast, meals, staples, alwaysHave,
+      location, startDate, numDays, days, forecast, meals, staples, alwaysHave, weekNote,
       checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress,
       // TER-418: dual-write the date-keyed canonical model alongside the legacy keys.
       // TER-428: `currentWeek` is gone from state and payload — the rollback floor
@@ -505,7 +509,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, alwaysHave, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress, liveModel, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, alwaysHave, weekNote, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress, liveModel, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -1137,6 +1141,7 @@ ${recipeOutputContract(day.people)}`;
                 staples={staples} setStaples={setStaples} rotation={rotation}
                 avoidTerms={avoidTerms} setAvoidTerms={setAvoidTerms}
                 alwaysHave={alwaysHave} setAlwaysHave={setAlwaysHave}
+                weekNote={weekNote} setWeekNote={setWeekNote}
                 onGenerate={generateAll} busy={busy} isMobile={isMobile}
               />
             )}
