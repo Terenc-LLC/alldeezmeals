@@ -85,7 +85,7 @@ export default function ShareRecipeButton({ session, recipe }: { session: any; r
         aria-label="Share recipe"
       >
         {state.phase === "busy"
-          ? <RefreshCw size={15} className="spin" color="var(--c-text-muted)" />
+          ? <RefreshCw size={15} className="animate-spin" color="var(--c-text-muted)" />
           : <Share2 size={15} color={state.phase === "error" ? "var(--c-danger)" : "var(--c-text-muted)"} />}
       </button>
 
