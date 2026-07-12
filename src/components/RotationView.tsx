@@ -26,6 +26,7 @@ export default function RotationView({ rotation, setRotation, liked, setLiked, a
         <RecipeCard
           meal={rotation[selectedIdx]}
           onSaveRotation={() => setSelectedIdx(null)}
+          session={session}
         />
       </div>
     );

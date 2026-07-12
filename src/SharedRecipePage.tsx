@@ -2,7 +2,7 @@
 // Talks ONLY to the public shared-recipe endpoint via fetch — no Supabase client,
 // no auth, no user-state imports. Renders zero account/PII.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DIFFICULTY_LABELS, fmtRecipeQty, dietaryDisclaimer } from "./lib/format";
 
 type Snapshot = {
@@ -176,7 +176,145 @@ const s = {
     margin: 0,
     maxWidth: "34ch",
   } as const,
+  titleRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "var(--space-3)",
+    flexWrap: "wrap" as const,
+  } as const,
+  shareWrap: {
+    position: "relative" as const,
+    display: "inline-flex",
+    flexShrink: 0,
+  } as const,
+  copyLinkBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "var(--space-2) var(--space-4)",
+    background: "var(--c-surface)",
+    color: "var(--c-text)",
+    border: "1px solid var(--c-border)",
+    borderRadius: "var(--radius-md)",
+    fontSize: "var(--t-bodysm-size)",
+    fontWeight: 600,
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  } as const,
+  sharePopover: {
+    position: "absolute" as const,
+    top: "calc(100% + 6px)",
+    right: 0,
+    zIndex: 20,
+    width: "min(300px, 90vw)",
+    background: "var(--c-surface)",
+    border: "1px solid var(--c-border)",
+    borderRadius: "var(--radius-md)",
+    boxShadow: "0 4px 16px rgba(0,0,0,.12)",
+    padding: "var(--space-3)",
+    display: "grid",
+    gap: "var(--space-2)",
+  } as const,
+  sharePopoverClose: {
+    position: "absolute" as const,
+    top: 6,
+    right: 6,
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    color: "var(--c-text-muted)",
+    padding: 4,
+    fontSize: 13,
+    lineHeight: 1,
+  } as const,
+  sharePopoverLabel: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "var(--c-text-muted)",
+    textTransform: "uppercase" as const,
+    letterSpacing: ".04em",
+    margin: "0 20px 0 0",
+  } as const,
+  shareUrlInput: {
+    width: "100%",
+    padding: "8px 9px",
+    border: "1px solid var(--c-border)",
+    borderRadius: 8,
+    fontSize: 12.5,
+    color: "var(--c-text)",
+    background: "var(--c-surface-2)",
+    boxSizing: "border-box" as const,
+  } as const,
+  shareCopiedLine: {
+    fontSize: 12,
+    color: "var(--c-primary)",
+    margin: 0,
+  } as const,
+  shareErrorLine: {
+    fontSize: 12,
+    color: "var(--c-danger)",
+    margin: 0,
+  } as const,
 };
+
+// TER-534: public page has no session, so it copies the current URL directly
+// rather than calling /api/shared-recipe/create — the link already exists.
+function CopyLinkButton({ title }: { title?: string }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [open]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+    setOpen(true);
+  };
+
+  const nativeShare = async () => {
+    try {
+      await navigator.share({ title, url: window.location.href });
+      setOpen(false);
+    } catch {
+      // User cancelled the share sheet (or it failed) — leave the popover open with copy fallback.
+    }
+  };
+
+  return (
+    <div ref={wrapRef} style={s.shareWrap}>
+      <button onClick={copy} style={s.copyLinkBtn}>Copy link</button>
+      {open && (
+        <div style={s.sharePopover} role="dialog" aria-label="Share this recipe">
+          <button onClick={() => setOpen(false)} style={s.sharePopoverClose} aria-label="Dismiss">✕</button>
+          <p style={s.sharePopoverLabel}>Share link</p>
+          <input readOnly value={window.location.href} onFocus={(e) => e.currentTarget.select()} style={s.shareUrlInput} />
+          {copied ? (
+            <p style={s.shareCopiedLine}>✓ Copied to clipboard</p>
+          ) : (
+            <p style={s.shareErrorLine}>Couldn't copy automatically — copy the link above</p>
+          )}
+          {canNativeShare && (
+            <button className="btn-primary btn--sm" onClick={nativeShare}>Share…</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SharedRecipePage({ token }: { token: string }) {
   const [load, setLoad] = useState<Load>({ status: "loading" });
@@ -240,8 +378,13 @@ export default function SharedRecipePage({ token }: { token: string }) {
   return (
     <div style={s.page}>
       <div style={s.container}>
-        {snapshot.cuisine && <span style={s.cuisinePill}>{snapshot.cuisine}</span>}
-        <h1 style={s.title}>{snapshot.name}</h1>
+        <div style={s.titleRow}>
+          <div style={{ minWidth: 0 }}>
+            {snapshot.cuisine && <span style={s.cuisinePill}>{snapshot.cuisine}</span>}
+            <h1 style={s.title}>{snapshot.name}</h1>
+          </div>
+          <CopyLinkButton title={snapshot.name} />
+        </div>
         {snapshot.description && <p style={s.description}>{snapshot.description}</p>}
 
         <div style={s.metaRow}>

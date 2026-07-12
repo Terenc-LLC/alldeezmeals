@@ -24,6 +24,7 @@ import ListView from "./components/ListView";
 import RotationView from "./components/RotationView";
 import RecipeImportHandler from "./components/RecipeImportHandler";
 import SetupView from "./components/SetupView";
+import ShareRecipeButton from "./components/ShareRecipeButton";
 
 /* ------------------------------------------------------------------ */
 /*  ALLDEEZMeals - ALDI family meal planner, weather-aware, learns      */
@@ -1154,6 +1155,7 @@ ${recipeOutputContract(day.people)}`;
                 onAddRotation={(d: any) => addToRotation(meals[d.id].data)}
                 liked={liked} onGenerate={() => generateAll()}
                 onAllAccepted={() => setTab("today")} acceptedCount={acceptedCount}
+                session={session}
               />
             )}
           </>
@@ -1696,7 +1698,7 @@ function TocStatusPill({ m, isPinned, isSkipped }: { m: any; isPinned: boolean; 
   return <span style={{ ...base, background: "var(--c-accent)", color: "var(--c-pill-text)" }}>Review</span>;
 }
 
-function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onAllAccepted, acceptedCount, startDate, onShiftWeek }: any) {
+function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, onThumbUp, onThumbDown, onAddRotation, liked, onGenerate, onAllAccepted, acceptedCount, startDate, onShiftWeek, session }: any) {
   const firstMealIdx = days.findIndex((d: any) => meals[d.id]);
   const [activeMealIdx, setActiveMealIdx] = useState<number>(firstMealIdx >= 0 ? firstMealIdx : 0);
 
@@ -2071,6 +2073,7 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
                   <button onClick={() => onAddRotation(activeDay)} style={s.rotateBtn} title="Save to Recipe Box">
                     <Star size={14} /> Recipe Box
                   </button>
+                  <ShareRecipeButton session={session} recipe={m.data} />
                   <button
                     onClick={() => setActiveMealIdx(prev => Math.min(total - 1, prev + 1))}
                     disabled={safeIdx === total - 1}
