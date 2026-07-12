@@ -37,11 +37,11 @@ export default function RecipeImportHandler({ rotation, setRotation }: { rotatio
           return;
         }
         setRecipeName(recipe.name);
-        if (rotation.some((r: any) => r.name === recipe.name)) {
+        if (rotation.some((r: any) => r.name.toLowerCase() === recipe.name.toLowerCase())) {
           setStatus("duplicate");
           return;
         }
-        setRotation((p: any[]) => (p.some((r) => r.name === recipe.name) ? p : [...p, recipe]));
+        setRotation((p: any[]) => (p.some((r) => r.name.toLowerCase() === recipe.name.toLowerCase()) ? p : [...p, recipe]));
         setStatus("saved");
       } catch {
         setStatus("error");

@@ -53,7 +53,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const recipe = body.recipe;
-  if (!recipe || typeof recipe.name !== "string" || !recipe.name.trim() || !Array.isArray(recipe.ingredients)) {
+  if (!recipe || typeof recipe.name !== "string" || !recipe.name.trim() || !Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) {
     res.status(400).json({ error: "recipe with name and ingredients array is required" });
     return;
   }

@@ -260,7 +260,7 @@ export default function SharedRecipePage({ token }: { token: string }) {
         <section>
           <h2 style={s.sectionTitle}>Ingredients</h2>
           <ul style={s.ingList}>
-            {snapshot.ingredients.map((ing, i) => (
+            {(snapshot.ingredients ?? []).map((ing, i) => (
               <li key={i} style={s.ingRow}>
                 <span>{ing.name}</span>
                 <span style={{ color: "var(--c-text-muted)" }}>{fmtRecipeQty(ing)}</span>
@@ -274,7 +274,7 @@ export default function SharedRecipePage({ token }: { token: string }) {
         <section>
           <h2 style={s.sectionTitle}>Instructions</h2>
           <ol style={s.stepList}>
-            {snapshot.steps.map((step, i) => (
+            {(snapshot.steps ?? []).map((step, i) => (
               <li key={i} style={s.stepRow}>
                 <span style={s.stepMarker}>{i + 1}</span>
                 <span>{step}</span>
