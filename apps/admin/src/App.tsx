@@ -91,7 +91,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/approvals" element={<ApprovalsPage session={session} />} />
-          <Route path="/review-queues" element={<ReviewQueues />} />
+          <Route path="/review-queues" element={<ReviewQueues session={session} />} />
           <Route path="/users" element={<Users session={session} />} />
           <Route path="/catalog" element={<Catalog />} />
           <Route path="/beta" element={<Beta />} />
