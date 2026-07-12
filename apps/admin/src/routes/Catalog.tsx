@@ -1,5 +1,7 @@
-import SectionPlaceholder from "../SectionPlaceholder";
+import CatalogDirectory from "../CatalogDirectory";
 
-export default function Catalog() {
-  return <SectionPlaceholder title="Catalog" />;
+// CatalogDirectory renders its own heading (with a live filtered count), same
+// pattern as Users.tsx — no need to duplicate it here.
+export default function Catalog({ session }: { session: any }) {
+  return <CatalogDirectory session={session} />;
 }
