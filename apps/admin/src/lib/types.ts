@@ -15,7 +15,7 @@ export type AdminUser = {
   qualification_slot: number | null;
 };
 
-// TER-492: shape returned by GET /api/list-feedback.
+// TER-492/TER-514: shape returned by GET /api/list-feedback.
 export type FeedbackItem = {
   id: string;
   user_id: string | null;
@@ -26,6 +26,18 @@ export type FeedbackItem = {
   created_at: string;
   first_name: string | null;
   last_name: string | null;
+  handled: boolean;
+  handled_at: string | null;
+};
+
+// TER-266/TER-514: shape returned by GET /api/list-qualified.
+export type QualifiedUser = {
+  qualification_number: number;
+  qualified_at: string;
+  email: string | null;
+  name: string | null;
+  referral_code: string | null;
+  referred_signups: number;
 };
 
 // TER-357: shape returned by GET /api/list-pending-recipes.

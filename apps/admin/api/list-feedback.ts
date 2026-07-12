@@ -14,7 +14,7 @@ export default async function handler(req: any, res: any) {
 
   const { data: feedbackData, error } = await svc
     .from("feedback")
-    .select("id, user_id, email, message, category, app_context, created_at")
+    .select("id, user_id, email, message, category, app_context, created_at, handled, handled_at")
     .order("created_at", { ascending: false })
     .limit(200);
 

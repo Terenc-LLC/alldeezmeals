@@ -1,5 +1,5 @@
-import SectionPlaceholder from "../SectionPlaceholder";
+import FeedbackViewer from "../FeedbackViewer";
 
-export default function Feedback() {
-  return <SectionPlaceholder title="Feedback" />;
+export default function Feedback({ session }: { session: any }) {
+  return <FeedbackViewer session={session} />;
 }
