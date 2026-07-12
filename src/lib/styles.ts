@@ -116,4 +116,13 @@ lvStaple:   { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sa
   tocDate:       { fontSize: 11, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase" as const, letterSpacing: ".04em" },
   tocMealName:   { fontFamily: serif, fontSize: 15, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const },
   tocDetail:     { padding: "12px 14px 14px", borderTop: "1px solid var(--c-border)" },
+  // TER-534: ShareRecipeButton feedback popover
+  shareWrap:            { position: "relative", display: "inline-flex" },
+  sharePopover:          { position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50, width: "min(300px, 90vw)", background: "var(--c-surface)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)", boxShadow: "var(--elev-1)", padding: "var(--space-3)", display: "grid", gap: "var(--space-2)" },
+  sharePopoverClose:     { position: "absolute", top: 6, right: 6, background: "transparent", border: "none", cursor: "pointer", color: "var(--c-text-muted)", padding: 4, display: "grid", placeItems: "center" },
+  sharePopoverLabel:     { fontSize: 11, fontWeight: 700, color: "var(--c-text-muted)", textTransform: "uppercase", letterSpacing: ".04em", margin: "0 20px 0 0" },
+  shareUrlInput:         { width: "100%", padding: "8px 9px", border: "1px solid var(--c-border)", borderRadius: 8, fontFamily: sans, fontSize: 12.5, color: "var(--c-text)", background: "var(--c-surface-2)", boxSizing: "border-box" },
+  shareCopiedLine:       { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--c-primary)", margin: 0 },
+  shareErrorLine:        { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--c-danger)", margin: 0 },
+  sharePopoverActions:   { display: "flex", gap: 8, marginTop: 2 },
 };

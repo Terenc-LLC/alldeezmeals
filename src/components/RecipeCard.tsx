@@ -2,9 +2,10 @@ import { Clock, Users, Flame, ThumbsUp, ThumbsDown, Star, Printer } from "lucide
 import { s } from "../lib/styles";
 import { useIsMobile } from "../lib/utils";
 import { DIFFICULTY_LABELS, fmtRecipeQty, dietaryDisclaimer } from "../lib/format";
+import ShareRecipeButton from "./ShareRecipeButton";
 
 /* ============================ RecipeCard (TER-251) — standalone, no planner actions ============================ */
-export default function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, isLiked }: { meal: any; kcalInfo?: { kcalPerServing: number | null; tier: string } | null; onSaveRotation?: () => void; onThumbUp?: () => void; onThumbDown?: () => void; isLiked?: boolean }) {
+export default function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, onThumbDown, isLiked, session }: { meal: any; kcalInfo?: { kcalPerServing: number | null; tier: string } | null; onSaveRotation?: () => void; onThumbUp?: () => void; onThumbDown?: () => void; isLiked?: boolean; session?: any }) {
   const isMobile = useIsMobile();
   const totalMin = (meal.prepMinutes ?? 0) + (meal.cookMinutes ?? 0);
   const diffLabel = DIFFICULTY_LABELS[meal.difficulty] ?? "";
@@ -109,6 +110,7 @@ export default function RecipeCard({ meal, kcalInfo, onSaveRotation, onThumbUp, 
           <button className="btn-secondary" style={{ flex: 1 }} onClick={onSaveRotation}>
             <Star size={16} /> Save to Recipe Box
           </button>
+          <ShareRecipeButton session={session} recipe={meal} />
           <button className="btn-ghost" aria-label="Print" onClick={() => window.print()} style={{ padding: "0 var(--space-4)" }}>
             <Printer size={16} />
           </button>
