@@ -11,6 +11,47 @@ import { buildSeedPrompt, parseRecipeResponse, normalizeRecipeName } from "./_re
 
 const MODEL = "claude-sonnet-4-6";
 
+// Mirrors api/generate.ts's LLM_RATES ($/MTok) — duplicated because apps/admin
+// is a separate Vercel project and stays self-contained (see header comment).
+// Update alongside that table when Anthropic changes pricing.
+const LLM_RATES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  "claude-sonnet-4-6": { input: 3, output: 15, cacheRead: 0.30, cacheWrite: 3.75 },
+};
+
+function computeCostUsd(inputTokens: number, outputTokens: number, cacheReadTokens: number, cacheWriteTokens: number): number {
+  const rates = LLM_RATES[MODEL];
+  const perTok = (rate: number) => rate / 1_000_000;
+  return (
+    inputTokens * perTok(rates.input) +
+    outputTokens * perTok(rates.output) +
+    cacheReadTokens * perTok(rates.cacheRead) +
+    cacheWriteTokens * perTok(rates.cacheWrite)
+  );
+}
+
+// Best-effort per-call usage logging — must never affect the seed response.
+// Called for every Anthropic call including retried attempts, since retries cost tokens too.
+async function logSeedUsage(svc: any, userId: string, usage: any) {
+  if (!usage) return;
+  try {
+    const inputTokens = usage.input_tokens ?? 0;
+    const outputTokens = usage.output_tokens ?? 0;
+    const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
+    const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
+    await svc.from("llm_usage").insert({
+      user_id: userId,
+      model: MODEL,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cache_read_tokens: cacheReadTokens,
+      cost_usd: computeCostUsd(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens),
+      feature: "seed",
+    });
+  } catch (logErr: any) {
+    console.error("llm_usage insert failed:", logErr?.message);
+  }
+}
+
 function computeContentHash(name: string, ingredients: any[], steps: any[]): string {
   const normalizedName = normalizeRecipeName(name);
   const ingNames = ingredients
@@ -62,6 +103,7 @@ export default async function handler(req: any, res: any) {
         body: JSON.stringify({ model: MODEL, max_tokens: 5000, messages: [{ role: "user", content: prompt }] }),
       });
       const data = await r.json();
+      await logSeedUsage(svc, auth.user.id, data?.usage);
       if (!r.ok) {
         const msg = data?.error?.message ?? data?.error ?? `Anthropic error ${r.status}`;
         throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
