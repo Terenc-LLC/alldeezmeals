@@ -50,8 +50,10 @@ export default function SetupView(p: any) {
   const [newPantry, setNewPantry] = useState("");
 
   // TER-532: one-time append copy-down — every day's note gets the week note
-  // folded in, separated by a blank line if the day already has text. After
-  // this, day notes are fully independent again (no linkage back to the week note).
+  // folded in, separated by " · " if the day already has text (day-note field
+  // is a single-line input; a blank line renders as a run-on and is stripped
+  // on any subsequent edit). After this, day notes are fully independent
+  // again (no linkage back to the week note).
   useEffect(() => {
     if (!applyConfirm) return;
     const t = setTimeout(() => setApplyConfirm(null), 3000);
@@ -61,7 +63,7 @@ export default function SetupView(p: any) {
   const applyWeekNoteToAllDays = () => {
     const note = weekNote.trim();
     if (!note) return;
-    days.forEach((day: any) => updDay(day.id, { note: day.note ? `${day.note}\n\n${note}` : note }));
+    days.forEach((day: any) => updDay(day.id, { note: day.note ? `${day.note} · ${note}` : note }));
     setApplyConfirm(`Added to ${days.length} day${days.length === 1 ? "" : "s"}`);
   };
 
