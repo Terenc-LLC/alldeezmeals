@@ -34,8 +34,11 @@ export default async function handler(req: any, res: any) {
     svc.from("receipt_submissions").select("id", { count: "exact", head: true }).eq("status", "pending"),
     svc.from("feedback").select("id", { count: "exact", head: true }).eq("handled", false),
     svc.from("profiles").select("id", { count: "exact", head: true }).eq("approved", true),
-    // WAU: distinct users with plan/state activity in the last 7 days.
-    svc.from("user_state").select("user_id").gte("updated_at", weekAgoISO),
+    // WAU: user_state has a UNIQUE(user_id) constraint (one row per user), so a
+    // head-only count on updated_at is exact — no dedup needed. This is the
+    // same activity signal /api/users surfaces as "last_active" (there is no
+    // profiles.last_active column; that's a response field, not a DB column).
+    svc.from("user_state").select("user_id", { count: "exact", head: true }).gte("updated_at", weekAgoISO),
     svc.from("qualification_counter").select("count").eq("id", 1).maybeSingle(),
     svc.from("llm_usage").select("feature, cost_usd").gte("created_at", weekAgoISO),
   ]);
@@ -46,7 +49,7 @@ export default async function handler(req: any, res: any) {
   ].find((r) => r.error)?.error;
   if (firstError) { res.status(500).json({ error: firstError.message }); return; }
 
-  const wau = new Set((wauRes.data ?? []).map((r: any) => r.user_id)).size;
+  const wau = wauRes.count ?? 0;
   const generationsThisWeek = (llmUsageWeekRes.data ?? []).filter((r: any) => r.feature === "meal_gen").length;
   const costThisWeekUsd = (llmUsageWeekRes.data ?? []).reduce((sum: number, r: any) => sum + (r.cost_usd ?? 0), 0);
 
