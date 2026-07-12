@@ -45,7 +45,7 @@
     </header>
     <main class="policy">
       <h1>How to use ALLDEEZMeals</h1>
-      <p class="eff"><strong>Updated:</strong> May 27, 2026</p>
+      <p class="eff"><strong>Updated:</strong> July 12, 2026</p>
       <!-- BEGIN HELP BODY -->
       <p style="font-size:13px;color:var(--c-text-muted);background:#F4F1E9;border:1px solid var(--c-border);border-radius:6px;padding:10px 14px;margin:0 0 18px;">ALLDEEZMeals is an independent meal-planning tool operated by Terenc LLC. It is not affiliated with, endorsed by, sponsored by, or associated with ALDI Inc. or any of its affiliates. References to ALDI describe product availability and pricing context only (nominative use) and do not imply any partnership or endorsement. All trademarks, including ALDI, are the property of their respective owners.</p>
       <h2>What this is</h2>
@@ -132,6 +132,14 @@
       <h2>Send your list to Instacart (the magic part)</h2>
       <p>ALLDEEZMeals doesn't talk to Instacart directly. Instead, it gives you a perfectly-formatted message that you paste into <strong>Claude</strong> or <strong>ChatGPT</strong>, which build the cart for you. Set it up once, and the whole flow is about 30 seconds.</p>
 
+      <h3>What you need</h3>
+      <ul>
+        <li>A free account on <strong>Claude</strong> or <strong>ChatGPT</strong> — no paid plan required on either.</li>
+        <li>A free <strong>Instacart</strong> account. You'll sign in once when you connect it.</li>
+        <li>A U.S. location — both platforms' Instacart integrations are U.S.-only for now.</li>
+      </ul>
+      <p>Free tiers on both platforms have daily/weekly usage limits, but one grocery handoff a week fits comfortably within either.</p>
+
       <h3>Step 1 — Copy the list</h3>
       <p>On the <strong>List</strong> tab, tap <strong>Copy for Instacart (AI)</strong>. Your clipboard now has a preamble plus your items, like this:</p>
       <pre><code>Add these items to my Instacart cart, matching each to the closest available
@@ -147,25 +155,26 @@ the cart, give me the link so I can pick my store and check out.
       <h3>Step 2A — If you use Claude (claude.ai)</h3>
       <ol>
         <li>Open Claude and start a new chat.</li>
-        <li>Click the <strong>+</strong> at the bottom-left of the chat, hover over <strong>Connectors</strong>, and turn on <strong>Instacart</strong>. (Or set it up under <strong>Customize → Connectors</strong>.) Sign in to Instacart when prompted — you only do this once.</li>
         <li>Paste your copied list as a single message and send.</li>
+        <li>Claude will suggest connecting Instacart — approve it, then sign in to Instacart when prompted. You only do this once.</li>
         <li>Claude builds your cart and <strong>confirms with you before purchasing</strong>. Review the items, tell it about anything you want swapped in plain English (<em>"swap the diced tomatoes for crushed"</em>), then approve to finish checkout on Instacart.</li>
       </ol>
+      <p>Don't see the connector prompt? Turn it on yourself from the <a href="https://claude.ai/directory/connectors">connector directory</a> or under <strong>Settings → Connectors</strong>. Instacart also works on Claude's mobile apps — connector support there is in beta.</p>
 
       <h3>Step 2B — If you use ChatGPT (chat.openai.com)</h3>
       <ol>
-        <li>Open ChatGPT and start a new chat.</li>
-        <li>Open the <strong>Apps</strong> directory (it lives in the sidebar or behind the <strong>+</strong> menu), find <strong>Instacart</strong>, and enable it. Sign in to Instacart when prompted — once only.</li>
-        <li>Paste your copied list as a single message and send.</li>
+        <li>Open ChatGPT and go to <strong>Settings → Apps</strong> (the App Directory), find <strong>Instacart</strong>, and install it. Sign in to Instacart when prompted — once only.</li>
+        <li>Start a new chat, mention <strong>@Instacart</strong> before pasting your list (or add it from the tools menu), then paste your copied list as a single message and send.</li>
         <li>ChatGPT builds the cart and lets you <strong>check out directly inside ChatGPT</strong> with Instant Checkout — no need to switch tabs. Pay with your card and you're done.</li>
       </ol>
+      <p>Works on desktop, mobile web, and the iOS and Android apps.</p>
 
       <h3>Tips</h3>
       <ul>
         <li>The AI will sometimes pick a slightly different brand or pack size. Tell it what to swap in plain language; both Claude and ChatGPT handle this conversationally.</li>
         <li>You only sign in to Instacart once. The connection sticks for future weeks.</li>
         <li>If an item is out of stock at your local store, Instacart will suggest a replacement at checkout — that's Instacart's own logic, not the AI's.</li>
-        <li>If the AI seems confused, double-check that Instacart is actually toggled <strong>on</strong> for the current chat (in Claude, look for the carrot icon; in ChatGPT, the Instacart app should appear in the chat composer).</li>
+        <li>If the AI seems confused, make sure the connection actually went through — in Claude, check that you approved the Instacart connector suggestion (or that it's turned on under <strong>Settings → Connectors</strong>); in ChatGPT, make sure you invoked <strong>@Instacart</strong> (or added it from the tools menu) before pasting your list.</li>
       </ul>
 
       <h3>About the relationship</h3>
