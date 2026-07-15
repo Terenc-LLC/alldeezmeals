@@ -113,7 +113,9 @@ body { background: var(--c-bg); }
   .tab-label { display: none; }
 }
 
-/* iOS Safari zooms on focus when font-size < 16px — prevent by clamping to threshold on mobile */
+/* iOS Safari zooms on focus when font-size < 16px — prevent by clamping to threshold
+   on mobile. !important is required: form controls set font-size inline (s.input =
+   13px, several callsites 12.5px), and inline styles otherwise win over this rule. */
 @media (max-width: 767px) {
-  input, select, textarea { font-size: 16px; }
+  input, select, textarea { font-size: 16px !important; }
 }
