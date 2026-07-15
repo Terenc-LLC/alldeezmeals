@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   type ColumnDef,
   type SortingState,
@@ -32,11 +33,17 @@ type AdminUserRow = AdminUser & { lifecycle: LifecycleState };
 // user table (previously CatalogView.tsx in the consumer app, deleted in TER-510).
 // GET /api/users already carries everything this needs — no new endpoint.
 export default function UsersDirectory({ session }: { session: any }) {
+  const [searchParams] = useSearchParams();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [lifecycleFilter, setLifecycleFilter] = useState<"all" | LifecycleState>("all");
+  // TER-517: Insights links here as /users?lifecycle=<state> — seed the filter
+  // from the URL once on mount so the directory opens pre-filtered.
+  const [lifecycleFilter, setLifecycleFilter] = useState<"all" | LifecycleState>(() => {
+    const fromUrl = searchParams.get("lifecycle");
+    return (LIFECYCLE_STATES as string[]).includes(fromUrl ?? "") ? (fromUrl as LifecycleState) : "all";
+  });
   const [sorting, setSorting] = useState<SortingState>([{ id: "created_at", desc: true }]);
   const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);

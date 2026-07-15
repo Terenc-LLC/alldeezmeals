@@ -89,7 +89,7 @@ export default function App() {
       <Routes>
         <Route element={<AdminShell email={session.user?.email} onSignOut={signOut} />}>
           <Route path="/" element={<Dashboard session={session} />} />
-          <Route path="/insights" element={<Insights />} />
+          <Route path="/insights" element={<Insights session={session} />} />
           <Route path="/approvals" element={<ApprovalsPage session={session} />} />
           <Route path="/review-queues" element={<ReviewQueues session={session} />} />
           <Route path="/users" element={<Users session={session} />} />
