@@ -565,7 +565,7 @@ export default function App() {
   /* ---- meal generation (via /api/generate proxy) ---- */
   const callClaude = async (prompt: string) => generateRecipeFromPrompt(prompt, session?.access_token ?? "");
 
-  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], rejected: string[] = [], violatedTerms: string[] = [], weekAvoid: string[] = avoidTerms) => {
+  const buildPrompt = (day: any, dateISO: string, committed: any[], usedCuisines: string[], rejected: string[] = [], violatedTerms: string[] = [], weekAvoid: string[] = avoidTerms, dropNote = false) => {
     const fx = forecast[dateISO];
     const band = tempBand(fx?.hi);
     const wlabel = fx ? `Forecast for ${weekdayLabel(dateISO)}: high ${fx.hi}F, low ${fx.lo}F, ${wx(fx.code).l}.` : `Date: ${weekdayLabel(dateISO)} (no forecast available).`;
@@ -651,7 +651,7 @@ People eating: ${day.people}
 ${tempGuide}
 ${cuisineGuide}
 ${effortGuide}
-${day.note ? `Extra request: ${day.note}` : ""}
+${day.note && !dropNote ? `Extra request: ${day.note}\nThe extra request above is a soft preference: if it is unclear, contradictory, or impossible to satisfy alongside the constraints above, use your best judgment and satisfy it as best you can. NEVER respond with anything other than the single required JSON object -- no apology, no explanation, no refusal, no prose.` : ""}
 ${avoidBlock}
 ${prefLines.join("\n")}
 
@@ -732,13 +732,21 @@ ${recipeOutputContract(day.people)}`;
 
       let data: any = null;
       let violatedTerms: string[] = [];
+      let noteDropped = false;
       // TER-401 guard loop: initial attempt + ≤2 avoid-violation retries, each
       // retry with the violated terms explicitly emphasized in the prompt.
       for (let guardAttempt = 0; guardAttempt < 3 && !data; guardAttempt++) {
         let pendingHits: ReturnType<typeof checkRecipe> = [];
         for (let attempt = 0; attempt < 3; attempt++) {
+          // TER-544: a note that's contradictory/unintelligible can make the
+          // model refuse or reply with prose on every retry — same doomed
+          // prompt in, same failure out. On the last inner attempt, drop the
+          // free-text "Extra request" line and let the run succeed without it.
+          // Note-detected dietary terms stay enforced regardless (buildPrompt
+          // derives avoidBlock from day.note independently of this flag).
+          const dropNote = attempt === 2 && !!day.note;
           try {
-            const candidate = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), rejected, violatedTerms, weekAvoid));
+            const candidate = await callClaude(buildPrompt(day, dateFor(idx), committed, usedCuisinesFrom(committed), rejected, violatedTerms, weekAvoid, dropNote));
             // TER-401 deterministic guard: runs after parse, BEFORE the save gate
             // and before any meals-state commit — a violating dish must never
             // render, even transiently.
@@ -760,11 +768,16 @@ ${recipeOutputContract(day.people)}`;
               }
             }
             data = candidate;
+            if (dropNote) noteDropped = true;
             break;
           } catch (e: any) {
             const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape";
             if (!retryable) throw e;
-            if (attempt === 2) throw new Error("Couldn't generate this recipe — try again.");
+            if (attempt === 2) {
+              throw new Error(day.note
+                ? "Couldn't generate this recipe — your day note may be too restrictive. Try simplifying it, then regenerate."
+                : "Couldn't generate this recipe — try again.");
+            }
           }
         }
         if (pendingHits.length) {
@@ -774,6 +787,8 @@ ${recipeOutputContract(day.people)}`;
           if (guardAttempt === 2) throw new Error(`Couldn't generate a dish avoiding ${violatedTerms.join(", ")} — try adjusting your avoid list or note, then regenerate.`);
         }
       }
+      // TER-544: surface (never silently drop) when the note fallback fired.
+      if (noteDropped) data.noteApplied = false;
       // TER-401: banner data comes from the structured term list (week-level
       // avoid list + note-detected terms), never from an LLM echo.
       if (allAvoid.length) data.dietaryAvoid = allAvoid;
@@ -1981,6 +1996,12 @@ function PlanView({ days, meals, busy, dateFor, forecast, onAccept, onReject, on
               {m.data.dietaryAvoid?.length > 0 && (
                 <div style={{ ...s.reuseNote, marginBottom: "var(--space-3)" }}>
                   {dietaryDisclaimer(m.data.dietaryAvoid)}
+                </div>
+              )}
+
+              {m.data.noteApplied === false && (
+                <div style={{ ...s.reuseNote, marginBottom: "var(--space-3)", color: "var(--c-warning)" }}>
+                  <AlertCircle size={13} /> Your note for this day couldn't be applied — generated without it.
                 </div>
               )}
 
