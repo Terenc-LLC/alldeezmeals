@@ -105,9 +105,14 @@ export const s: Record<string, any> = {
   lvCatTitle: { fontFamily: "var(--font-serif)", fontSize: 15, fontWeight: 600, margin: "0 0 var(--space-2)", color: "var(--c-primary)", borderBottom: "1px solid var(--c-border)", paddingBottom: "var(--space-2)" },
   lvRow:      { display: "flex", alignItems: "center", gap: "var(--space-3)", minHeight: "var(--tap-min)", padding: "var(--space-1) 0" },
   lvCheck:    { width: 24, height: 24, borderRadius: "var(--radius-sm)", border: "2px solid", cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0, padding: 0, transition: "background 120ms, border-color 120ms" },
-  lvHaveIt:   { fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", fontWeight: 700, border: "1px solid", borderRadius: "var(--radius-pill)", padding: "2px 9px", cursor: "pointer", whiteSpace: "nowrap" as const, display: "inline-flex", alignItems: "center", minHeight: 28 },
-lvStaple:   { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)" },
-  lvFooter:   { marginTop: "var(--space-4)", padding: "var(--space-3) var(--space-4)", background: "var(--c-success-bg)", border: "1px solid var(--c-border)", borderRadius: "var(--radius-md)" },
+  lvHaveIt:   { fontFamily: "var(--font-sans)", fontSize: "var(--t-bodysm-size)", fontWeight: 700, border: "1px solid", borderRadius: "var(--radius-pill)", padding: "0 12px", cursor: "pointer", whiteSpace: "nowrap" as const, display: "inline-flex", alignItems: "center", minHeight: "var(--tap-min)", flexShrink: 0 },
+  lvStaple:   { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, color: "var(--c-warning)", background: "var(--c-warning-bg)", padding: "2px 7px", borderRadius: "var(--radius-pill)" },
+  // TER-504: "added by you" tag on user-added rows folded into category cards
+  lvAddedTag: { display: "inline-block", marginLeft: 6, fontFamily: "var(--font-sans)", fontSize: "var(--t-label-size)", fontWeight: 700, color: "var(--c-pill-text)", background: "var(--c-accent)", padding: "2px 7px", borderRadius: "var(--radius-pill)", textTransform: "uppercase" as const, letterSpacing: ".03em" },
+  // TER-504: muted helper microcopy under inputs / action buttons
+  lvMicrocopy:{ fontFamily: "var(--font-sans)", fontSize: "var(--t-caption-size)", lineHeight: "var(--t-caption-lh)", fontWeight: 400, color: "var(--c-text-muted)", margin: 0 },
+  // TER-504: category picker in the add-item row
+  lvAddSelect:{ padding: "6px 9px", border: "1px solid var(--c-border)", borderRadius: "var(--radius-sm)", fontFamily: "var(--font-sans)", fontSize: 12.5, color: "var(--c-text)", background: "var(--c-surface)", boxSizing: "border-box" as const, cursor: "pointer" },
   // TER-283: TOC wizard
   tocRow:        { background: "var(--c-surface)", border: "1px solid var(--c-border)", borderRadius: 12, overflow: "hidden" },
   tocRowActive:  { borderColor: "var(--c-primary)", boxShadow: "0 0 0 1px var(--c-primary)" },

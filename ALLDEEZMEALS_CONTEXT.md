@@ -780,6 +780,42 @@ Built in two reviewable commits.
   subBadge/subBadgeActive/sdrRow/sdrHead/sdrSkipBtn/sdrCheck/sdrSkipMsg`.
 - `tsc --noEmit && vite build` pass (559.76 kB JS / 155.17 kB gzip, 0 TS errors).
 
+## Status (TER-504 — July 2026)
+- Shopping & pantry interaction model v2 (`src/components/ListView.tsx` + `src/App.tsx` state).
+- **NEW `weekHaveIt: string[]` key** (per-week "have it" override). Additive `user_state` key —
+  normalized names via `normalizeIngName`, wired exactly like `weekAdditions`: `useState`,
+  localStorage boot (`if (d.weekHaveIt)`), Supabase sign-in load (`if (d.weekHaveIt !== undefined)`),
+  save payload + save-effect dep array, default `[]`. No migration (missing key = `[]`).
+- **Have-it semantics (the bug fix):** the per-row "have it" button now toggles `weekHaveIt`, NOT
+  the durable `alwaysHave` list. It is a PER-WEEK override — "I already have this for this trip" —
+  and never permanently excludes an item. Previously it wrote `alwaysHave`, which is why items like
+  ground beef / apples / bananas became permanent exclusions in the live account.
+- **`weekHaveIt` clears ONLY on Mark Purchased.** `handleMarkOrdered`'s success path calls
+  `setWeekHaveIt([])` beside `setCheckedItems({})` / `setWeekAdditions([])`. Generation
+  (`generateAll`) does NOT touch it; it persists across sessions between shopping trips.
+- **Single exclusion chokepoint:** `src/lib/shoppingExclusion.ts` exports
+  `isExcludedFromWeeklyList(name, alwaysHave, weekHaveIt)`; the `groceryList` memo drops an item if
+  its normalized name is in EITHER list. `listText`, the Instacart handoff, and every view inherit
+  the exclusion. `weekHaveIt` added to the memo dep array. Unit-tested in `shoppingExclusion.test.ts`.
+- **Categorized "Added by you":** additions now store `{id, name, qty, category}` (category select
+  added to the add-item row, default "Other"; `CATEGORIES` from `recipeGenerate.js`). Additions fold
+  into their own category card (marked with an "added" pill, remove-X kept) so the screen reads as one
+  unified list, not two sections. Legacy additions without a `category` render under "Other" via
+  `additionCategory()` (render-time default, no migration). Need-it: additions are never filtered by
+  `alwaysHave`/`weekHaveIt`. Copy / Instacart "Added by you:" text formats UNCHANGED.
+- **Price display removed (closes TER-389 by removal):** deleted `catalogPriceMap`/`priceEstimate`
+  memos, the per-item "$X ea" span, and the price footer (`s.lvFooter` token removed). The `catalog`
+  fetch is KEPT — `buildInstacartHandoff` still uses its UPC hints.
+- **Mark Purchased (Phase C minimal):** button + confirm copy renamed "Mark ordered" → "Mark
+  Purchased" (same `handleMarkOrdered` mechanics — stamps `orderedAt`, deletes nothing). Microcopy
+  under it: "Closes this trip — purchased dinners leave the list and your week's overrides reset."
+  "Unmark last order" → "Undo last purchase". No receipt-share / TER-505 treatment (deferred).
+- **Restyle:** header renamed "Grocery list" → "Shopping list"; new `s` tokens `lvAddedTag`,
+  `lvMicrocopy`, `lvAddSelect`; `lvHaveIt` bumped to a 44px tap target; `lvStaple` indentation fixed
+  (TER-521 cosmetic). Always-have panel unchanged (typed-add only).
+- `tsc --noEmit && vite build` pass (555.45 kB JS / 154.89 kB gzip, 0 TS errors). `vitest run`:
+  173 tests green (8 new in `shoppingExclusion.test.ts`).
+
 ## Backlog / next
 - TER-249 PR1–PR5 (design refresh Phase 1): all 5 PRs are open and awaiting Chris review/merge.
 - TER-196: Calorie cascade + UI (depends on TER-194).
