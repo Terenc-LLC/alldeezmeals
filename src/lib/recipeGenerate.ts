@@ -27,10 +27,12 @@ export async function generateRecipeFromPrompt(
   if (!r.ok) {
     const msg = data?.error?.message ?? data?.error ?? `API error ${r.status}`;
     const err: any = new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
-    // TER-414: 429 = daily quota — must abort the whole run, never feed the
-    // shape/guard retry loops. (4xx errors are already non-retryable: the
-    // retry predicates only match truncation, SyntaxError, and "bad shape".)
-    if (r.status === 429) err.quota = true;
+    // TER-414/TER-545: 429 only means daily quota when the server's own marker
+    // is present — must abort the whole run, never feed the shape/guard retry
+    // loops. An Anthropic-side 429 (no marker) or any 5xx is transient upstream
+    // trouble and gets retried instead of halting the run.
+    if (r.status === 429 && data?.quotaExceeded === true) err.quota = true;
+    else if (r.status >= 500 || r.status === 429) err.transient = true;
     throw err;
   }
   if (data.stop_reason === "max_tokens") {
