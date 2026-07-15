@@ -18,6 +18,7 @@ import { emptyDateModel, mergeWindowIntoDateModel, hydrateWindow, migrateLegacyB
 import { listScopeFromModel, reuseScopeFromModel } from "./lib/listScope";
 import { s, serif, sans } from "./lib/styles";
 import { CATEGORIES, generateRecipeFromPrompt, recipeOutputContract } from "./lib/recipeGenerate.js";
+import { isExcludedFromWeeklyList } from "./lib/shoppingExclusion";
 import { uid, useIsMobile } from "./lib/utils";
 import { fmtPurchaseQty, DIFFICULTY_LABELS, fmtRecipeQty, dietaryDisclaimer } from "./lib/format";
 import ListView from "./components/ListView";
@@ -227,7 +228,11 @@ export default function App() {
   // TER-532: week-level note, copy-down source only — never sent to generation itself.
   const [weekNote, setWeekNote] = useState<string>("");
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
-  const [weekAdditions, setWeekAdditions] = useState<Array<{id: string; name: string; qty: string}>>([]);
+  const [weekAdditions, setWeekAdditions] = useState<Array<{id: string; name: string; qty: string; category?: string}>>([]);
+  // TER-504: per-week "have it" override — items you already have for THIS trip.
+  // Additive `user_state` key; excludes from the weekly buy like `alwaysHave` but
+  // never writes the durable list, and clears only on Mark Purchased.
+  const [weekHaveIt, setWeekHaveIt] = useState<string[]>([]);
   const [defaultPeople, setDefaultPeople] = useState(4);
   const [efficiency, setEfficiency] = useState(true);
   const [mixCuisines, setMixCuisines] = useState(true);
@@ -320,6 +325,7 @@ export default function App() {
         setWeekNote(d.weekNote ?? "");
         setCheckedItems(d.checkedItems ?? {});
         if (d.weekAdditions) setWeekAdditions(d.weekAdditions);
+        if (d.weekHaveIt) setWeekHaveIt(d.weekHaveIt); // TER-504
         setDefaultPeople(d.defaultPeople ?? 4);
         setEfficiency(d.efficiency ?? true);
         setMixCuisines(d.mixCuisines ?? true);
@@ -401,6 +407,7 @@ export default function App() {
           if (d.weekNote !== undefined) setWeekNote(d.weekNote);
           if (d.checkedItems !== undefined) setCheckedItems(d.checkedItems);
           if (d.weekAdditions !== undefined) setWeekAdditions(d.weekAdditions);
+          if (d.weekHaveIt !== undefined) setWeekHaveIt(d.weekHaveIt); // TER-504
           if (d.defaultPeople !== undefined) setDefaultPeople(d.defaultPeople);
           if (d.efficiency !== undefined) setEfficiency(d.efficiency);
           if (d.mixCuisines !== undefined) setMixCuisines(d.mixCuisines);
@@ -489,7 +496,7 @@ export default function App() {
       // into `alwaysHave` on hydrate. Old clients still read `alwaysHave`, so the
       // merged set keeps excluding correctly with no data loss.
       location, startDate, numDays, days, forecast, meals, staples, alwaysHave, weekNote,
-      checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress,
+      checkedItems, weekAdditions, weekHaveIt, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress,
       // TER-418: dual-write the date-keyed canonical model alongside the legacy keys.
       // TER-428: `currentWeek` is gone from state and payload — the rollback floor
       // is now Phase B (TER-426); older builds rendered Today from currentWeek and
@@ -510,7 +517,7 @@ export default function App() {
         .then(({ error }) => { if (error) console.warn("user_state upsert failed:", error.message); });
     }, 2000);
     return () => clearTimeout(t);
-  }, [location, startDate, numDays, days, forecast, meals, staples, alwaysHave, weekNote, checkedItems, weekAdditions, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress, liveModel, loaded, session]); // eslint-disable-line
+  }, [location, startDate, numDays, days, forecast, meals, staples, alwaysHave, weekNote, checkedItems, weekAdditions, weekHaveIt, defaultPeople, efficiency, mixCuisines, rotation, liked, avoid, avoidTerms, recipeStars, cookProgress, liveModel, loaded, session]); // eslint-disable-line
 
   /* ---- keep day array length synced ---- */
   useEffect(() => {
@@ -941,12 +948,14 @@ ${recipeOutputContract(day.people)}`;
     const byCat: Record<string, any[]> = {}; CATEGORIES.forEach((c) => (byCat[c] = []));
     Object.values(agg).forEach((it: any) => {
       if (it.qty === 0) return;
-      if (alwaysHave.includes(normalizeIngName(it.name))) return; // TER-330: unified pantry exclusion
+      // TER-330 durable `alwaysHave` + TER-504 per-week `weekHaveIt` exclusion — one
+      // chokepoint so listText, Instacart handoff, and every view stay consistent.
+      if (isExcludedFromWeeklyList(it.name, alwaysHave, weekHaveIt)) return;
       (byCat[it.category] || byCat.Other).push(it);
     });
     CATEGORIES.forEach((c) => byCat[c].sort((a, b) => a.name.localeCompare(b.name)));
     return byCat;
-  }, [scopeEntries, staples, alwaysHave]);
+  }, [scopeEntries, staples, alwaysHave, weekHaveIt]);
 
   const totalItems = useMemo(() => Object.values(groceryList).reduce((n, a) => n + a.length, 0), [groceryList]);
 
@@ -1019,6 +1028,7 @@ ${recipeOutputContract(day.people)}`;
       });
       setCheckedItems({});
       setWeekAdditions([]);
+      setWeekHaveIt([]); // TER-504: per-week have-it overrides reset when the trip closes.
       setLastOrder({ dates: scope.map((e) => e.date), orderedAt });
       return { error: null };
     } catch (e: any) {
@@ -1198,6 +1208,7 @@ ${recipeOutputContract(day.people)}`;
           <ListView groceryList={groceryList} totalItems={totalItems} listText={listText}
             checkedItems={checkedItems} setCheckedItems={setCheckedItems}
             weekAdditions={weekAdditions} setWeekAdditions={setWeekAdditions}
+            weekHaveIt={weekHaveIt} setWeekHaveIt={setWeekHaveIt}
             slotCount={days.length} location={location}
             onMarkOrdered={handleMarkOrdered} scopeCount={scopeEntries.length}
             canUnmark={!!lastOrder} onUnmarkOrder={unmarkLastOrder}
