@@ -118,7 +118,7 @@ export default async function handler(req: any, res: any) {
       else console.warn(`generate: quota count failed for user ${userData.user.id}; failing open`, countError);
     }
     if (isQuotaExceeded(todayCount, dailyLimit)) {
-      res.status(429).json({ error: "Daily generation limit reached — resets at midnight UTC." });
+      res.status(429).json({ error: "Daily generation limit reached — resets at midnight UTC.", quotaExceeded: true });
       return;
     }
 
@@ -139,6 +139,8 @@ export default async function handler(req: any, res: any) {
     const data = await r.json();
     // Pass Anthropic's status + body through unchanged so the frontend gets the real error.
     if (!r.ok) {
+      // TER-545: failed generations are otherwise invisible in Vercel logs (llm_usage only records successes).
+      console.error(`generate: upstream error ${r.status}`, JSON.stringify(data));
       res.status(r.status).json(data);
       return;
     }

@@ -771,13 +771,16 @@ ${recipeOutputContract(day.people)}`;
             if (dropNote) noteDropped = true;
             break;
           } catch (e: any) {
-            const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape";
+            const retryable = e?.truncated || e instanceof SyntaxError || e?.message === "bad shape" || e?.transient;
             if (!retryable) throw e;
             if (attempt === 2) {
               throw new Error(day.note
                 ? "Couldn't generate this recipe — your day note may be too restrictive. Try simplifying it, then regenerate."
                 : "Couldn't generate this recipe — try again.");
             }
+            // TER-545: transient upstream errors (529/500/unmarked 429) get a short
+            // backoff before retrying; existing retry cases keep no-delay behavior.
+            if (e?.transient) await new Promise((r) => setTimeout(r, attempt === 0 ? 1000 : 2000));
           }
         }
         if (pendingHits.length) {
